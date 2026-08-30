@@ -1,0 +1,26 @@
+# Environment
+.venv/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.idea/
+.vscode/
+
+# Private data artifacts (real PDF, extracted text, embeddings, indexes)
+data/raw/*
+data/processed/*
+data/artifacts/*
+
+# Keep placeholders and eval fixtures trackable
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/artifacts/.gitkeep
+!data/eval/README.md
