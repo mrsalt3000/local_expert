@@ -1,0 +1,44 @@
+{
+  "manifest_schema_version": "1.0.0",
+  "assessment_schema_version": "1.0.0",
+  "document_ref": "SYNTHETIC-DOCUMENT",
+  "manifest_note": "SYNTHETIC EXAMPLE TEMPLATE — not a real assessment. This file only shows the shape of the local-only manifest data/eval/parser_assessment.local.json, which is git-ignored and holds real printed page numbers and private reviewer notes. All values are placeholders. The envelope follows schemas/parser-assessment-manifest.schema.json; records[0] follows schemas/parser-assessment.schema.json.",
+  "records": [
+    {
+      "schema_version": "1.0.0",
+      "parser": {
+        "id": "SYNTHETIC-PARSER-ID",
+        "version": "SYNTHETIC-PARSER-VERSION",
+        "configuration_hash": "SYNTHETIC-CONFIGURATION-HASH"
+      },
+      "document_ref": "SYNTHETIC-DOCUMENT",
+      "page_ref": {
+        "pdf_page_index": 0,
+        "printed_page_label": "SYNTHETIC-PAGE"
+      },
+      "page_types": [
+        "body_text",
+        "heading_hierarchy"
+      ],
+      "criteria": {
+        "text_coverage": "pass",
+        "reading_order": "warning",
+        "heading_structure": "pass",
+        "table_fidelity": "not_applicable",
+        "footnote_separation": "not_applicable",
+        "header_footer_handling": "not_applicable",
+        "image_handling": "not_applicable",
+        "page_linkage": "pass",
+        "runtime": "pass"
+      },
+      "review": {
+        "reviewer": "SYNTHETIC-REVIEWER",
+        "reviewed_at": "1970-01-01T00:00:00Z",
+        "notes": []
+      },
+      "runtime": {
+        "elapsed_ms": 0
+      }
+    }
+  ]
+}
