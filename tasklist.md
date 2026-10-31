@@ -40,7 +40,8 @@
 3. Defects возвращаются dev-агенту; цикл до вердикта `accepted`.
 4. Только после `accepted` — commit и push.
 5. Каждая задача — отдельный commit; исправления после коммита — новым commit.
-6. Push требует настроенного remote (сейчас отсутствует).
+6. Push выполняется после `accepted`; remote `origin` настроен
+   (`git@github.com:mrsalt3000/local_expert.git`).
 
 ## Очередь задач
 
@@ -196,6 +197,21 @@
 - Verify: `uv sync`, `ruff format --check`, `ruff check`, `pytest`,
   `pre-commit run --all-files`.
 
+### T19 — Веб-чат (RAG + агент)
+
+- [x] Статус: `accepted`
+- Scope: `src/book_expert/web/` (`app.py`, `backend.py`,
+  `static/index.html`), команда `ui` в `cli.py`, `tests/test_web.py`,
+  `README.md`, `docs/architecture.md`, `pyproject.toml` + `uv.lock`
+  (fastapi/uvicorn).
+- Acceptance: `book-expert ui` поднимает сервер на `127.0.0.1:8000`;
+  `GET /api/books` отдаёт только `ready` книги; `POST /api/chat` в режимах
+  `rag` и `agent` возвращает ответ, в RAG — цитаты; ошибки провайдера → 503
+  без traceback; история диалога только в браузере; тесты не требуют
+  Qdrant/Ollama; все проверки `AGENTS.md` зелёные.
+- Verify: `uv sync`, `ruff format --check`, `ruff check`, `pytest`,
+  `pre-commit run --all-files`, ручной smoke из браузера.
+
 ## Журнал
 
 | Дата | Задача | Статус | Примечание |
@@ -220,3 +236,5 @@
 | 2026-10-31 | T17 | review | real-book local run, manifest ignored |
 | 2026-10-31 | T18 | review | docs, think=false fix, full checks |
 | 2026-10-31 | T01–T18 | accepted | независимая приёмка: 179 tests, doctor ok |
+| 2026-10-31 | T19 | review | FastAPI UI + RAG/агент, 206 tests; live ask упёрся в SW Power Cap GPU |
+| 2026-10-31 | T19 | accepted | live smoke в браузере (RAG + агент, 200), 214 tests; приёмка нашла и закрыла 500 в agent-режиме при недоступном провайдере |

@@ -250,6 +250,32 @@ def chat(
 
 
 @app.command()
+def ui(
+    host: str = typer.Option("127.0.0.1", "--host", help="Адрес прослушивания."),
+    port: int = typer.Option(8000, "--port", min=1, max=65535),
+) -> None:
+    """Веб-чат в браузере (RAG и агент)."""
+    import uvicorn
+
+    from book_expert.web.app import create_app
+
+    settings = Settings()
+    settings.ensure_dirs()
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        console.print(
+            "[yellow]warning[/yellow] у UI нет авторизации: не открывайте его "
+            "в недоверенной сети."
+        )
+    console.print(f"[bold]book-expert ui[/bold] — http://{host}:{port}")
+    uvicorn.run(
+        create_app(settings),
+        host=host,
+        port=port,
+        log_level=settings.log_level.lower(),
+    )
+
+
+@app.command()
 def doctor(
     json_output: bool = typer.Option(False, "--json"),
     skip_qdrant: bool = typer.Option(False, "--skip-qdrant"),

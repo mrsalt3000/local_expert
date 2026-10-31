@@ -42,6 +42,22 @@ MCP-сервер для внешних агентов:
 uv run book-expert mcp
 ```
 
+## Веб-чат
+
+```bash
+uv run book-expert ui
+```
+
+Откройте `http://127.0.0.1:8000`. В интерфейсе два режима: **RAG** — ответ
+только по найденным фрагментам с цитатами на книгу/страницу; **Агент** —
+react-цикл с `rag_search`/`rag_ask` и coding-инструментами (если доступен
+`bwrap`). Книгу можно выбрать явно или оставить авто-выбор по библиотеке.
+
+Сервер слушает только loopback и не имеет авторизации. История диалога
+хранится в `localStorage` браузера и в модель не передаётся; серверных
+сессий нет. `--host`/`--port` меняют адрес, но выставлять UI в сеть без
+дополнительной защиты не стоит.
+
 ## Команды
 
 | Команда | Назначение |
@@ -52,6 +68,7 @@ uv run book-expert mcp
 | `search <query>` | Гибридный поиск (dense + lexical + RRF); `--lexical-only` без Qdrant |
 | `ask <question>` | Ответ с citations; авто-routing; `--lexical-only` без Qdrant |
 | `chat` | Интерактивный агент: RAG + shell/fs/git в bwrap-песочнице |
+| `ui` | Веб-чат в браузере: RAG-ответы с цитатами или агент |
 | `mcp` | MCP stdio server (`search_books`, `ask_books`, `list_books`, `get_outline`) |
 | `eval` | `--synthetic` или `<cases.json>`: recall@k, MRR, citations |
 

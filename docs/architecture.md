@@ -54,6 +54,7 @@
 | Eval | `eval/metrics.py`, `eval/parser_assessment.py` | recall/MRR/citations, parser assessment |
 | Ops | `doctor.py`, `docker-compose.yml`, `scripts/` | проверки окружения, Qdrant, оценка |
 | Interfaces | `cli.py`, `mcp_server.py` | CLI и MCP stdio |
+| Web | `web/app.py`, `web/backend.py`, `web/static/` | локальный веб-чат: FastAPI, RAG и агент |
 
 ## Потоки
 
@@ -95,6 +96,14 @@ MCP stdio server отдаёт tools `search_books`, `ask_books`, `list_books`,
 `get_outline`, чтобы внешние агенты (Qwen Code, Claude Code) могли получать
 знания из библиотеки без собственного ingestion.
 
+### Веб-чат
+
+`book-expert ui` поднимает FastAPI на loopback. `GET /api/books` отдаёт только
+`ready` книги; `POST /api/chat` с `mode=rag` вызывает `GroundedAnswerer.ask()`
+и возвращает citations, с `mode=agent` — `AgentRunner` с теми же tool-политиками
+и audit. История диалога живёт в `localStorage` браузера, серверных сессий нет;
+ошибки провайдера возвращаются как 503 без traceback.
+
 ## Хранение
 
 | Данные | Где | Git |
@@ -130,5 +139,5 @@ MCP stdio server отдаёт tools `search_books`, `ask_books`, `list_books`,
 
 - Мультиязычный OCR и сложный layout recovery.
 - Распределённый Qdrant и multi-user доступ.
-- Веб-UI.
+- Авторизация и удалённый доступ к веб-чату.
 - Автоматический деплой и remote-операции без opt-in.

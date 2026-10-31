@@ -7,13 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
+import httpx
 from langchain.agents import create_agent
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.tools import BaseTool
 
 from book_expert.config import Settings
-from book_expert.providers import ProviderUnavailableError
+from book_expert.providers import ProviderError, ProviderUnavailableError
 from book_expert.agent.trace import TraceRecorder
 
 SYSTEM_PROMPT = (
@@ -83,8 +84,11 @@ class AgentRunner:
                 self.settings.agent_timeout_s if timeout is None else timeout,
             )
         except Exception as exc:
-            trace.write("agent_error", error=type(exc).__name__, message=str(exc)[:300])
-            raise
+            error = normalize_agent_error(exc)
+            trace.write("agent_error", error=type(error).__name__)
+            if error is exc:
+                raise
+            raise error from exc
 
         messages = tuple(state.get("messages", ()))
         text = _final_text(messages)
@@ -149,6 +153,33 @@ def invoke_with_timeout(
         executor.shutdown(wait=False, cancel_futures=True)
 
 
+def normalize_agent_error(exc: Exception) -> Exception:
+    """Приводит сбои LangChain/транспорта к ошибкам слоя провайдера или агента."""
+    if isinstance(exc, (AgentError, ProviderError, ValueError)):
+        return exc
+    provider_error = _find_cause(exc, ProviderError)
+    if provider_error is not None:
+        return provider_error
+    if _find_cause(exc, (httpx.HTTPError, ConnectionError, OSError)) is not None:
+        return ProviderUnavailableError(
+            "provider is unavailable; check that the model server is running"
+        )
+    return AgentError(f"agent failed: {type(exc).__name__}")
+
+
+def _find_cause(
+    exc: BaseException, types: type[BaseException] | tuple[type[BaseException], ...]
+) -> BaseException | None:
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, types):
+            return current
+        current = current.__cause__ or current.__context__
+    return None
+
+
 def _user_prompt(query: str, book_ids: Sequence[str] | None) -> str:
     if book_ids:
         return (
@@ -190,4 +221,5 @@ __all__ = [
     "AgentTimeoutError",
     "build_chat_model",
     "invoke_with_timeout",
+    "normalize_agent_error",
 ]

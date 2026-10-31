@@ -1,0 +1,80 @@
+"""Сборка retrieval- и агентных сервисов для веб-чата."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from threading import Lock
+
+from book_expert.agent.audit import AuditLogger
+from book_expert.agent.graph import AgentRunner
+from book_expert.agent.tools.coding import build_coding_tools
+from book_expert.agent.tools.rag import build_rag_tools
+from book_expert.agent.trace import TraceRecorder
+from book_expert.catalog import Catalog
+from book_expert.config import Settings
+from book_expert.models import Answer, Book, BookStatus
+from book_expert.providers import get_provider
+from book_expert.retrieval.answer import GroundedAnswerer
+from book_expert.retrieval.hybrid import HybridSearcher
+from book_expert.retrieval.router import BookRouter
+
+
+class BookChatBackend:
+    """RAG- и агентный режимы поверх локального индекса."""
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        settings.ensure_dirs()
+        self.catalog = Catalog(settings.catalog_path)
+        self.catalog.initialize()
+        self.provider = get_provider(settings)
+        self.searcher = HybridSearcher(settings, self.provider, self.catalog)
+        self.trace = TraceRecorder.create(settings, prefix="web")
+        self.router = BookRouter(
+            settings, self.provider, self.catalog, trace=self.trace
+        )
+        self.answerer = GroundedAnswerer(
+            settings,
+            self.provider,
+            self.searcher,
+            self.router,
+            trace=self.trace,
+        )
+        self._agent: AgentRunner | None = None
+        self._agent_lock = Lock()
+
+    def list_books(self) -> list[Book]:
+        return ready_books(self.catalog.list_books())
+
+    def ask_rag(self, message: str, book_ids: Sequence[str] | None = None) -> Answer:
+        return self.answerer.ask(
+            message,
+            book_ids=list(book_ids) if book_ids else None,
+            auto_route=True,
+        )
+
+    def ask_agent(self, message: str, book_ids: Sequence[str] | None = None) -> str:
+        return self._agent_runner().run(message, book_ids=book_ids or None).text
+
+    def close(self) -> None:
+        self.searcher.close()
+        close = getattr(self.provider, "close", None)
+        if callable(close):
+            close()
+
+    def _agent_runner(self) -> AgentRunner:
+        with self._agent_lock:
+            if self._agent is None:
+                audit = AuditLogger.create(self.settings)
+                tools = build_rag_tools(self.searcher, self.answerer, audit=audit)
+                tools.extend(build_coding_tools(self.settings, audit=audit))
+                self._agent = AgentRunner(self.settings, tools, trace=self.trace)
+            return self._agent
+
+
+def ready_books(books: Sequence[Book]) -> list[Book]:
+    """Оставляет только книги, доступные для поиска."""
+    return [book for book in books if book.status is BookStatus.ready]
+
+
+__all__ = ["BookChatBackend", "ready_books"]

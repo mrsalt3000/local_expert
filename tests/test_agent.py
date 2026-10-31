@@ -8,26 +8,40 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import pytest
+import httpx
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
 from book_expert.agent.graph import (
+    AgentError,
     AgentRunner,
     AgentTimeoutError,
     build_chat_model,
     invoke_with_timeout,
+    normalize_agent_error,
 )
 from book_expert.agent.audit import AuditLogger
 from book_expert.agent.trace import TraceRecorder
 from book_expert.agent.tools.rag import build_rag_tools
 from book_expert.config import Settings
 from book_expert.models import Answer, Citation, SearchHit
+from book_expert.providers import ProviderUnavailableError
 from book_expert.retrieval.hybrid import SearchOutcome
 
 
 class ToolFakeModel(GenericFakeChatModel):
     def bind_tools(self, tools: Any, **kwargs: Any) -> ToolFakeModel:
         return self
+
+
+class TransportErrorModel(ToolFakeModel):
+    def _generate(self, *args: Any, **kwargs: Any) -> Any:
+        raise httpx.ConnectError("connection refused")
+
+
+class InternalErrorModel(ToolFakeModel):
+    def _generate(self, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("secret internals")
 
 
 class FakeSearcher:
@@ -194,6 +208,49 @@ def test_invoke_with_timeout_raises() -> None:
 
     with pytest.raises(AgentTimeoutError, match="exceeded"):
         invoke_with_timeout(slow, 0.05)
+
+
+def test_agent_transport_error_is_provider_error(tmp_path: Path) -> None:
+    trace = TraceRecorder(tmp_path / "trace.jsonl")
+    runner = AgentRunner(
+        _settings(tmp_path),
+        [],
+        model=TransportErrorModel(messages=iter([])),
+        trace=trace,
+    )
+
+    with pytest.raises(ProviderUnavailableError) as info:
+        runner.run("What is retrieval?")
+
+    assert "connection refused" not in str(info.value)
+    assert "connection refused" not in trace.path.read_text(encoding="utf-8")
+    events = [
+        json.loads(line)["event"]
+        for line in trace.path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert events == ["agent_start", "agent_error"]
+
+
+def test_normalize_agent_error_unwraps_provider_error() -> None:
+    provider_error = ProviderUnavailableError("provider is down")
+    wrapper = RuntimeError("langchain wrapper")
+    wrapper.__cause__ = provider_error
+
+    assert normalize_agent_error(wrapper) is provider_error
+
+
+def test_agent_internal_error_hides_details(tmp_path: Path) -> None:
+    runner = AgentRunner(
+        _settings(tmp_path),
+        [],
+        model=InternalErrorModel(messages=iter([])),
+    )
+
+    with pytest.raises(AgentError) as info:
+        runner.run("What is retrieval?")
+
+    assert "secret internals" not in str(info.value)
+    assert "RuntimeError" in str(info.value)
 
 
 def test_trace_redacts_text_by_default(tmp_path: Path) -> None:

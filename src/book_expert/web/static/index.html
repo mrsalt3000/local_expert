@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book Expert</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f6f4;
+    --panel: #ffffff;
+    --text: #17181a;
+    --muted: #6b6f76;
+    --line: #e2e3e0;
+    --accent: #2f6f4f;
+    --accent-ink: #ffffff;
+    --user: #e8efe9;
+    --error: #a3282b;
+    --error-bg: #fbeaea;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141517;
+      --panel: #1c1e21;
+      --text: #eceded;
+      --muted: #9aa0a6;
+      --line: #2c2f33;
+      --accent: #6fbf92;
+      --accent-ink: #10231a;
+      --user: #24322a;
+      --error: #ff8f8f;
+      --error-bg: #3a1d1d;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { font-weight: 650; letter-spacing: -0.01em; }
+  .brand .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  select, textarea, button {
+    font: inherit;
+    color: inherit;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+  }
+  select { padding: 7px 10px; max-width: 320px; }
+  .modes { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .modes button {
+    border: 0;
+    border-radius: 0;
+    padding: 7px 14px;
+    background: transparent;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .modes button.active { background: var(--accent); color: var(--accent-ink); }
+  button.ghost { padding: 7px 10px; background: transparent; cursor: pointer; color: var(--muted); }
+  button.ghost:hover { color: var(--text); }
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 20px 8px;
+    scroll-behavior: smooth;
+  }
+  .thread { width: min(860px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .msg { display: flex; flex-direction: column; gap: 6px; }
+  .msg.user { align-items: flex-end; }
+  .bubble {
+    max-width: min(680px, 100%);
+    padding: 11px 14px;
+    border-radius: var(--radius);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .msg.user .bubble { background: var(--user); border-color: transparent; }
+  .meta { font-size: 12px; color: var(--muted); padding: 0 4px; }
+  .badge {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .citations { display: flex; flex-direction: column; gap: 8px; max-width: min(680px, 100%); }
+  .citation {
+    margin: 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--accent);
+    background: var(--panel);
+    border-radius: 0 10px 10px 0;
+    font-size: 14px;
+  }
+  .citation figcaption { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .citation blockquote { margin: 0; }
+  .empty {
+    width: min(860px, 100%);
+    margin: 8vh auto 0;
+    text-align: center;
+    color: var(--muted);
+  }
+  .empty h1 { color: var(--text); font-size: 22px; margin: 0 0 8px; }
+  .empty p { margin: 0 auto 6px; max-width: 520px; }
+  .error {
+    width: min(860px, calc(100% - 40px));
+    margin: 0 auto 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: var(--error-bg);
+    color: var(--error);
+    font-size: 14px;
+  }
+  footer { padding: 10px 20px 16px; }
+  .composer { width: min(860px, 100%); margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+  textarea {
+    flex: 1;
+    resize: none;
+    padding: 11px 14px;
+    min-height: 46px;
+    max-height: 200px;
+    background: var(--panel);
+  }
+  textarea:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #send {
+    padding: 11px 18px;
+    border: 0;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #send:disabled { opacity: 0.55; cursor: default; }
+  .hint { width: min(860px, 100%); margin: 8px auto 0; font-size: 12px; color: var(--muted); }
+  .pending { color: var(--muted); font-size: 14px; padding: 0 4px; }
+  .pending span { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  @media (max-width: 640px) {
+    header { padding: 10px 14px; }
+    main { padding: 16px 14px 6px; }
+    footer { padding: 8px 14px 12px; }
+    .brand .sub { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Book Expert <span class="sub">локальный чат по книгам</span></div>
+  <div class="controls">
+    <select id="book" aria-label="Книга">
+      <option value="">Все книги (авто-выбор)</option>
+    </select>
+    <div class="modes" role="group" aria-label="Режим ответа">
+      <button type="button" data-mode="rag" class="active" aria-pressed="true">RAG</button>
+      <button type="button" data-mode="agent" aria-pressed="false">Агент</button>
+    </div>
+    <button type="button" id="clear" class="ghost">Очистить</button>
+  </div>
+</header>
+
+<main id="messages" aria-live="polite">
+  <div class="thread" id="thread"></div>
+</main>
+
+<div id="error" class="error" role="alert" hidden></div>
+
+<footer>
+  <form id="form" class="composer">
+    <textarea id="input" rows="1" maxlength="4000" placeholder="Спросите о книге…" aria-label="Вопрос"></textarea>
+    <button id="send" type="submit">Отправить</button>
+  </form>
+  <div class="hint">Enter — отправить, Shift+Enter — новая строка. История хранится только в этом браузере.</div>
+</footer>
+
+<script>
+(() => {
+  "use strict";
+
+  const STORAGE_KEY = "book-expert-chat-v1";
+  const thread = document.getElementById("thread");
+  const messagesPane = document.getElementById("messages");
+  const bookSelect = document.getElementById("book");
+  const modeButtons = Array.from(document.querySelectorAll(".modes button"));
+  const form = document.getElementById("form");
+  const input = document.getElementById("input");
+  const sendButton = document.getElementById("send");
+  const clearButton = document.getElementById("clear");
+  const errorBox = document.getElementById("error");
+
+  const state = { mode: "rag", bookId: "", messages: [], pending: false };
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (Array.isArray(saved.messages)) {
+        state.messages = saved.messages.filter(
+          (item) =>
+            item &&
+            (item.role === "user" || item.role === "assistant") &&
+            typeof item.text === "string"
+        );
+      }
+      if (saved.mode === "rag" || saved.mode === "agent") state.mode = saved.mode;
+      if (typeof saved.bookId === "string") state.bookId = saved.bookId;
+    } catch (error) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ mode: state.mode, bookId: state.bookId, messages: state.messages })
+      );
+    } catch (error) {
+      /* приватный режим или переполнение — история просто не сохранится */
+    }
+  }
+
+  function showError(message) {
+    if (!message) {
+      errorBox.hidden = true;
+      errorBox.textContent = "";
+      return;
+    }
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  function applyMode() {
+    for (const button of modeButtons) {
+      const active = button.dataset.mode === state.mode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+    input.placeholder =
+      state.mode === "rag" ? "Спросите о книге…" : "Задача для агента…";
+  }
+
+  function renderEmpty() {
+    const box = document.createElement("div");
+    box.className = "empty";
+    const title = document.createElement("h1");
+    title.textContent = "Book Expert";
+    const first = document.createElement("p");
+    first.textContent =
+      "Ответы строятся только по проиндексированным книгам, с цитатами на страницы.";
+    const second = document.createElement("p");
+    second.textContent =
+      "RAG — быстрый ответ по фрагментам. Агент — react-цикл с поиском и инструментами.";
+    box.append(title, first, second);
+    return box;
+  }
+
+  function citationElement(citation) {
+    const figure = document.createElement("figure");
+    figure.className = "citation";
+    const caption = document.createElement("figcaption");
+    const page = citation.page === undefined || citation.page === null ? "?" : citation.page;
+    caption.textContent = `${citation.book_title || "Книга"} — стр. ${page}`;
+    figure.append(caption);
+    if (citation.quote) {
+      const quote = document.createElement("blockquote");
+      quote.textContent = citation.quote;
+      figure.append(quote);
+    }
+    return figure;
+  }
+
+  function messageElement(message) {
+    const wrapper = document.createElement("article");
+    wrapper.className = `msg ${message.role}`;
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = message.text;
+    if (message.error) bubble.style.color = "var(--error)";
+    wrapper.append(bubble);
+
+    if (message.role === "assistant") {
+      if (message.refused) {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = "Недостаточно контекста";
+        wrapper.append(badge);
+      }
+      const citations = (message.citations || []).filter(Boolean);
+      if (citations.length) {
+        const list = document.createElement("div");
+        list.className = "citations";
+        for (const citation of citations) list.append(citationElement(citation));
+        wrapper.append(list);
+      }
+      if (message.mode || message.elapsed_ms !== undefined) {
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const parts = [];
+        if (message.mode) parts.push(message.mode === "rag" ? "RAG" : "агент");
+        if (typeof message.elapsed_ms === "number") parts.push(`${(message.elapsed_ms / 1000).toFixed(1)} с`);
+        meta.textContent = parts.join(" · ");
+        wrapper.append(meta);
+      }
+    }
+    return wrapper;
+  }
+
+  function pendingElement() {
+    const wrapper = document.createElement("article");
+    wrapper.className = "msg assistant";
+    const pending = document.createElement("div");
+    pending.className = "pending";
+    const dots = document.createElement("span");
+    dots.textContent = state.mode === "rag" ? "Ищу по книге…" : "Агент работает…";
+    pending.append(dots);
+    wrapper.append(pending);
+    return wrapper;
+  }
+
+  function render() {
+    thread.replaceChildren();
+    if (!state.messages.length) {
+      thread.append(renderEmpty());
+    } else {
+      for (const message of state.messages) thread.append(messageElement(message));
+    }
+    if (state.pending) thread.append(pendingElement());
+    sendButton.disabled = state.pending;
+    messagesPane.scrollTop = messagesPane.scrollHeight;
+  }
+
+  function persistAndRender() {
+    saveState();
+    render();
+  }
+
+  function autoGrow() {
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
+  }
+
+  async function ask(text) {
+    const mode = state.mode;
+    const bookIds = state.bookId ? [state.bookId] : [];
+    state.messages.push({ role: "user", text });
+    state.pending = true;
+    showError("");
+    persistAndRender();
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, mode, book_ids: bookIds }),
+      });
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (error) {
+        data = {};
+      }
+      if (!response.ok) {
+        const detail = typeof data.detail === "string" ? data.detail : `HTTP ${response.status}`;
+        throw new Error(detail);
+      }
+      state.messages.push({
+        role: "assistant",
+        text: data.answer || "Пустой ответ.",
+        refused: Boolean(data.refused),
+        citations: Array.isArray(data.citations) ? data.citations : [],
+        mode: data.mode || mode,
+        elapsed_ms: data.elapsed_ms,
+      });
+    } catch (error) {
+      state.messages.push({
+        role: "assistant",
+        text: `Ошибка: ${error.message || error}`,
+        error: true,
+      });
+    } finally {
+      state.pending = false;
+      persistAndRender();
+      input.focus();
+    }
+  }
+
+  async function loadBooks() {
+    try {
+      const response = await fetch("/api/books");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const books = await response.json();
+      const known = new Set();
+      for (const book of books) {
+        known.add(book.id);
+        const option = document.createElement("option");
+        option.value = book.id;
+        option.textContent = `${book.title} (${book.pages} стр.)`;
+        bookSelect.append(option);
+      }
+      if (state.bookId && !known.has(state.bookId)) state.bookId = "";
+      bookSelect.value = state.bookId;
+    } catch (error) {
+      showError(`Не удалось загрузить список книг: ${error.message || error}`);
+    }
+  }
+
+  modeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.mode = button.dataset.mode;
+      applyMode();
+      saveState();
+    });
+  });
+
+  bookSelect.addEventListener("change", () => {
+    state.bookId = bookSelect.value;
+    saveState();
+  });
+
+  clearButton.addEventListener("click", () => {
+    if (!state.messages.length) return;
+    if (!window.confirm("Очистить историю диалога в этом браузере?")) return;
+    state.messages = [];
+    persistAndRender();
+    input.focus();
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text || state.pending) return;
+    input.value = "";
+    autoGrow();
+    ask(text);
+  });
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  input.addEventListener("input", autoGrow);
+
+  loadState();
+  applyMode();
+  bookSelect.value = state.bookId;
+  render();
+  loadBooks();
+  input.focus();
+})();
+</script>
+</body>
+</html>
