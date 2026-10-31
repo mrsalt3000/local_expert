@@ -244,3 +244,26 @@ def test_rrf_fuse_sums_ranks_and_is_deterministic() -> None:
 
     tied = rrf_fuse([_hit("z")], [_hit("y")], limit=2)
     assert [hit.chunk_id for hit in tied] == ["y", "z"]
+
+
+def test_rrf_weights_shift_ranking() -> None:
+    dense = [_hit("a"), _hit("b")]
+    lexical = [_hit("c"), _hit("d")]
+
+    equal = rrf_fuse(dense, lexical, limit=4)
+    assert [hit.chunk_id for hit in equal] == ["a", "c", "b", "d"]
+
+    lexical_heavy = rrf_fuse(dense, lexical, limit=4, lexical_weight=2.0)
+    assert [hit.chunk_id for hit in lexical_heavy] == ["c", "d", "a", "b"]
+
+    dense_heavy = rrf_fuse(dense, lexical, limit=4, dense_weight=2.0)
+    assert [hit.chunk_id for hit in dense_heavy] == ["a", "b", "c", "d"]
+
+
+def test_rrf_weights_must_not_both_be_zero() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        rrf_fuse(
+            [_hit("a")], [_hit("b")], limit=1, dense_weight=0.0, lexical_weight=0.0
+        )
+    with pytest.raises(ValueError, match="non-negative"):
+        rrf_fuse([_hit("a")], [_hit("b")], limit=1, lexical_weight=-1.0)

@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     strip_running_headers: bool = False
     top_k: int = 8
     router_confidence_threshold: float = 0.6
+    rrf_dense_weight: float = 1.0
+    rrf_lexical_weight: float = 0.1
     max_upload_mb: int = 200
 
     rerank_enabled: bool = False
@@ -70,6 +72,13 @@ class Settings(BaseSettings):
     def _check_threshold(cls, value: float) -> float:
         if not 0.0 <= value <= 1.0:
             raise ValueError("router_confidence_threshold must be in [0, 1]")
+        return value
+
+    @field_validator("rrf_dense_weight", "rrf_lexical_weight")
+    @classmethod
+    def _check_weight(cls, value: float) -> float:
+        if value < 0.0:
+            raise ValueError("rrf weights must be non-negative")
         return value
 
     @field_validator(
@@ -98,6 +107,8 @@ class Settings(BaseSettings):
     def _check_chunking(self) -> Settings:
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be smaller than chunk_size")
+        if self.rrf_dense_weight == 0.0 and self.rrf_lexical_weight == 0.0:
+            raise ValueError("at least one RRF weight must be positive")
         return self
 
     @property

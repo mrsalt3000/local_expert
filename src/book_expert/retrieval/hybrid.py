@@ -104,7 +104,13 @@ class HybridSearcher:
             sources.append("lexical")
 
         if dense_hits and lexical_hits:
-            fused = rrf_fuse(dense_hits, lexical_hits, limit=candidate_limit)
+            fused = rrf_fuse(
+                dense_hits,
+                lexical_hits,
+                limit=candidate_limit,
+                dense_weight=self.settings.rrf_dense_weight,
+                lexical_weight=self.settings.rrf_lexical_weight,
+            )
         elif dense_hits:
             fused = tuple(dense_hits[:candidate_limit])
         else:
@@ -161,12 +167,20 @@ def rrf_fuse(
     *,
     limit: int,
     k: int = RRF_K,
+    dense_weight: float = 1.0,
+    lexical_weight: float = 1.0,
 ) -> tuple[SearchHit, ...]:
+    if dense_weight < 0.0 or lexical_weight < 0.0:
+        raise ValueError("rrf weights must be non-negative")
+    if dense_weight == 0.0 and lexical_weight == 0.0:
+        raise ValueError("at least one RRF weight must be positive")
     scores: dict[str, float] = {}
     best: dict[str, SearchHit] = {}
-    for hits in (dense, lexical):
+    for hits, weight in ((dense, dense_weight), (lexical, lexical_weight)):
+        if weight == 0.0:
+            continue
         for rank, hit in enumerate(hits, start=1):
-            scores[hit.chunk_id] = scores.get(hit.chunk_id, 0.0) + 1.0 / (k + rank)
+            scores[hit.chunk_id] = scores.get(hit.chunk_id, 0.0) + weight / (k + rank)
             best.setdefault(hit.chunk_id, hit)
     ordered = sorted(scores, key=lambda chunk_id: (-scores[chunk_id], chunk_id))
     return tuple(
