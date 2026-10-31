@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Диагностика окружения Book Expert. Аргументы прокидываются в book_expert.doctor.
+set -euo pipefail
+
+exec uv run python -m book_expert.doctor "$@"

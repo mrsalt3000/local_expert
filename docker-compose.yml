@@ -1,0 +1,21 @@
+# Локальный Qdrant для Book Expert.
+# Запуск: docker compose up -d
+# Остановка без удаления данных: docker compose down
+# Данные лежат в ./data/artifacts/qdrant (git-ignored), наружу открыт только loopback.
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    container_name: book-expert-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - ./data/artifacts/qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

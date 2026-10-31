@@ -18,6 +18,7 @@ htmlcov/
 data/raw/*
 data/processed/*
 data/artifacts/*
+*.local.json
 
 # Keep placeholders and eval fixtures trackable
 !data/raw/.gitkeep

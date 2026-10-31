@@ -4,14 +4,32 @@ version = "0.1.0"
 description = "Local observable book-only RAG expert — foundation bootstrap."
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+    "langchain>=1.4.7",
+    "langchain-core>=1.7.3",
+    "langchain-ollama>=1.1.0",
+    "langchain-openai>=1.7.3",
+    "langgraph>=1.2.19",
+    "mcp>=2.3.0",
+    "pydantic-settings>=2.16.2",
+    "pymupdf>=2.0",
+    "python-dotenv>=1.2.4",
+    "qdrant-client>=1.20.0",
+    "rich>=15.0.0",
+    "typer>=0.27.3",
+]
 
 [dependency-groups]
 dev = [
     "pre-commit>=4.0",
     "pytest>=8.0",
+    "pytest-asyncio>=1.4.1",
     "ruff>=0.8",
 ]
+
+[project.scripts]
+book-expert = "book_expert.cli:app"
 
 [build-system]
 requires = ["hatchling"]

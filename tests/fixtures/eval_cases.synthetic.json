@@ -1,0 +1,17 @@
+[
+  {
+    "question": "Hybrid retrieval combines dense lexical search.",
+    "expected_chunk_ids": ["synthetic-c1"],
+    "expected_book_ids": ["synthetic-book"]
+  },
+  {
+    "question": "Evaluation measures recall and citation accuracy.",
+    "expected_chunk_ids": ["synthetic-c2"],
+    "expected_book_ids": ["synthetic-book"]
+  },
+  {
+    "question": "Reciprocal rank fusion merges rankings.",
+    "expected_chunk_ids": ["synthetic-c1"],
+    "expected_book_ids": ["synthetic-book"]
+  }
+]
