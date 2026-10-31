@@ -197,6 +197,27 @@ def test_insufficient_context_refuses(tmp_path: Path) -> None:
     assert answer.citations == ()
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Во фрагментах нет ответа.\n\n**INSUFFICIENT_CONTEXT**",
+        "insufficient_context",
+        "INSUFFICIENT_CONTEXT — в книге об этом не сказано.",
+    ],
+)
+def test_insufficient_context_marker_is_detected_anywhere(
+    tmp_path: Path, text: str
+) -> None:
+    provider = FakeProvider(text)
+    answerer = _answerer(tmp_path, provider, FakeSearcher(_hits()))
+
+    answer = answerer.ask("question", book_ids=["book-1"])
+
+    assert answer.refused is True
+    assert answer.text == REFUSAL
+    assert answer.citations == ()
+
+
 def test_empty_response_refuses(tmp_path: Path) -> None:
     provider = FakeProvider("   ")
     answerer = _answerer(tmp_path, provider, FakeSearcher(_hits()))

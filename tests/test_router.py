@@ -182,6 +182,31 @@ def test_empty_library_skips_llm(tmp_path: Path) -> None:
     assert provider.calls == 0
 
 
+def test_single_book_skips_llm(tmp_path: Path) -> None:
+    catalog = Catalog(tmp_path / "single.sqlite3")
+    catalog.initialize()
+    catalog.upsert_book(
+        Book(
+            id="book-1",
+            title="Retrieval Handbook",
+            path=tmp_path / "one.pdf",
+            content_hash="hash-1",
+            status=BookStatus.ready,
+        ),
+        [Section("book-1", "Chapter 1", 0, "Chapter 1", 0, 3)],
+    )
+    provider = FakeProvider('{"book_ids": ["book-1"], "confidence": 0.2}')
+    router = BookRouter(_settings(tmp_path), provider, catalog)
+
+    route = router.route("any question")
+
+    assert route.book_ids == ("book-1",)
+    assert route.confidence == 1.0
+    assert route.fallback is False
+    assert "single ready book" in route.reason
+    assert provider.calls == 0
+
+
 def test_empty_query_skips_llm(tmp_path: Path) -> None:
     catalog = _catalog(tmp_path)
     provider = FakeProvider('{"book_ids": ["book-1"], "confidence": 1.0}')

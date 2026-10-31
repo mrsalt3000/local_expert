@@ -154,7 +154,9 @@ def test_end_to_end_synthetic_book(tmp_path: Path) -> None:
     assert answer.refused is False
     assert answer.citations
     assert answer.citations[0].chunk_id in {hit.chunk_id for hit in found.hits}
-    assert provider.chat_calls >= 2
+    assert answer.confidence == 1.0
+    assert answer.route_reason == "single ready book; routing skipped"
+    assert provider.chat_calls == 1
 
     runtime = BookExpertMCP(settings, catalog, provider, searcher, answerer)
     try:

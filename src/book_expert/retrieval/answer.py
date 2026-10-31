@@ -92,7 +92,7 @@ class GroundedAnswerer:
             max_tokens=MAX_ANSWER_TOKENS,
         )
         text = response.text.strip()
-        if not text or text == INSUFFICIENT:
+        if not text or _is_insufficient(text):
             return self._record(
                 Answer(
                     text=REFUSAL,
@@ -134,6 +134,11 @@ class GroundedAnswerer:
                 answer=answer.text,
             )
         return answer
+
+
+def _is_insufficient(text: str) -> bool:
+    """Модель может добавить объяснение вокруг маркера — ловим его в любом месте."""
+    return INSUFFICIENT in text.upper()
 
 
 def _context_prompt(query: str, hits: tuple[SearchHit, ...]) -> str:

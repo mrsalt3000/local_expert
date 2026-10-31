@@ -68,6 +68,13 @@ class BookRouter:
             return BookRoute((), 0.0, "library is empty")
         if not query.strip():
             return self._fallback(candidates, "empty query")
+        if len(candidates) == 1:
+            only = candidates[0]
+            return BookRoute(
+                (only.id,),
+                1.0,
+                "single ready book; routing skipped",
+            )
 
         messages = [
             ChatMessage(role="system", content=SYSTEM_PROMPT),
