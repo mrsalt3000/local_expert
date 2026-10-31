@@ -73,6 +73,29 @@ denylist опасных команд, audit JSONL, запрет remote-опер�
 отключены. Политика —
 [docs/adr/0003](docs/adr/0003-agent-autonomy.md).
 
+## Reranking
+
+Гибридный поиск можно дополнительно переранжировать cross-encoder-моделью
+через `fastembed` (ONNX, без torch). По умолчанию выключено:
+
+```dotenv
+BOOK_EXPERT_RERANK_ENABLED=true
+BOOK_EXPERT_RERANK_MODEL=jinaai/jina-reranker-v2-base-multilingual
+BOOK_EXPERT_RERANK_TOP_N=20
+```
+
+Модель (~1.1 ГБ) скачивается при первом поиске в `data/artifacts/models`
+(git-ignored); `doctor` показывает, есть ли она в кэше. Если модель не
+загрузилась или инференс упал, поиск возвращается к обычному RRF-порядку и
+помечает это в `note`.
+
+## Очистка колонтитулов
+
+Опционально (`BOOK_EXPERT_STRIP_RUNNING_HEADERS=true`) из текста перед chunking
+удаляются повторяющиеся колонтитулы с номерами страниц. Сноски и тело страницы
+остаются; page map и `printed_page_label` не меняются. На реальной книге
+выигрыша в recall/MRR не дало, поэтому по умолчанию выключено.
+
 ## Оценка и тесты
 
 ```bash

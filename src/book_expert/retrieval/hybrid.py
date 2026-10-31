@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 import httpx
@@ -12,6 +13,7 @@ from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.models import BookStatus, SearchHit, SearchSource
 from book_expert.providers import Provider, ProviderUnavailableError
+from book_expert.retrieval.rerank import RerankError, Reranker, create_reranker
 
 RRF_K = 60
 
@@ -33,6 +35,7 @@ class HybridSearcher:
         catalog: Catalog,
         *,
         client: QdrantClient | None = None,
+        reranker: Reranker | None = None,
     ) -> None:
         self.settings = settings
         self.provider = provider
@@ -40,8 +43,11 @@ class HybridSearcher:
         self.collection = settings.qdrant_collection
         self.client = client if client is not None else _qdrant_client(settings)
         self._owns_client = client is None
+        self.reranker = reranker if reranker is not None else create_reranker(settings)
 
     def close(self) -> None:
+        if self.reranker is not None:
+            self.reranker.close()
         if self._owns_client:
             self.client.close()
 
@@ -64,6 +70,8 @@ class HybridSearcher:
         if result_limit <= 0:
             return SearchOutcome(hits=(), note="limit must be positive")
         candidate_limit = max(result_limit * 4, 20)
+        if self.reranker is not None:
+            candidate_limit = max(candidate_limit, self.settings.rerank_top_n)
 
         dense_hits: list[SearchHit] = []
         sources: list[str] = []
@@ -96,13 +104,36 @@ class HybridSearcher:
             sources.append("lexical")
 
         if dense_hits and lexical_hits:
-            hits = rrf_fuse(dense_hits, lexical_hits, limit=result_limit)
+            fused = rrf_fuse(dense_hits, lexical_hits, limit=candidate_limit)
         elif dense_hits:
-            hits = tuple(dense_hits[:result_limit])
+            fused = tuple(dense_hits[:candidate_limit])
         else:
-            hits = tuple(lexical_hits[:result_limit])
+            fused = tuple(lexical_hits[:candidate_limit])
 
-        return SearchOutcome(hits=hits, sources=tuple(sources))
+        hits, note, reranked = self._rerank(text, fused, result_limit)
+        if reranked:
+            sources.append("rerank")
+        return SearchOutcome(hits=hits, sources=tuple(sources), note=note)
+
+    def _rerank(
+        self, query: str, hits: Sequence[SearchHit], limit: int
+    ) -> tuple[tuple[SearchHit, ...], str | None, bool]:
+        if self.reranker is None or len(hits) < 2:
+            return tuple(hits[:limit]), None, False
+        pool = tuple(hits[: self.settings.rerank_top_n])
+        try:
+            scores = self.reranker.rerank(query, [hit.text for hit in pool])
+        except RerankError as exc:
+            return tuple(hits[:limit]), f"rerank failed: {exc}", False
+        ranked = sorted(
+            zip(pool, scores, strict=True),
+            key=lambda item: (-item[1], item[0].chunk_id),
+        )
+        return (
+            tuple(replace(hit, score=score) for hit, score in ranked[:limit]),
+            None,
+            True,
+        )
 
     def _dense_search(
         self, query: str, book_ids: list[str] | None, limit: int

@@ -13,6 +13,7 @@ Exit code: 0 — нет fail-проверок, 1 — есть хотя бы од
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import platform
 import shutil
@@ -29,6 +30,7 @@ from rich.console import Console
 from rich.table import Table
 
 from book_expert.config import Settings
+from book_expert.retrieval.rerank import reranker_cache_dir
 
 OK = "ok"
 WARN = "warn"
@@ -143,6 +145,34 @@ def check_provider(settings: Settings) -> CheckResult:
             "фрагменты книг уйдут наружу; используйте только с явного согласия",
         )
     return CheckResult("provider", OK, "локальный ollama")
+
+
+def _reranker_cached(settings: Settings) -> bool:
+    cache_root = reranker_cache_dir(settings)
+    folder = f"models--{settings.rerank_model.replace('/', '--')}"
+    return (cache_root / folder).exists()
+
+
+def check_reranker(settings: Settings) -> CheckResult:
+    if not settings.rerank_enabled:
+        return CheckResult(
+            "reranker", OK, "выключен (BOOK_EXPERT_RERANK_ENABLED=false)"
+        )
+    if importlib.util.find_spec("fastembed") is None:
+        return CheckResult(
+            "reranker",
+            FAIL,
+            "fastembed не установлен",
+            "выполните: uv sync",
+        )
+    if _reranker_cached(settings):
+        return CheckResult("reranker", OK, f"{settings.rerank_model}: в кэше")
+    return CheckResult(
+        "reranker",
+        WARN,
+        f"{settings.rerank_model}: не скачана",
+        "модель (~1.1 GB) скачается при первом поиске",
+    )
 
 
 def check_bwrap(which: Which) -> CheckResult:
@@ -406,6 +436,7 @@ class Doctor:
             check_python(),
             check_directories(self.settings),
             check_provider(self.settings),
+            check_reranker(self.settings),
             check_bwrap(self._which),
             check_docker(self._which, self._runner),
         ]

@@ -99,7 +99,10 @@ class BookIndexer:
         force: bool = False,
     ) -> Book:
         pdf_path = Path(path).expanduser()
-        document = extract_pdf(pdf_path)
+        document = extract_pdf(
+            pdf_path,
+            strip_running_lines=self.settings.strip_running_headers,
+        )
         existing = self.catalog.get_book_by_path(pdf_path)
         book_id = existing.id if existing is not None else _book_id(document.path)
         book_title = title or document.title or (existing.title if existing else None)

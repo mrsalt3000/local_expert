@@ -10,8 +10,10 @@ import pytest
 
 from book_expert.ingestion.pdf import (
     PdfEncryptedError,
+    PdfPage,
     PdfParseError,
     extract_pdf,
+    strip_running_lines_from_pages,
 )
 
 
@@ -118,3 +120,68 @@ def test_blank_document_has_no_text_layer(tmp_path: Path) -> None:
     document = extract_pdf(pdf)
     assert document.has_text_layer is False
     assert document.empty_page_indices == (0,)
+
+
+def _page(index: int, lines: list[str]) -> PdfPage:
+    text = "\n".join(lines)
+    return PdfPage(
+        pdf_page_index=index,
+        text=text,
+        printed_page_label=str(index + 1),
+        char_count=len(text),
+        block_count=len(lines),
+        width=595.0,
+        height=842.0,
+    )
+
+
+def test_running_headers_with_page_numbers_are_removed() -> None:
+    pages = [
+        _page(
+            index,
+            [
+                f"{12 + index} Глава 1. Синтетика",
+                f"Тело страницы {index}.",
+                f"Сноска {index} уникальна.",
+            ],
+        )
+        for index in range(6)
+    ]
+    cleaned = strip_running_lines_from_pages(pages)
+    for page in cleaned:
+        assert "Глава 1. Синтетика" not in page.text
+        assert "Тело страницы" in page.text
+        assert "уникальна" in page.text
+    assert cleaned[0].printed_page_label == "1"
+
+
+def test_unique_margin_line_is_kept() -> None:
+    pages = [_page(0, ["Заголовок главы", "Текст."])]
+    pages += [
+        _page(index, [f"{20 + index} Глава 1. Синтетика", "Текст."])
+        for index in range(1, 6)
+    ]
+    cleaned = strip_running_lines_from_pages(pages)
+    assert "Заголовок главы" in cleaned[0].text
+
+
+def test_bare_page_numbers_are_removed() -> None:
+    pages = [_page(index, ["Текст.", str(index + 1)]) for index in range(5)]
+    cleaned = strip_running_lines_from_pages(pages)
+    for page in cleaned:
+        assert page.text.strip() == "Текст."
+
+
+def test_short_documents_are_left_untouched() -> None:
+    pages = [
+        _page(index, [f"{5 + index} Глава 1. Синтетика", "Текст."])
+        for index in range(3)
+    ]
+    cleaned = strip_running_lines_from_pages(pages)
+    assert cleaned == tuple(pages)
+
+
+def test_structural_headings_are_never_removed() -> None:
+    pages = [_page(index, ["Часть 1", f"Текст {index}."]) for index in range(6)]
+    cleaned = strip_running_lines_from_pages(pages)
+    assert all("Часть 1" in page.text for page in cleaned)

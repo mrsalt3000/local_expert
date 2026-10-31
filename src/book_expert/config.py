@@ -42,8 +42,13 @@ class Settings(BaseSettings):
 
     chunk_size: int = 1000
     chunk_overlap: int = 150
+    strip_running_headers: bool = False
     top_k: int = 8
     router_confidence_threshold: float = 0.6
+
+    rerank_enabled: bool = False
+    rerank_model: str = "jinaai/jina-reranker-v2-base-multilingual"
+    rerank_top_n: int = 20
 
     agent_max_steps: int = 12
     agent_timeout_s: int = 120
@@ -69,6 +74,7 @@ class Settings(BaseSettings):
     @field_validator(
         "chunk_size",
         "top_k",
+        "rerank_top_n",
         "agent_max_steps",
         "agent_timeout_s",
         "command_timeout_s",
