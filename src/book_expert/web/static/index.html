@@ -34,6 +34,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; }
   body {
     margin: 0;
@@ -153,6 +154,30 @@
   }
   #send:disabled { opacity: 0.55; cursor: default; }
   .hint { width: min(860px, 100%); margin: 8px auto 0; font-size: 12px; color: var(--muted); }
+  .tabs { display: flex; gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+  .tab { border: 0; background: transparent; padding: 7px 14px; border-radius: 8px; cursor: pointer; color: var(--muted); }
+  .tab.active { background: var(--accent); color: var(--accent-ink); }
+  .view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .view[hidden] { display: none; }
+  .library { width: min(980px, 100%); margin: 0 auto; padding: 24px 20px; overflow-y: auto; }
+  .lib-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .upload { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 14px; }
+  .upload input[type=file] { max-width: 260px; }
+  .lib-list { display: flex; flex-direction: column; gap: 10px; }
+  .lib-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  .lib-main { min-width: 220px; flex: 1; }
+  .lib-title { font-weight: 600; overflow-wrap: anywhere; }
+  .lib-sub { color: var(--muted); font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
+  .lib-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .lib-actions button { padding: 6px 10px; font-size: 14px; background: var(--bg); cursor: pointer; }
+  .lib-actions button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .lib-actions button.danger { color: var(--error); }
+  .lib-actions button:disabled { opacity: 0.5; cursor: default; }
+  .status { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .status.ready { color: var(--accent); border-color: var(--accent); }
+  .status.failed { color: var(--error); border-color: var(--error); }
+  .job { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; }
+  .job.failed { color: var(--error); }
   .pending { color: var(--muted); font-size: 14px; padding: 0 4px; }
   .pending span { animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.35; } }
@@ -167,7 +192,11 @@
 <body>
 <header>
   <div class="brand">Book Expert <span class="sub">локальный чат по книгам</span></div>
-  <div class="controls">
+  <nav class="tabs" role="tablist" aria-label="Разделы">
+    <button type="button" class="tab active" data-tab="chat" role="tab" aria-selected="true">Чат</button>
+    <button type="button" class="tab" data-tab="library" role="tab" aria-selected="false">Библиотека</button>
+  </nav>
+  <div class="controls" id="chat-controls">
     <select id="book" aria-label="Книга">
       <option value="">Все книги (авто-выбор)</option>
     </select>
@@ -179,19 +208,37 @@
   </div>
 </header>
 
-<main id="messages" aria-live="polite">
-  <div class="thread" id="thread"></div>
-</main>
-
 <div id="error" class="error" role="alert" hidden></div>
 
-<footer>
-  <form id="form" class="composer">
-    <textarea id="input" rows="1" maxlength="4000" placeholder="Спросите о книге…" aria-label="Вопрос"></textarea>
-    <button id="send" type="submit">Отправить</button>
-  </form>
-  <div class="hint">Enter — отправить, Shift+Enter — новая строка. История хранится только в этом браузере.</div>
-</footer>
+<div id="view-chat" class="view">
+  <main id="messages" aria-live="polite">
+    <div class="thread" id="thread"></div>
+  </main>
+
+  <footer>
+    <form id="form" class="composer">
+      <textarea id="input" rows="1" maxlength="4000" placeholder="Спросите о книге…" aria-label="Вопрос"></textarea>
+      <button id="send" type="submit">Отправить</button>
+    </form>
+    <div class="hint">Enter — отправить, Shift+Enter — новая строка. История хранится только в этом браузере.</div>
+  </footer>
+</div>
+
+<div id="view-library" class="view" hidden>
+  <main class="library">
+    <div class="lib-toolbar">
+      <div class="upload">
+        <input type="file" id="upload-file" accept=".pdf,application/pdf" aria-label="PDF для загрузки">
+        <label><input type="checkbox" id="upload-ingest"> сразу в RAG</label>
+        <button type="button" id="upload-button" class="primary">Загрузить PDF</button>
+      </div>
+      <button type="button" id="lib-refresh" class="ghost">Обновить</button>
+    </div>
+    <div id="lib-job" class="job" hidden></div>
+    <div id="lib-list" class="lib-list"></div>
+    <p class="hint">PDF хранятся в data/raw/books. «Удалить файл» убирает и файл, и индекс.</p>
+  </main>
+</div>
 
 <script>
 (() => {
@@ -207,8 +254,28 @@
   const sendButton = document.getElementById("send");
   const clearButton = document.getElementById("clear");
   const errorBox = document.getElementById("error");
+  const tabs = Array.from(document.querySelectorAll(".tab"));
+  const views = {
+    chat: document.getElementById("view-chat"),
+    library: document.getElementById("view-library"),
+  };
+  const chatControls = document.getElementById("chat-controls");
+  const libList = document.getElementById("lib-list");
+  const libJob = document.getElementById("lib-job");
+  const uploadFile = document.getElementById("upload-file");
+  const uploadIngest = document.getElementById("upload-ingest");
+  const uploadButton = document.getElementById("upload-button");
+  const refreshButton = document.getElementById("lib-refresh");
 
-  const state = { mode: "rag", bookId: "", messages: [], pending: false };
+  const state = {
+    mode: "rag",
+    bookId: "",
+    messages: [],
+    pending: false,
+    tab: "chat",
+    library: [],
+    libraryBusy: false,
+  };
 
   function loadState() {
     try {
@@ -225,6 +292,7 @@
       }
       if (saved.mode === "rag" || saved.mode === "agent") state.mode = saved.mode;
       if (typeof saved.bookId === "string") state.bookId = saved.bookId;
+      if (saved.tab === "chat" || saved.tab === "library") state.tab = saved.tab;
     } catch (error) {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -234,7 +302,12 @@
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ mode: state.mode, bookId: state.bookId, messages: state.messages })
+        JSON.stringify({
+          mode: state.mode,
+          bookId: state.bookId,
+          tab: state.tab,
+          messages: state.messages,
+        })
       );
     } catch (error) {
       /* приватный режим или переполнение — история просто не сохранится */
@@ -405,12 +478,16 @@
     }
   }
 
-  async function loadBooks() {
+  async function refreshBooks() {
     try {
       const response = await fetch("/api/books");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const books = await response.json();
       const known = new Set();
+      const auto = document.createElement("option");
+      auto.value = "";
+      auto.textContent = "Все книги (авто-выбор)";
+      bookSelect.replaceChildren(auto);
       for (const book of books) {
         known.add(book.id);
         const option = document.createElement("option");
@@ -424,6 +501,276 @@
       showError(`Не удалось загрузить список книг: ${error.message || error}`);
     }
   }
+
+  const STATUS_LABELS = {
+    ready: "в RAG",
+    failed: "ошибка",
+    not_indexed: "не в RAG",
+    indexing: "индексируется",
+    pending: "ожидает индексации",
+  };
+
+  function formatSize(bytes) {
+    if (typeof bytes !== "number") return "—";
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+    return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+  }
+
+  function statusBadge(item) {
+    const badge = document.createElement("span");
+    badge.className = `status ${item.in_rag ? "ready" : item.status === "failed" ? "failed" : ""}`;
+    badge.textContent = item.in_rag ? "в RAG" : STATUS_LABELS[item.status] || item.status;
+    return badge;
+  }
+
+  function actionButton(label, action, item, options = {}) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    if (options.primary) button.classList.add("primary");
+    if (options.danger) button.classList.add("danger");
+    button.disabled = state.libraryBusy;
+    button.addEventListener("click", () => runLibraryAction(action, item, Boolean(options.force)));
+    return button;
+  }
+
+  function libraryRow(item) {
+    const row = document.createElement("div");
+    row.className = "lib-row";
+
+    const main = document.createElement("div");
+    main.className = "lib-main";
+    const title = document.createElement("div");
+    title.className = "lib-title";
+    title.textContent = item.title;
+    title.append(" ", statusBadge(item));
+    const sub = document.createElement("div");
+    sub.className = "lib-sub";
+    const parts = [
+      item.name,
+      formatSize(item.size_bytes),
+      item.pages ? `${item.pages} стр.` : null,
+      item.chunks ? `${item.chunks} чанков` : null,
+    ].filter(Boolean);
+    sub.textContent = parts.join(" · ") + (item.file_exists ? "" : " · файл не найден");
+    if (item.error) sub.textContent += ` · ${item.error}`;
+    main.append(title, sub);
+
+    const actions = document.createElement("div");
+    actions.className = "lib-actions";
+    if (item.file_exists && item.status === "failed") {
+      actions.append(actionButton("Повторить", "ingest", item, { primary: true }));
+    } else if (item.file_exists && item.in_rag) {
+      actions.append(actionButton("Переиндексировать", "ingest", item, { force: true }));
+    } else if (item.file_exists) {
+      actions.append(actionButton("В RAG", "ingest", item, { primary: true }));
+    }
+    if (item.book_id) {
+      actions.append(actionButton("Убрать из RAG", "remove", item, { danger: true }));
+    }
+    if (item.file_exists) {
+      actions.append(actionButton("Удалить файл", "delete", item, { danger: true }));
+    }
+    row.append(main, actions);
+    return row;
+  }
+
+  function renderLibrary() {
+    libList.replaceChildren();
+    if (!state.library.length) {
+      const empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = "Библиотека пуста — загрузите PDF.";
+      libList.append(empty);
+      return;
+    }
+    for (const item of state.library) libList.append(libraryRow(item));
+  }
+
+  async function loadLibrary() {
+    try {
+      const response = await fetch("/api/library");
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error((data && data.detail) || `HTTP ${response.status}`);
+      }
+      state.library = Array.isArray(data) ? data : [];
+      renderLibrary();
+    } catch (error) {
+      showError(`Не удалось загрузить библиотеку: ${error.message || error}`);
+    }
+  }
+
+  function showJob(job) {
+    libJob.hidden = false;
+    libJob.classList.toggle("failed", job.status === "failed");
+    const kind = job.kind === "reindex" ? "Переиндексация" : "Индексация";
+    const label = {
+      queued: "в очереди",
+      running: "выполняется",
+      done: "готово",
+      failed: "ошибка",
+    }[job.status] || job.status;
+    libJob.textContent = `${kind}: ${job.name} — ${label}${job.error ? `: ${job.error}` : ""}`;
+  }
+
+  let pollTimer = null;
+
+  function pollJob(jobId) {
+    if (pollTimer) clearTimeout(pollTimer);
+    state.libraryBusy = true;
+    renderLibrary();
+    const tick = async () => {
+      try {
+        const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+        const job = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(job.detail || `HTTP ${response.status}`);
+        }
+        showJob(job);
+        if (job.status === "queued" || job.status === "running") {
+          pollTimer = setTimeout(tick, 1500);
+          return;
+        }
+        state.libraryBusy = false;
+        await loadLibrary();
+        await refreshBooks();
+        if (job.status === "failed") {
+          showError(`Индексация не удалась: ${job.error || "неизвестная ошибка"}`);
+        }
+      } catch (error) {
+        state.libraryBusy = false;
+        renderLibrary();
+        showError(`Не удалось получить статус задачи: ${error.message || error}`);
+      }
+    };
+    tick();
+  }
+
+  async function runLibraryAction(action, item, force) {
+    if (state.libraryBusy) return;
+    if (
+      action === "delete" &&
+      !window.confirm(`Удалить файл «${item.name}» вместе с индексом?`)
+    ) {
+      return;
+    }
+    if (
+      action === "remove" &&
+      !window.confirm(`Убрать «${item.title}» из RAG? Файл останется на диске.`)
+    ) {
+      return;
+    }
+    showError("");
+    state.libraryBusy = true;
+    renderLibrary();
+    let started = false;
+    try {
+      if (action === "ingest") {
+        const response = await fetch("/api/library/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: item.name, force }),
+        });
+        const job = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(job.detail || `HTTP ${response.status}`);
+        started = true;
+        await loadLibrary();
+        pollJob(job.id);
+        return;
+      }
+      const url =
+        action === "remove"
+          ? "/api/library/remove-from-rag"
+          : "/api/library/delete-file";
+      const payload = action === "remove" ? { book_id: item.book_id } : { name: item.name };
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      await loadLibrary();
+      await refreshBooks();
+    } catch (error) {
+      showError(`Не удалось выполнить действие: ${error.message || error}`);
+    } finally {
+      if (!started) {
+        state.libraryBusy = false;
+        renderLibrary();
+      }
+    }
+  }
+
+  async function uploadPdf() {
+    if (state.libraryBusy) return;
+    const file = uploadFile.files && uploadFile.files[0];
+    if (!file) {
+      showError("Выберите PDF-файл.");
+      return;
+    }
+    if (!/\.pdf$/i.test(file.name)) {
+      showError("Можно загружать только PDF.");
+      return;
+    }
+    const body = new FormData();
+    body.append("file", file);
+    body.append("ingest", uploadIngest.checked ? "true" : "false");
+    showError("");
+    state.libraryBusy = true;
+    renderLibrary();
+    uploadButton.disabled = true;
+    try {
+      const response = await fetch("/api/library/upload", { method: "POST", body });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+      uploadFile.value = "";
+      await loadLibrary();
+      await refreshBooks();
+      if (data.job) {
+        pollJob(data.job.id);
+      } else {
+        state.libraryBusy = false;
+        renderLibrary();
+        if (data.note) showError(data.note);
+      }
+    } catch (error) {
+      state.libraryBusy = false;
+      renderLibrary();
+      showError(`Не удалось загрузить файл: ${error.message || error}`);
+    } finally {
+      uploadButton.disabled = false;
+    }
+  }
+
+  function applyTab() {
+    for (const tab of tabs) {
+      const active = tab.dataset.tab === state.tab;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", String(active));
+    }
+    for (const [name, view] of Object.entries(views)) {
+      view.hidden = name !== state.tab;
+    }
+    chatControls.hidden = state.tab !== "chat";
+    if (state.tab === "library") {
+      loadLibrary();
+    } else {
+      input.focus();
+    }
+  }
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      state.tab = tab.dataset.tab === "library" ? "library" : "chat";
+      saveState();
+      applyTab();
+    });
+  });
+
+  uploadButton.addEventListener("click", uploadPdf);
+  refreshButton.addEventListener("click", loadLibrary);
 
   modeButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -465,9 +812,10 @@
 
   loadState();
   applyMode();
+  applyTab();
   bookSelect.value = state.bookId;
   render();
-  loadBooks();
+  refreshBooks();
   input.focus();
 })();
 </script>

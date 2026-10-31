@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     strip_running_headers: bool = False
     top_k: int = 8
     router_confidence_threshold: float = 0.6
+    max_upload_mb: int = 200
 
     rerank_enabled: bool = False
     rerank_model: str = "jinaai/jina-reranker-v2-base-multilingual"
@@ -78,6 +79,7 @@ class Settings(BaseSettings):
         "agent_max_steps",
         "agent_timeout_s",
         "command_timeout_s",
+        "max_upload_mb",
     )
     @classmethod
     def _check_positive(cls, value: int) -> int:
@@ -111,6 +113,10 @@ class Settings(BaseSettings):
         return self.data_path / "raw"
 
     @property
+    def books_dir(self) -> Path:
+        return self.raw_dir / "books"
+
+    @property
     def processed_dir(self) -> Path:
         return self.data_path / "processed"
 
@@ -140,6 +146,7 @@ class Settings(BaseSettings):
     def ensure_dirs(self) -> None:
         for directory in (
             self.raw_dir,
+            self.books_dir,
             self.processed_dir,
             self.artifacts_dir,
             self.eval_dir,

@@ -104,6 +104,17 @@ MCP stdio server отдаёт tools `search_books`, `ask_books`, `list_books`,
 и audit. История диалога живёт в `localStorage` браузера, серверных сессий нет;
 ошибки провайдера возвращаются как 503 без traceback.
 
+### Библиотека
+
+`GET /api/library` объединяет PDF из `data/raw/books` и записи каталога:
+показывает, есть ли файл и попал ли он в RAG. `POST /api/library/upload`
+сохраняет PDF (sanitize имени, лимит `BOOK_EXPERT_MAX_UPLOAD_MB`, проверка
+`%PDF-`); `POST /api/library/ingest` ставит ingest/reindex в фоновую очередь
+с одним воркером и возвращает id задачи, `GET /api/jobs/{id}` отдаёт её статус.
+`POST /api/library/remove-from-rag` удаляет Qdrant points и запись каталога,
+оставляя файл; `POST /api/library/delete-file` удаляет и файл, и индекс.
+Пока задача выполняется, новые ingest и удаления отклоняются с 409.
+
 ## Хранение
 
 | Данные | Где | Git |

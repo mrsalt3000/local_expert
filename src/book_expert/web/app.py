@@ -9,7 +9,7 @@ from threading import Lock
 from time import perf_counter
 from typing import Annotated, Literal, Protocol
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -18,11 +18,21 @@ from book_expert.config import Settings
 from book_expert.models import Answer, Book
 from book_expert.providers import ProviderError, ProviderUnavailableError
 from book_expert.web.backend import BookChatBackend
+from book_expert.web.library import (
+    LibraryConflictError,
+    LibraryEntry,
+    LibraryError,
+    LibraryJob,
+    LibraryNotFoundError,
+    LibraryService,
+    LibraryValidationError,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 MAX_MESSAGE_CHARS = 4000
 MAX_BOOK_FILTERS = 20
 MAX_BOOK_ID_CHARS = 128
+MAX_FILE_NAME_CHARS = 255
 
 
 class ChatBackend(Protocol):
@@ -82,18 +92,66 @@ class ChatResponse(BaseModel):
     elapsed_ms: int
 
 
+class LibraryBookOut(BaseModel):
+    key: str
+    name: str
+    title: str
+    size_bytes: int | None = None
+    file_exists: bool
+    in_rag: bool
+    status: str
+    book_id: str | None = None
+    pages: int = 0
+    chunks: int = 0
+    error: str | None = None
+
+
+class LibraryJobOut(BaseModel):
+    id: str
+    kind: Literal["ingest", "reindex"]
+    name: str
+    status: Literal["queued", "running", "done", "failed"]
+    book_id: str | None = None
+    error: str | None = None
+
+
+class LibraryUploadOut(BaseModel):
+    entry: LibraryBookOut
+    job: LibraryJobOut | None = None
+    note: str | None = None
+
+
+class LibraryIngestRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_FILE_NAME_CHARS)
+    force: bool = False
+
+
+class LibraryRemoveRequest(BaseModel):
+    book_id: str = Field(min_length=1, max_length=MAX_BOOK_ID_CHARS)
+
+
+class LibraryDeleteRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_FILE_NAME_CHARS)
+
+
+class OkResponse(BaseModel):
+    ok: bool = True
+
+
 def create_app(
     settings: Settings | None = None,
     backend: ChatBackend | None = None,
+    library: LibraryService | None = None,
 ) -> FastAPI:
-    """Создаёт приложение; backend можно подменить в тестах."""
+    """Создаёт приложение; backend и library можно подменить в тестах."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
-        active = getattr(app.state, "backend", None)
-        if active is not None:
-            active.close()
+        for name in ("backend", "library"):
+            active = getattr(app.state, name, None)
+            if active is not None:
+                active.close()
 
     app = FastAPI(
         title="Book Expert",
@@ -104,7 +162,10 @@ def create_app(
     app.state.settings = settings or Settings()
     if backend is not None:
         app.state.backend = backend
+    if library is not None:
+        app.state.library = library
     backend_lock = Lock()
+    library_lock = Lock()
 
     def get_backend() -> ChatBackend:
         active = getattr(app.state, "backend", None)
@@ -120,6 +181,36 @@ def create_app(
                         ) from exc
                     app.state.backend = active
         return active
+
+    def get_library() -> LibraryService:
+        active = getattr(app.state, "library", None)
+        if active is None:
+            with library_lock:
+                active = getattr(app.state, "library", None)
+                if active is None:
+                    try:
+                        active = LibraryService(app.state.settings)
+                    except ValueError as exc:
+                        raise ProviderUnavailableError(
+                            f"library is not configured: {exc}"
+                        ) from exc
+                    app.state.library = active
+        return active
+
+    def raise_library_error(exc: Exception) -> None:
+        if isinstance(exc, LibraryNotFoundError):
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if isinstance(exc, LibraryConflictError):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if isinstance(exc, LibraryValidationError):
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if isinstance(exc, LibraryError):
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if isinstance(exc, ProviderError):
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if isinstance(exc, OSError):
+            raise HTTPException(status_code=503, detail="local storage error") from exc
+        raise exc
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
@@ -156,7 +247,105 @@ def create_app(
         response.elapsed_ms = int((perf_counter() - started) * 1000)
         return response
 
+    @app.get("/api/library", response_model=list[LibraryBookOut])
+    def library_books() -> list[LibraryBookOut]:
+        try:
+            entries = get_library().entries()
+        except Exception as exc:
+            raise_library_error(exc)
+        return [_library_out(entry) for entry in entries]
+
+    @app.post(
+        "/api/library/upload",
+        response_model=LibraryUploadOut,
+        status_code=201,
+    )
+    def library_upload(
+        file: UploadFile = File(...),
+        ingest: bool = Form(False),
+    ) -> LibraryUploadOut:
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="file name is required")
+        try:
+            entry, job, note = get_library().save_upload(
+                file.filename, file.file, ingest=ingest
+            )
+        except Exception as exc:
+            raise_library_error(exc)
+        finally:
+            file.file.close()
+        return LibraryUploadOut(
+            entry=_library_out(entry),
+            job=_job_out(job),
+            note=note,
+        )
+
+    @app.post(
+        "/api/library/ingest",
+        response_model=LibraryJobOut,
+        status_code=202,
+    )
+    def library_ingest(payload: LibraryIngestRequest) -> LibraryJobOut:
+        try:
+            job = get_library().start_ingest(payload.name, force=payload.force)
+        except Exception as exc:
+            raise_library_error(exc)
+        return _job_out(job)
+
+    @app.post("/api/library/remove-from-rag", response_model=OkResponse)
+    def library_remove(payload: LibraryRemoveRequest) -> OkResponse:
+        try:
+            get_library().remove_from_rag(payload.book_id)
+        except Exception as exc:
+            raise_library_error(exc)
+        return OkResponse()
+
+    @app.post("/api/library/delete-file", response_model=OkResponse)
+    def library_delete(payload: LibraryDeleteRequest) -> OkResponse:
+        try:
+            get_library().delete_file(payload.name)
+        except Exception as exc:
+            raise_library_error(exc)
+        return OkResponse()
+
+    @app.get("/api/jobs/{job_id}", response_model=LibraryJobOut)
+    def library_job(job_id: str) -> LibraryJobOut:
+        try:
+            job = get_library().get_job(job_id)
+        except Exception as exc:
+            raise_library_error(exc)
+        return _job_out(job)
+
     return app
+
+
+def _library_out(entry: LibraryEntry) -> LibraryBookOut:
+    return LibraryBookOut(
+        key=entry.key,
+        name=entry.name,
+        title=entry.title,
+        size_bytes=entry.size_bytes,
+        file_exists=entry.file_exists,
+        in_rag=entry.in_rag,
+        status=entry.status,
+        book_id=entry.book_id,
+        pages=entry.pages,
+        chunks=entry.chunks,
+        error=entry.error,
+    )
+
+
+def _job_out(job: LibraryJob | None) -> LibraryJobOut | None:
+    if job is None:
+        return None
+    return LibraryJobOut(
+        id=job.id,
+        kind=job.kind,
+        name=job.name,
+        status=job.status,
+        book_id=job.book_id,
+        error=job.error,
+    )
 
 
 def _book_out(book: Book) -> BookOut:
