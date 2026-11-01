@@ -15,6 +15,22 @@ _YEAR_PREFIX_RE = re.compile(r"^\s*(?:19|20)\d{2}\s*[-–—:]\s*")
 _SUSPICIOUS_RE = re.compile(
     r"(?i)(?:untitled|\.indd\b|^[-_.\s]+$|^\d{1,3}(?:[\s_-]+\d+)*$)"
 )
+_GENERIC_TITLE_KEYS = {
+    "аннотация",
+    "благодарности",
+    "введение",
+    "вступление",
+    "заключение",
+    "об авторе",
+    "обложка",
+    "оглавление",
+    "от автора",
+    "предисловие",
+    "пролог",
+    "содержание",
+    "untitled",
+    "эпилог",
+}
 
 
 def normalize_title(title: str) -> str:
@@ -101,7 +117,7 @@ def audit_catalog(
     missing: list[Book] = []
     for book in books:
         key = normalize_title(book.title)
-        if len(key) >= 3:
+        if len(key) >= 3 and key not in _GENERIC_TITLE_KEYS:
             duplicate_map[key].append(book)
         reason = suspicious_reason(book.title)
         if reason is not None:

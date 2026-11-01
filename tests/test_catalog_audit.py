@@ -65,6 +65,19 @@ def test_audit_groups_duplicates_and_prefers_richer_book(tmp_path: Path) -> None
     assert [book.id for book in group.books] == ["b", "a"]
 
 
+def test_audit_does_not_group_generic_section_titles(tmp_path: Path) -> None:
+    books = [
+        _book("a", "Вступление", tmp_path / "a.pdf"),
+        _book("b", "Вступление", tmp_path / "b.pdf"),
+        _book("c", "Alpha", tmp_path / "c.pdf"),
+        _book("d", "Alpha", tmp_path / "d.pdf"),
+    ]
+
+    report = audit_catalog(books, check_files=False)
+
+    assert [group.key for group in report.duplicates] == ["alpha"]
+
+
 def test_audit_reports_missing_files_without_deleting(tmp_path: Path) -> None:
     existing = tmp_path / "present.pdf"
     existing.write_text("x", encoding="utf-8")
