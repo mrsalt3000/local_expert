@@ -10,6 +10,7 @@ import pymupdf
 from typer.testing import CliRunner
 
 from book_expert import cli
+from book_expert.agent.audit import AuditLogger
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.ingestion.indexer import IndexingError
@@ -94,6 +95,18 @@ def test_ingest_error_returns_exit_code(monkeypatch: Any, tmp_path: Path) -> Non
     assert result.exit_code == 1
     assert json.loads(result.stdout)["error"] == "no extractable text"
     assert indexer.closed is True
+
+
+def test_audit_verify_json(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    AuditLogger(path).log("rag_search", {"query": "secret"}, ok=True)
+
+    result = runner.invoke(cli.app, ["audit-verify", str(path), "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["records"] == 1
 
 
 def test_books_json(monkeypatch: Any, tmp_path: Path) -> None:

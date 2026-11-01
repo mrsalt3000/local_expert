@@ -10,7 +10,7 @@ from typing import Any
 import typer
 from rich.console import Console
 
-from book_expert.agent.audit import AuditLogger
+from book_expert.agent.audit import AuditLogger, verify_audit_chain
 from book_expert.agent.graph import AgentRunner
 from book_expert.agent.tools.coding import build_coding_tools
 from book_expert.agent.tools.rag import build_rag_tools
@@ -193,6 +193,37 @@ def catalog_audit_report(
         or len(report.missing_files) > limit
     ):
         console.print(f"[dim]показаны первые {limit}; полный отчёт — --json[/dim]")
+
+
+@app.command("audit-verify")
+def audit_verify(
+    path: Path | None = typer.Argument(
+        None, exists=True, dir_okay=False, readable=True
+    ),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Проверить hash chain audit-лога."""
+    settings = Settings()
+    settings.ensure_dirs()
+    target = path
+    if target is None:
+        files = sorted(settings.audit_dir.glob("tools-*.jsonl"))
+        if not files:
+            _fail("audit log not found", json_output)
+        target = files[-1]
+    ok, records = verify_audit_chain(target)
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {"ok": ok, "records": records, "path": str(target)},
+                ensure_ascii=False,
+            )
+        )
+    else:
+        status = "[green]ok[/green]" if ok else "[red]broken[/red]"
+        console.print(f"{status} {target} ({records} records)")
+    if not ok:
+        raise typer.Exit(code=1)
 
 
 @app.command()
