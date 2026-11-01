@@ -239,6 +239,8 @@
 | 2026-10-31 | T19 | review | FastAPI UI + RAG/агент, 206 tests; live ask упёрся в SW Power Cap GPU |
 | 2026-10-31 | T19 | accepted | live smoke в браузере (RAG + агент, 200), 214 tests; приёмка нашла и закрыла 500 в agent-режиме при недоступном провайдере |
 | 2026-11-01 | T20 | accepted | book profiles 1150; DeepSeek routing top1 0.533, local 4B 0.500 без профилей; 356 tests |
+| 2026-11-01 | T21 | accepted | lemma-FTS5 547946 chunks; `сон/сна`; page recall@5 0.8947; `_lemma_ready` 0.2 ms после partial index |
+| 2026-11-01 | T24 | review | 100 reviewed на 3 книгах; third-book page recall@5 0.958, citation precision 0.771 |
 
 ### T20 — Book-level routing index
 
@@ -253,7 +255,7 @@
 
 ### T21 — Лемматизация FTS5 для русской морфологии
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted` (2026-11-01; partial index `_lemma_ready` 0.2 ms)
 - Scope: dependency `pymorphy3`, lemma-normalization query/index, reindex
   strategy, migration tests, eval на 76 кейсах.
 - Acceptance: `сон/сна`, `модель/модели` находят друг друга; нет регрессии
@@ -280,7 +282,7 @@
 
 ### T24 — Расширение eval до 5 книг / 150 вопросов
 
-- [ ] Статус: `todo`
+- [ ] Статус: `review` (2026-11-01; 100 reviewed на 3 книгах; 24 third-book draft проверены вручную)
 - Scope: human-review вопросы по 3–5 книгам, per-stage routing/retrieval/
   citation metrics, local-only dataset.
 - Acceptance: ≥100 reviewed cases, routing и retrieval метрики считаются

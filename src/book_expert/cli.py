@@ -199,6 +199,24 @@ def catalog_audit_report(
         console.print(f"[dim]показаны первые {limit}; полный отчёт — --json[/dim]")
 
 
+@app.command("reindex-lemmas")
+def reindex_lemmas(
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Заполнить lemma-индекс FTS5 для всех chunks."""
+    settings = Settings()
+    settings.ensure_dirs()
+    catalog = _load_catalog(settings)
+    try:
+        count = catalog.reindex_lemmas()
+    except (OSError, ValueError) as exc:
+        _fail(str(exc), json_output)
+    if json_output:
+        typer.echo(json.dumps({"chunks": count}, ensure_ascii=False))
+    else:
+        console.print(f"лемматизировано chunks: {count}")
+
+
 @app.command("router-index")
 def router_index(
     json_output: bool = typer.Option(False, "--json"),

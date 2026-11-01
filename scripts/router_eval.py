@@ -81,6 +81,7 @@ def evaluate(path: Path) -> dict[str, Any]:
                     catalog,
                     profiles=router.profiles,
                     provider=provider,
+                    use_lemmas=settings.lexical_use_lemmas,
                 )
             }
             route = router.route(question)

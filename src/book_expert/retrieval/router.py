@@ -117,6 +117,7 @@ class BookRouter:
             self.catalog,
             profiles=self.profiles,
             provider=self.provider,
+            use_lemmas=self.settings.lexical_use_lemmas,
         )
         messages = [
             ChatMessage(role="system", content=SYSTEM_PROMPT),
@@ -171,6 +172,7 @@ def _candidate_books(
     *,
     profiles: BookProfileStore | None = None,
     provider: Provider | None = None,
+    use_lemmas: bool = True,
 ) -> list[Book]:
     """Сужает каталог до правдоподобных книг до вызова LLM."""
     by_id = {book.id: book for book in books}
@@ -196,6 +198,7 @@ def _candidate_books(
             query,
             limit=CANDIDATE_HITS,
             query_mode="or_prefix5",
+            use_lemmas=use_lemmas,
         )
     except Exception:
         hits = []

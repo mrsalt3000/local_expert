@@ -70,6 +70,76 @@ def test_upsert_and_get_book(tmp_path: Path) -> None:
     assert catalog.get_book("missing") is None
 
 
+def test_lexical_search_matches_russian_word_forms(tmp_path: Path) -> None:
+    catalog = _catalog(tmp_path)
+    catalog.upsert_book(_book(tmp_path))
+    catalog.replace_chunks(
+        "book-1",
+        [
+            _chunk("book-1", 0, "глубокий сон"),
+            _chunk("book-1", 1, "фаза сна"),
+        ],
+    )
+
+    lemma_hits = catalog.search_lexical("сон", use_lemmas=True)
+    exact_hits = catalog.search_lexical("сон", use_lemmas=False)
+
+    assert {hit.chunk_id for hit in lemma_hits} == {
+        "book-1-chunk-0",
+        "book-1-chunk-1",
+    }
+    assert {hit.chunk_id for hit in exact_hits} == {"book-1-chunk-0"}
+
+
+def test_reindex_lemmas_rebuilds_fts(tmp_path: Path) -> None:
+    catalog = _catalog(tmp_path)
+    catalog.upsert_book(_book(tmp_path))
+    catalog.replace_chunks(
+        "book-1",
+        [
+            _chunk("book-1", 0, "глубокий сон"),
+            _chunk("book-1", 1, "фаза сна"),
+        ],
+    )
+    with catalog._connect() as connection:
+        connection.execute("UPDATE chunks SET lemma_text = NULL")
+
+    assert catalog.reindex_lemmas() == 2
+    assert {hit.chunk_id for hit in catalog.search_lexical("сон")} == {
+        "book-1-chunk-0",
+        "book-1-chunk-1",
+    }
+
+
+def test_partial_lemma_index_falls_back_to_text_fts(tmp_path: Path) -> None:
+    catalog = _catalog(tmp_path)
+    catalog.upsert_book(_book(tmp_path))
+    catalog.replace_chunks(
+        "book-1",
+        [_chunk("book-1", 0, "глубокий сон")],
+    )
+    with catalog._connect() as connection:
+        connection.execute("UPDATE chunks SET lemma_text = NULL")
+    catalog.upsert_book(
+        _book(
+            tmp_path,
+            book_id="book-2",
+            content_hash="hash-2",
+            title="Second Book",
+        )
+    )
+    catalog.replace_chunks(
+        "book-2",
+        [_chunk("book-2", 0, "новый сон")],
+    )
+
+    assert catalog._lemma_ready() is False
+    assert {hit.chunk_id for hit in catalog.search_lexical("сон")} == {
+        "book-1-chunk-0",
+        "book-2-chunk-0",
+    }
+
+
 def test_upsert_is_idempotent(tmp_path: Path) -> None:
     catalog = _catalog(tmp_path)
     catalog.upsert_book(_book(tmp_path))

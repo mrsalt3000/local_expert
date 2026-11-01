@@ -20,6 +20,7 @@ from book_expert.models import (
     SearchSource,
     Section,
 )
+from book_expert.retrieval.lemmas import lemmatize_text, lemmatize_tokens
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS books (
@@ -62,6 +63,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     section_path TEXT,
     ordinal INTEGER NOT NULL,
     text TEXT NOT NULL,
+    lemma_text TEXT,
     token_count INTEGER,
     UNIQUE(book_id, ordinal)
 );
@@ -90,6 +92,35 @@ CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
     VALUES ('delete', old.rowid, old.text);
     INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, new.text);
 END;
+"""
+
+_LEMMA_SCHEMA = """
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts_lemma USING fts5(
+    lemma_text,
+    content='chunks',
+    content_rowid='rowid',
+    tokenize='unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER IF NOT EXISTS chunks_lemma_ai AFTER INSERT ON chunks BEGIN
+    INSERT INTO chunks_fts_lemma(rowid, lemma_text)
+    VALUES (new.rowid, new.lemma_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_lemma_ad AFTER DELETE ON chunks BEGIN
+    INSERT INTO chunks_fts_lemma(chunks_fts_lemma, rowid, lemma_text)
+    VALUES ('delete', old.rowid, old.lemma_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_lemma_au AFTER UPDATE ON chunks BEGIN
+    INSERT INTO chunks_fts_lemma(chunks_fts_lemma, rowid, lemma_text)
+    VALUES ('delete', old.rowid, old.lemma_text);
+    INSERT INTO chunks_fts_lemma(rowid, lemma_text)
+    VALUES (new.rowid, new.lemma_text);
+END;
+
+CREATE INDEX IF NOT EXISTS chunks_lemma_missing
+    ON chunks(lemma_text) WHERE lemma_text IS NULL;
 """
 
 
@@ -150,6 +181,12 @@ class Catalog:
                 connection.execute(
                     "ALTER TABLE books ADD COLUMN format TEXT NOT NULL DEFAULT 'pdf'"
                 )
+            chunk_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(chunks)")
+            }
+            if "lemma_text" not in chunk_columns:
+                connection.execute("ALTER TABLE chunks ADD COLUMN lemma_text TEXT")
+            connection.executescript(_LEMMA_SCHEMA)
 
     def upsert_book(
         self, book: Book, sections: Sequence[Section] | None = None
@@ -231,8 +268,8 @@ class Catalog:
                 """
                 INSERT INTO chunks (
                     id, book_id, pdf_page_index, printed_page_label,
-                    section_path, ordinal, text, token_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    section_path, ordinal, text, lemma_text, token_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -243,6 +280,7 @@ class Catalog:
                         chunk.section_path,
                         chunk.ordinal,
                         chunk.text,
+                        lemmatize_text(chunk.text),
                         chunk.token_count,
                     )
                     for chunk in chunks
@@ -253,6 +291,38 @@ class Catalog:
                 (len(chunks), _iso(utcnow()), book_id),
             )
         return len(chunks)
+
+    def reindex_lemmas(self) -> int:
+        """Заполняет lemma_text для всех chunks и перестраивает FTS5."""
+        self.initialize()
+        updated = 0
+        with self._connect() as connection:
+            connection.execute("DROP TRIGGER IF EXISTS chunks_au")
+            connection.execute("DROP TRIGGER IF EXISTS chunks_lemma_au")
+            cursor = connection.execute("SELECT id, text FROM chunks")
+            while True:
+                batch = cursor.fetchmany(500)
+                if not batch:
+                    break
+                connection.executemany(
+                    "UPDATE chunks SET lemma_text = ? WHERE id = ?",
+                    [(lemmatize_text(row["text"]), row["id"]) for row in batch],
+                )
+                updated += len(batch)
+            connection.execute("INSERT INTO chunks_fts(chunks_fts) VALUES ('rebuild')")
+            connection.execute(
+                "INSERT INTO chunks_fts_lemma(chunks_fts_lemma) VALUES ('rebuild')"
+            )
+            connection.executescript(_SCHEMA)
+            connection.executescript(_LEMMA_SCHEMA)
+        return updated
+
+    def _lemma_ready(self) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM chunks WHERE lemma_text IS NULL LIMIT 1"
+            ).fetchone()
+        return row is None
 
     def set_status(
         self, book_id: str, status: BookStatus, *, description: str | None = None
@@ -348,11 +418,18 @@ class Catalog:
         book_ids: Sequence[str] | None = None,
         limit: int = 20,
         query_mode: LexicalQueryMode = "and",
+        use_lemmas: bool = True,
     ) -> list[SearchHit]:
         tokens = _tokens(query)
         if not tokens or limit <= 0:
             return []
         if book_ids is not None and not book_ids:
+            return []
+        fts_table = "chunks_fts"
+        if use_lemmas and self._lemma_ready():
+            fts_table = "chunks_fts_lemma"
+            tokens = lemmatize_tokens(query)
+        if not tokens:
             return []
         if query_mode == "or_prefix5":
             match = " OR ".join(
@@ -361,15 +438,16 @@ class Catalog:
             )
         else:
             match = " ".join(f'"{token}"' for token in tokens)
-        sql = """
+        sql = f"""
             SELECT
                 c.id, c.book_id, c.text, c.pdf_page_index,
                 c.printed_page_label, c.section_path, c.ordinal,
-                b.title AS book_title, b.format AS book_format, bm25(chunks_fts) AS rank
-            FROM chunks_fts
-            JOIN chunks c ON c.rowid = chunks_fts.rowid
+                b.title AS book_title, b.format AS book_format,
+                bm25({fts_table}) AS rank
+            FROM {fts_table}
+            JOIN chunks c ON c.rowid = {fts_table}.rowid
             JOIN books b ON b.id = c.book_id
-            WHERE chunks_fts MATCH ? AND b.status = ?
+            WHERE {fts_table} MATCH ? AND b.status = ?
         """
         params: list[Any] = [match, str(BookStatus.ready)]
         if book_ids is not None:

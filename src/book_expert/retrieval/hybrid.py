@@ -104,6 +104,7 @@ class HybridSearcher:
                 book_ids=book_ids,
                 limit=candidate_limit,
                 query_mode=lexical_query_mode or self.settings.lexical_query_mode,
+                use_lemmas=self.settings.lexical_use_lemmas,
             )
             sources.append("lexical")
 
