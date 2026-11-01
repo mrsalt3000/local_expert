@@ -19,6 +19,7 @@ from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.eval.metrics import load_cases, run_answer_eval, run_retrieval_eval
 from book_expert.eval.synthetic import seed_synthetic_corpus
+from book_expert.ingestion.document import DocumentError
 from book_expert.ingestion.indexer import BookIndexer, IndexingError
 from book_expert.ingestion.pdf import PdfError
 from book_expert.models import Answer, Book, SearchHit
@@ -81,7 +82,7 @@ def ingest(
     force: bool = typer.Option(False, "--force", help="Переиндексировать книгу."),
     json_output: bool = typer.Option(False, "--json", help="Машинный вывод."),
 ) -> None:
-    """Загрузить PDF в локальный индекс."""
+    """Загрузить книгу (PDF/EPUB/FB2/DJVU) в локальный индекс."""
     settings = Settings()
     settings.ensure_dirs()
     provider: Provider | None = None
@@ -91,7 +92,14 @@ def ingest(
         _, provider, indexer = _make_services(settings)
         book = indexer.index_pdf(path, title=title, force=force)
         payload = _book_payload(book, indexer)
-    except (PdfError, ProviderError, IndexingError, ValueError, OSError) as exc:
+    except (
+        DocumentError,
+        PdfError,
+        ProviderError,
+        IndexingError,
+        ValueError,
+        OSError,
+    ) as exc:
         _fail(str(exc), json_output)
         return
     finally:
@@ -209,8 +217,14 @@ def ask(
     console.print(answer.text)
     for citation in answer.citations:
         page = citation.printed_page_label or str(citation.pdf_page_index)
+        if citation.format in {"pdf", "djvu"}:
+            locator = f"стр. {page}"
+        elif citation.section_path:
+            locator = citation.section_path
+        else:
+            locator = f"фрагмент {page}"
         console.print(
-            f"[dim]— {citation.book_title}, стр. {page} ({citation.chunk_id})[/dim]"
+            f"[dim]— {citation.book_title}, {locator} ({citation.chunk_id})[/dim]"
         )
 
 
@@ -379,6 +393,7 @@ def _book_payload(book: Book, indexer: BookIndexer | None = None) -> dict[str, A
         "title": book.title,
         "author": book.author,
         "status": book.status.value,
+        "format": book.format,
         "pages": book.page_count,
         "chunks": book.chunk_count,
         "content_hash": book.content_hash,
@@ -404,6 +419,7 @@ def _hit_payload(hit: SearchHit) -> dict[str, Any]:
         "book_title": hit.book_title,
         "page": hit.printed_page_label or hit.pdf_page_index,
         "section": hit.section_path,
+        "format": hit.book_format,
         "score": round(hit.score, 6),
         "text": hit.text,
     }
@@ -422,6 +438,9 @@ def _answer_payload(answer: Answer) -> dict[str, Any]:
                 "book_title": citation.book_title,
                 "page": citation.printed_page_label or citation.pdf_page_index,
                 "chunk_id": citation.chunk_id,
+                "section": citation.section_path,
+                "format": citation.format,
+                "number": citation.number,
                 "quote": citation.quote,
             }
             for citation in answer.citations

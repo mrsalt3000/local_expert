@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     rrf_dense_weight: float = 1.0
     rrf_lexical_weight: float = 0.1
     max_upload_mb: int = 200
+    import_max_files: int = 500
+    import_max_file_mb: int = 500
+    import_max_total_mb: int = 50_000
 
     rerank_enabled: bool = False
     rerank_model: str = "jinaai/jina-reranker-v2-base-multilingual"
@@ -89,6 +92,9 @@ class Settings(BaseSettings):
         "agent_timeout_s",
         "command_timeout_s",
         "max_upload_mb",
+        "import_max_files",
+        "import_max_file_mb",
+        "import_max_total_mb",
     )
     @classmethod
     def _check_positive(cls, value: int) -> int:

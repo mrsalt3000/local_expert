@@ -47,7 +47,7 @@
 | Config | `config.py` | env/`.env`, пути, лимиты, выбор провайдера |
 | Domain | `models.py` | `Book`, `Chunk`, `Citation`, `Answer`, `SearchHit` |
 | Catalog | `catalog.py` | SQLite: книги, hash, статус, метаданные, оглавление, FTS5 |
-| Ingestion | `ingestion/pdf.py`, `chunking.py`, `indexer.py` | PDF → страницы → chunks → embeddings → Qdrant |
+| Ingestion | `ingestion/extract.py`, `epub.py`, `fb2.py`, `djvu.py`, `chunking.py`, `indexer.py` | PDF/EPUB/FB2/DJVU → страницы/секции → chunks → embeddings → Qdrant |
 | Providers | `providers/` | Ollama и OpenAI-compatible chat/embeddings |
 | Retrieval | `retrieval/hybrid.py`, `router.py`, `answer.py` | dense + lexical + RRF, router, grounded answer |
 | Agent | `agent/graph.py`, `agent/tools/`, `agent/policy.py` | LangGraph react-цикл, RAG/shell/fs/git, audit |
@@ -60,15 +60,17 @@
 
 ### Ingestion
 
-1. Пользователь: `book-expert ingest <pdf> [--title ...]`.
-2. PyMuPDF извлекает native text постранично; фиксируются `pdf_page_index` и
-   `printed_page_label`, если метку удалось определить.
+1. Пользователь: `book-expert ingest <book> [--title ...]`.
+2. `extract_document` определяет формат по расширению и сигнатуре:
+   PyMuPDF для PDF/EPUB, нативный XML для FB2, `djvutxt` для DJVU.
+   Фиксируются `pdf_page_index` (универсальный индекс), `printed_page_label`
+   (для FB2 — путь секции) и `format`.
 3. Chunker режет текст по структуре (заголовки/абзацы), сохраняя page anchor и
    `section_path`; chunk id детерминирован.
-4. Embeddings через выбранный провайдер; запись в Qdrant (dense) и FTS5
-   (lexical).
-5. Каталог обновляет статус книги и content hash. Повторный ingest того же
-   файла идемпотентен; изменённый файл переиндексируется.
+4. Embeddings через выбранный провайдер; запись в Qdrant (dense, payload
+   `book_format`) и FTS5 (lexical).
+5. Каталог обновляет статус книги, формат и content hash. Повторный ingest
+   того же файла идемпотентен; изменённый файл переиндексируется.
 
 ### Запрос с явной книгой
 
@@ -106,20 +108,32 @@ MCP stdio server отдаёт tools `search_books`, `ask_books`, `list_books`,
 
 ### Библиотека
 
-`GET /api/library` объединяет PDF из `data/raw/books` и записи каталога:
+`GET /api/library` объединяет книги из `data/raw/books` и записи каталога:
 показывает, есть ли файл и попал ли он в RAG. `POST /api/library/upload`
-сохраняет PDF (sanitize имени, лимит `BOOK_EXPERT_MAX_UPLOAD_MB`, проверка
-`%PDF-`); `POST /api/library/ingest` ставит ingest/reindex в фоновую очередь
+сохраняет книгу (sanitize имени, лимит `BOOK_EXPERT_MAX_UPLOAD_MB`, проверка
+сигнатуры формата); `POST /api/library/ingest` ставит ingest/reindex в фоновую очередь
 с одним воркером и возвращает id задачи, `GET /api/jobs/{id}` отдаёт её статус.
 `POST /api/library/remove-from-rag` удаляет Qdrant points и запись каталога,
 оставляя файл; `POST /api/library/delete-file` удаляет и файл, и индекс.
 Пока задача выполняется, новые ingest и удаления отклоняются с 409.
 
+Пакетный импорт: `POST /api/library/scan` принимает путь к папке (WSL или
+Windows-формат) и возвращает количество книг, объём, число уже имеющихся файлов
+и пропущенных; `POST /api/library/import` запускает одну фоновую задачу:
+рекурсивный обход без симлинков, плоское копирование в `data/raw/books`
+с суффиксом при совпадении имён, пропуск файлов с тем же именем и размером,
+затем последовательный ingest. Задача отдаёт `processed/total`, счётчики
+`copied/ingested/failed`, `remaining` и текущий файл — по ним UI рисует
+прогресс-бар. Если книг больше `IMPORT_MAX_FILES`, берётся первый батч,
+`remaining` показывает остаток, а следующий запуск пропустит уже
+скопированные файлы и продолжит со следующими.
+`POST /api/jobs/{id}/cancel` отменяет импорт после текущего файла.
+
 ## Хранение
 
 | Данные | Где | Git |
 | --- | --- | --- |
-| PDF | `data/raw/` | ignored |
+| Книги (PDF/EPUB/FB2/DJVU) | `data/raw/` | ignored |
 | Extracted text / chunks | `data/processed/` | ignored |
 | Qdrant volume | `data/artifacts/qdrant/` | ignored |
 | SQLite catalog + FTS5 | `data/artifacts/catalog.sqlite3` | ignored |

@@ -44,6 +44,7 @@ class FakeBackend:
                     pdf_page_index=4,
                     chunk_id="c1",
                     printed_page_label="42",
+                    number=1,
                     quote="Цитата.",
                 ),
             ),
@@ -113,6 +114,7 @@ def test_books_endpoint_maps_fields(client: TestClient) -> None:
             "pages": 10,
             "chunks": 20,
             "status": "ready",
+            "format": "pdf",
         }
     ]
 
@@ -136,6 +138,7 @@ def test_rag_answer_returns_citations(client: TestClient, backend: FakeBackend) 
     assert data["answer"] == "Ответ [1]."
     assert data["refused"] is False
     assert data["citations"][0]["page"] == "42"
+    assert data["citations"][0]["number"] == 1
     assert data["citations"][0]["quote"] == "Цитата."
     assert data["confidence"] == pytest.approx(0.9)
     assert data["elapsed_ms"] >= 0
@@ -225,3 +228,15 @@ def test_agent_timeout_is_504(client: TestClient, backend: FakeBackend) -> None:
     response = client.post("/api/chat", json={"message": "q", "mode": "agent"})
     assert response.status_code == 504
     assert "agent exceeded" in response.json()["detail"]
+
+
+def test_index_renders_markdown_safely(client: TestClient) -> None:
+    html = client.get("/").text
+
+    assert "function renderMarkdown" in html
+    assert "bubble.append(renderMarkdown" in html
+    assert "innerHTML" not in html
+    assert "if (!paragraphLines.length)" in html
+    assert "const fence = line.match(/^\\s*```(.*)$/)" in html
+    assert 'document.createElement("details")' in html
+    assert "sources-title" in html

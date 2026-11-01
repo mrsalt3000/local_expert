@@ -174,6 +174,9 @@ def _citations(text: str, hits: tuple[SearchHit, ...]) -> tuple[Citation, ...]:
                 pdf_page_index=hit.pdf_page_index,
                 chunk_id=hit.chunk_id,
                 printed_page_label=hit.printed_page_label,
+                section_path=hit.section_path,
+                format=hit.book_format,
+                number=index,
                 quote=_quote(hit.text),
             )
         )

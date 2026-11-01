@@ -136,6 +136,29 @@ def _answerer(
     )
 
 
+def test_citation_carries_format_and_section(tmp_path: Path) -> None:
+    hits = (
+        SearchHit(
+            chunk_id="c1",
+            book_id="book-1",
+            book_title="FB2 Book",
+            text="Alpha relevant passage.",
+            score=0.9,
+            pdf_page_index=0,
+            printed_page_label="Пролог",
+            section_path="Пролог",
+            book_format="fb2",
+        ),
+    )
+    provider = FakeProvider("Ответ по фрагменту [1].")
+    answerer = _answerer(tmp_path, provider, FakeSearcher(hits))
+
+    answer = answerer.ask("О чём пролог?", book_ids=["book-1"])
+
+    assert answer.citations[0].format == "fb2"
+    assert answer.citations[0].section_path == "Пролог"
+
+
 def test_answer_uses_context_and_citations(tmp_path: Path) -> None:
     provider = FakeProvider("Hybrid retrieval combines signals [1].")
     searcher = FakeSearcher(_hits())
@@ -293,3 +316,12 @@ def test_answer_writes_trace(tmp_path: Path) -> None:
     assert record["refused"] is False
     assert record["query"] == "<15 chars>"
     assert "secret question" not in trace.path.read_text(encoding="utf-8")
+
+
+def test_citations_keep_marker_numbers(tmp_path: Path) -> None:
+    provider = FakeProvider("Второй источник [2], затем первый [1].")
+    answerer = _answerer(tmp_path, provider, FakeSearcher(_hits()))
+
+    answer = answerer.ask("Вопрос?", book_ids=["book-1"])
+
+    assert [citation.number for citation in answer.citations] == [1, 2]

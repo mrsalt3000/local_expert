@@ -29,6 +29,7 @@ class Book:
     path: Path
     content_hash: str
     status: BookStatus = BookStatus.pending
+    format: str = "pdf"
     author: str | None = None
     page_count: int = 0
     chunk_count: int = 0
@@ -72,6 +73,7 @@ class SearchHit:
     printed_page_label: str | None = None
     section_path: str | None = None
     book_title: str | None = None
+    book_format: str = "pdf"
     source: SearchSource = SearchSource.fused
 
 
@@ -82,6 +84,9 @@ class Citation:
     pdf_page_index: int
     chunk_id: str
     printed_page_label: str | None = None
+    section_path: str | None = None
+    format: str = "pdf"
+    number: int = 0
     quote: str | None = None
 
 

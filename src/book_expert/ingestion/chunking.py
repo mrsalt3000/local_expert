@@ -47,16 +47,24 @@ def chunk_document(
     current_section: str | None = None
     ordinal = 0
 
+    document_format = getattr(document, "format", "pdf")
     for page in document.pages:
+        fallback_section = (
+            page.printed_page_label if document_format in {"fb2", "epub"} else None
+        )
+        if document_format == "fb2":
+            current_section = fallback_section
+        page_had_heading = False
         for heading, segment in _page_segments(page.text):
             if heading is not None:
+                page_had_heading = True
                 level, title = heading
                 stack = stack[: min(level, len(stack) + 1) - 1] + [title]
                 current_section = " > ".join(stack)
                 sections.append(
                     Section(
                         book_id=book_id,
-                        section_path=current_section,
+                        section_path=current_section or fallback_section,
                         ordinal=len(sections),
                         title=title,
                         page_start=page.pdf_page_index,
@@ -71,12 +79,22 @@ def chunk_document(
                         text=text,
                         pdf_page_index=page.pdf_page_index,
                         printed_page_label=page.printed_page_label,
-                        section_path=current_section,
+                        section_path=fallback_section or current_section,
                         ordinal=ordinal,
                         token_count=len(text.split()),
                     )
                 )
                 ordinal += 1
+        if fallback_section and not page_had_heading:
+            sections.append(
+                Section(
+                    book_id=book_id,
+                    section_path=fallback_section,
+                    ordinal=len(sections),
+                    title=fallback_section.split(" > ")[-1],
+                    page_start=page.pdf_page_index,
+                )
+            )
 
     return ChunkingResult(
         chunks=tuple(chunks),

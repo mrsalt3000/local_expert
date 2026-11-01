@@ -150,6 +150,7 @@ def _hit_payload(index: int, hit: SearchHit) -> dict[str, Any]:
         "book_title": hit.book_title,
         "page": hit.printed_page_label or hit.pdf_page_index,
         "section": hit.section_path,
+        "format": hit.book_format,
         "score": round(hit.score, 6),
         "text": hit.text[:SNIPPET_LIMIT],
     }

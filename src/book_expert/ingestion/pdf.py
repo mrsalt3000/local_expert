@@ -5,11 +5,20 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pymupdf
+
+from book_expert.ingestion.document import (
+    DocumentError,
+    ExtractedDocument,
+    ExtractedPage,
+)
+
+PdfPage = ExtractedPage
+PdfDocument = ExtractedDocument
 
 _LABEL_RE = re.compile(
     r"^(?:[-–—.·]\s*)?(?P<label>\d{1,4}|[ivxlcdmIVXLCDM]{1,7})(?:\s*[-–—.·])?$"
@@ -22,7 +31,7 @@ _MARGIN_LINES = 1
 _MIN_REPEATS = 4
 
 
-class PdfError(RuntimeError):
+class PdfError(DocumentError):
     """Базовая ошибка обработки PDF."""
 
 
@@ -32,40 +41,6 @@ class PdfEncryptedError(PdfError):
 
 class PdfParseError(PdfError):
     """PDF не удалось открыть или разобрать."""
-
-
-@dataclass(frozen=True, slots=True)
-class PdfPage:
-    pdf_page_index: int
-    text: str
-    printed_page_label: str | None
-    char_count: int
-    block_count: int
-    width: float
-    height: float
-
-    @property
-    def is_empty(self) -> bool:
-        return not self.text.strip()
-
-
-@dataclass(frozen=True, slots=True)
-class PdfDocument:
-    path: Path
-    content_hash: str
-    page_count: int
-    pages: tuple[PdfPage, ...]
-    title: str | None = None
-    author: str | None = None
-    metadata: dict[str, str] | None = None
-
-    @property
-    def empty_page_indices(self) -> tuple[int, ...]:
-        return tuple(page.pdf_page_index for page in self.pages if page.is_empty)
-
-    @property
-    def has_text_layer(self) -> bool:
-        return any(not page.is_empty for page in self.pages)
 
 
 def extract_pdf(

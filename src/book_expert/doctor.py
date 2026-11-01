@@ -175,6 +175,18 @@ def check_reranker(settings: Settings) -> CheckResult:
     )
 
 
+def check_djvu(which: Which) -> CheckResult:
+    tool = which("djvutxt")
+    if tool:
+        return CheckResult("djvu", OK, f"djvutxt: {tool}")
+    return CheckResult(
+        "djvu",
+        WARN,
+        "djvutxt не установлен; DJVU недоступен",
+        "apt install djvulibre-bin (нужен только для DJVU)",
+    )
+
+
 def check_bwrap(which: Which) -> CheckResult:
     if which("bwrap") is None:
         return CheckResult(
@@ -437,6 +449,7 @@ class Doctor:
             check_directories(self.settings),
             check_provider(self.settings),
             check_reranker(self.settings),
+            check_djvu(self._which),
             check_bwrap(self._which),
             check_docker(self._which, self._runner),
         ]

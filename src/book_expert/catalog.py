@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS books (
     page_count INTEGER NOT NULL DEFAULT 0,
     chunk_count INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL,
+    format TEXT NOT NULL DEFAULT 'pdf',
     language TEXT,
     description TEXT,
     metadata_json TEXT NOT NULL DEFAULT '{}',
@@ -141,6 +142,13 @@ class Catalog:
         with self._connect() as connection:
             connection.executescript(_SCHEMA)
             connection.execute("PRAGMA journal_mode = WAL")
+            columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(books)")
+            }
+            if "format" not in columns:
+                connection.execute(
+                    "ALTER TABLE books ADD COLUMN format TEXT NOT NULL DEFAULT 'pdf'"
+                )
 
     def upsert_book(
         self, book: Book, sections: Sequence[Section] | None = None
@@ -155,9 +163,9 @@ class Catalog:
                     """
                     INSERT INTO books (
                         id, title, author, path, content_hash, page_count,
-                        chunk_count, status, language, description,
+                        chunk_count, status, format, language, description,
                         metadata_json, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         title = excluded.title,
                         author = excluded.author,
@@ -166,6 +174,7 @@ class Catalog:
                         page_count = excluded.page_count,
                         chunk_count = excluded.chunk_count,
                         status = excluded.status,
+                        format = excluded.format,
                         language = excluded.language,
                         description = excluded.description,
                         metadata_json = excluded.metadata_json,
@@ -180,6 +189,7 @@ class Catalog:
                         book.page_count,
                         book.chunk_count,
                         str(book.status),
+                        book.format,
                         book.language,
                         book.description,
                         _metadata_json(book.metadata),
@@ -347,7 +357,7 @@ class Catalog:
             SELECT
                 c.id, c.book_id, c.text, c.pdf_page_index,
                 c.printed_page_label, c.section_path, c.ordinal,
-                b.title AS book_title, bm25(chunks_fts) AS rank
+                b.title AS book_title, b.format AS book_format, bm25(chunks_fts) AS rank
             FROM chunks_fts
             JOIN chunks c ON c.rowid = chunks_fts.rowid
             JOIN books b ON b.id = c.book_id
@@ -372,6 +382,7 @@ class Catalog:
                 printed_page_label=row["printed_page_label"],
                 section_path=row["section_path"],
                 book_title=row["book_title"],
+                book_format=row["book_format"],
                 source=SearchSource.lexical,
             )
             for row in rows
@@ -398,6 +409,7 @@ class Catalog:
             page_count=row["page_count"],
             chunk_count=row["chunk_count"],
             status=BookStatus(row["status"]),
+            format=row["format"],
             language=row["language"],
             description=row["description"],
             metadata=_metadata_load(row["metadata_json"]),

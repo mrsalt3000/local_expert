@@ -19,6 +19,7 @@ from book_expert.models import Answer, Book
 from book_expert.providers import ProviderError, ProviderUnavailableError
 from book_expert.web.backend import BookChatBackend
 from book_expert.web.library import (
+    ImportPreview,
     LibraryConflictError,
     LibraryEntry,
     LibraryError,
@@ -72,6 +73,7 @@ class BookOut(BaseModel):
     pages: int
     chunks: int
     status: str
+    format: str = "pdf"
 
 
 class CitationOut(BaseModel):
@@ -79,6 +81,9 @@ class CitationOut(BaseModel):
     book_title: str
     page: str | int
     chunk_id: str
+    section: str | None = None
+    format: str = "pdf"
+    number: int = 0
     quote: str | None = None
 
 
@@ -101,6 +106,7 @@ class LibraryBookOut(BaseModel):
     in_rag: bool
     status: str
     book_id: str | None = None
+    format: str = "pdf"
     pages: int = 0
     chunks: int = 0
     error: str | None = None
@@ -108,11 +114,43 @@ class LibraryBookOut(BaseModel):
 
 class LibraryJobOut(BaseModel):
     id: str
-    kind: Literal["ingest", "reindex"]
+    kind: Literal["ingest", "reindex", "import"]
     name: str
-    status: Literal["queued", "running", "done", "failed"]
+    status: Literal["queued", "running", "done", "failed", "cancelled"]
     book_id: str | None = None
     error: str | None = None
+    total: int = 0
+    remaining: int = 0
+    processed: int = 0
+    copied: int = 0
+    skipped: int = 0
+    ingested: int = 0
+    failed: int = 0
+    current: str | None = None
+    errors: list[str] = Field(default_factory=list)
+
+
+class ImportScanRequest(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+    recursive: bool = True
+
+
+class ImportStartRequest(ImportScanRequest):
+    ingest: bool = True
+
+
+class ImportPreviewOut(BaseModel):
+    book_count: int
+    pdf_count: int
+    non_pdf_count: int
+    total_bytes: int
+    already_present: int
+    skipped: int
+    to_copy: int
+    batch_size: int
+    batch_bytes: int
+    remaining: int
+    sample: list[str] = Field(default_factory=list)
 
 
 class LibraryUploadOut(BaseModel):
@@ -214,7 +252,10 @@ def create_app(
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+        return FileResponse(
+            STATIC_DIR / "index.html",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/api/books", response_model=list[BookOut])
     def books() -> list[BookOut]:
@@ -308,6 +349,40 @@ def create_app(
             raise_library_error(exc)
         return OkResponse()
 
+    @app.post("/api/library/scan", response_model=ImportPreviewOut)
+    def library_scan(payload: ImportScanRequest) -> ImportPreviewOut:
+        try:
+            preview = get_library().scan_import(
+                payload.path, recursive=payload.recursive
+            )
+        except Exception as exc:
+            raise_library_error(exc)
+        return _preview_out(preview)
+
+    @app.post(
+        "/api/library/import",
+        response_model=LibraryJobOut,
+        status_code=202,
+    )
+    def library_import(payload: ImportStartRequest) -> LibraryJobOut:
+        try:
+            job = get_library().start_import(
+                payload.path,
+                recursive=payload.recursive,
+                ingest=payload.ingest,
+            )
+        except Exception as exc:
+            raise_library_error(exc)
+        return _job_out(job)
+
+    @app.post("/api/jobs/{job_id}/cancel", response_model=LibraryJobOut)
+    def library_cancel(job_id: str) -> LibraryJobOut:
+        try:
+            job = get_library().cancel_job(job_id)
+        except Exception as exc:
+            raise_library_error(exc)
+        return _job_out(job)
+
     @app.get("/api/jobs/{job_id}", response_model=LibraryJobOut)
     def library_job(job_id: str) -> LibraryJobOut:
         try:
@@ -329,6 +404,7 @@ def _library_out(entry: LibraryEntry) -> LibraryBookOut:
         in_rag=entry.in_rag,
         status=entry.status,
         book_id=entry.book_id,
+        format=entry.format,
         pages=entry.pages,
         chunks=entry.chunks,
         error=entry.error,
@@ -345,6 +421,31 @@ def _job_out(job: LibraryJob | None) -> LibraryJobOut | None:
         status=job.status,
         book_id=job.book_id,
         error=job.error,
+        total=job.total,
+        remaining=job.remaining,
+        processed=job.processed,
+        copied=job.copied,
+        skipped=job.skipped,
+        ingested=job.ingested,
+        failed=job.failed,
+        current=job.current,
+        errors=list(job.errors),
+    )
+
+
+def _preview_out(preview: ImportPreview) -> ImportPreviewOut:
+    return ImportPreviewOut(
+        book_count=preview.book_count,
+        pdf_count=preview.pdf_count,
+        non_pdf_count=preview.non_pdf_count,
+        total_bytes=preview.total_bytes,
+        already_present=preview.already_present,
+        skipped=preview.skipped,
+        to_copy=preview.to_copy,
+        batch_size=preview.batch_size,
+        batch_bytes=preview.batch_bytes,
+        remaining=preview.remaining,
+        sample=list(preview.sample),
     )
 
 
@@ -356,6 +457,7 @@ def _book_out(book: Book) -> BookOut:
         pages=book.page_count,
         chunks=book.chunk_count,
         status=book.status.value,
+        format=book.format,
     )
 
 
@@ -370,6 +472,9 @@ def _rag_response(answer: Answer) -> ChatResponse:
                 book_title=citation.book_title,
                 page=citation.printed_page_label or citation.pdf_page_index,
                 chunk_id=citation.chunk_id,
+                section=citation.section_path,
+                format=citation.format,
+                number=citation.number,
                 quote=citation.quote,
             )
             for citation in answer.citations

@@ -15,7 +15,7 @@ from qdrant_client.http import exceptions as qdrant_exceptions
 from book_expert.catalog import Catalog, utcnow
 from book_expert.config import Settings
 from book_expert.ingestion.chunking import chunk_document
-from book_expert.ingestion.pdf import extract_pdf
+from book_expert.ingestion.extract import extract_document
 from book_expert.models import Book, BookStatus, Chunk
 from book_expert.providers import EmbeddingResult, Provider
 
@@ -98,12 +98,12 @@ class BookIndexer:
         title: str | None = None,
         force: bool = False,
     ) -> Book:
-        pdf_path = Path(path).expanduser()
-        document = extract_pdf(
-            pdf_path,
+        source_path = Path(path).expanduser()
+        document = extract_document(
+            source_path,
             strip_running_lines=self.settings.strip_running_headers,
         )
-        existing = self.catalog.get_book_by_path(pdf_path)
+        existing = self.catalog.get_book_by_path(source_path)
         book_id = existing.id if existing is not None else _book_id(document.path)
         book_title = title or document.title or (existing.title if existing else None)
 
@@ -123,8 +123,10 @@ class BookIndexer:
             content_hash=document.content_hash,
             page_count=document.page_count,
             status=BookStatus.indexing,
+            format=document.format,
             metadata={
-                "pdf": document.metadata or {},
+                "source": document.metadata or {},
+                "format": document.format,
                 "empty_pages": len(document.empty_page_indices),
             },
         )
@@ -153,6 +155,7 @@ class BookIndexer:
                         payload={
                             "book_id": book_id,
                             "book_title": pending.title,
+                            "book_format": document.format,
                             "chunk_id": chunk.id,
                             "text": chunk.text,
                             "pdf_page_index": chunk.pdf_page_index,

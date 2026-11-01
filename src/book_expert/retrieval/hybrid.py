@@ -201,6 +201,7 @@ def _hit_from_point(point: models.ScoredPoint) -> SearchHit:
         printed_page_label=_optional_str(payload.get("printed_page_label")),
         section_path=_optional_str(payload.get("section_path")),
         book_title=_optional_str(payload.get("book_title")),
+        book_format=_optional_str(payload.get("book_format")) or "pdf",
         source=SearchSource.dense,
     )
 
