@@ -141,7 +141,7 @@ def _is_insufficient(text: str) -> bool:
     return INSUFFICIENT in text.upper()
 
 
-def _context_prompt(query: str, hits: tuple[SearchHit, ...]) -> str:
+def sources_prompt(hits: tuple[SearchHit, ...]) -> str:
     blocks = []
     for index, hit in enumerate(hits, start=1):
         page = hit.printed_page_label or str(hit.pdf_page_index)
@@ -151,7 +151,11 @@ def _context_prompt(query: str, hits: tuple[SearchHit, ...]) -> str:
             f'section="{_escape(hit.section_path or "")}">\n'
             f"{hit.text}\n</source>"
         )
-    return "Вопрос:\n" + query.strip() + "\n\nФрагменты:\n" + "\n\n".join(blocks)
+    return "Фрагменты:\n" + "\n\n".join(blocks)
+
+
+def _context_prompt(query: str, hits: tuple[SearchHit, ...]) -> str:
+    return "Вопрос:\n" + query.strip() + "\n\n" + sources_prompt(hits)
 
 
 def _citations(text: str, hits: tuple[SearchHit, ...]) -> tuple[Citation, ...]:

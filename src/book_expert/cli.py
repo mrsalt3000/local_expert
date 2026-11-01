@@ -24,7 +24,9 @@ from book_expert.ingestion.indexer import BookIndexer, IndexingError
 from book_expert.ingestion.pdf import PdfError
 from book_expert.models import Answer, Book, SearchHit
 from book_expert.providers import Provider, ProviderError, get_provider
+from book_expert.retrieval.advanced import AdvancedAnswerer
 from book_expert.retrieval.answer import GroundedAnswerer
+from book_expert.retrieval.super_advanced import SuperAdvancedAnswerer
 from book_expert.retrieval.hybrid import HybridSearcher, SearchOutcome
 from book_expert.retrieval.router import BookRouter
 
@@ -42,6 +44,8 @@ class RetrievalServices:
     searcher: HybridSearcher
     router: BookRouter
     answerer: GroundedAnswerer
+    advanced: AdvancedAnswerer
+    super_advanced: SuperAdvancedAnswerer
     trace: TraceRecorder
 
     def close(self) -> None:
@@ -66,7 +70,13 @@ def _make_retrieval(settings: Settings) -> RetrievalServices:
     trace = TraceRecorder.create(settings, prefix="retrieval")
     router = BookRouter(settings, provider, catalog, trace=trace)
     answerer = GroundedAnswerer(settings, provider, searcher, router, trace=trace)
-    return RetrievalServices(catalog, provider, searcher, router, answerer, trace)
+    advanced = AdvancedAnswerer(settings, provider, searcher, router, trace=trace)
+    super_advanced = SuperAdvancedAnswerer(
+        settings, provider, searcher, router, trace=trace
+    )
+    return RetrievalServices(
+        catalog, provider, searcher, router, answerer, advanced, super_advanced, trace
+    )
 
 
 def _load_catalog(settings: Settings) -> Catalog:
@@ -187,6 +197,12 @@ def ask(
     lexical_only: bool = typer.Option(
         False, "--lexical-only", help="Только SQLite FTS5, без Qdrant."
     ),
+    advanced: bool = typer.Option(
+        False, "--advanced", help="План запросов + несколько RAG-поисков."
+    ),
+    super_mode: bool = typer.Option(
+        False, "--super", help="Advanced + до N возвратов к плану."
+    ),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     """Ответ по книгам с цитатами."""
@@ -196,7 +212,13 @@ def ask(
     answer: Answer | None = None
     try:
         services = _make_retrieval(settings)
-        answer = services.answerer.ask(
+        if super_mode:
+            answerer = services.super_advanced
+        elif advanced:
+            answerer = services.advanced
+        else:
+            answerer = services.answerer
+        answer = answerer.ask(
             question,
             book_ids=book or None,
             auto_route=not no_route,
@@ -214,6 +236,12 @@ def ask(
     if json_output:
         typer.echo(json.dumps(_answer_payload(answer), ensure_ascii=False))
         return
+    if answer.max_rounds:
+        console.print(f"[dim]Раунды: {answer.rounds}/{answer.max_rounds}[/dim]")
+    if answer.plan:
+        console.print("[dim]План поиска:[/dim]")
+        for index, query in enumerate(answer.plan, start=1):
+            console.print(f"[dim]{index}. {query}[/dim]")
     console.print(answer.text)
     for citation in answer.citations:
         page = citation.printed_page_label or str(citation.pdf_page_index)
@@ -432,6 +460,9 @@ def _answer_payload(answer: Answer) -> dict[str, Any]:
         "confidence": answer.confidence,
         "book_ids": list(answer.book_ids),
         "route_reason": answer.route_reason,
+        "plan": list(answer.plan),
+        "rounds": answer.rounds,
+        "max_rounds": answer.max_rounds,
         "citations": [
             {
                 "book_id": citation.book_id,

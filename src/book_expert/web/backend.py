@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from threading import Lock
+from typing import Any
 
 from book_expert.agent.audit import AuditLogger
 from book_expert.agent.graph import AgentRunner
@@ -14,9 +15,11 @@ from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.models import Answer, Book, BookStatus
 from book_expert.providers import get_provider
+from book_expert.retrieval.advanced import AdvancedAnswerer
 from book_expert.retrieval.answer import GroundedAnswerer
 from book_expert.retrieval.hybrid import HybridSearcher
 from book_expert.retrieval.router import BookRouter
+from book_expert.retrieval.super_advanced import SuperAdvancedAnswerer
 
 
 class BookChatBackend:
@@ -40,6 +43,20 @@ class BookChatBackend:
             self.router,
             trace=self.trace,
         )
+        self.advanced = AdvancedAnswerer(
+            settings,
+            self.provider,
+            self.searcher,
+            self.router,
+            trace=self.trace,
+        )
+        self.super_advanced = SuperAdvancedAnswerer(
+            settings,
+            self.provider,
+            self.searcher,
+            self.router,
+            trace=self.trace,
+        )
         self._agent: AgentRunner | None = None
         self._agent_lock = Lock()
 
@@ -51,6 +68,32 @@ class BookChatBackend:
             message,
             book_ids=list(book_ids) if book_ids else None,
             auto_route=True,
+        )
+
+    def ask_advanced(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        progress: Callable[[dict[str, Any]], None] | None = None,
+    ) -> Answer:
+        return self.advanced.ask(
+            message,
+            book_ids=list(book_ids) if book_ids else None,
+            auto_route=True,
+            progress=progress,
+        )
+
+    def ask_super(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        progress: Callable[[dict[str, Any]], None] | None = None,
+    ) -> Answer:
+        return self.super_advanced.ask(
+            message,
+            book_ids=list(book_ids) if book_ids else None,
+            auto_route=True,
+            progress=progress,
         )
 
     def ask_agent(self, message: str, book_ids: Sequence[str] | None = None) -> str:

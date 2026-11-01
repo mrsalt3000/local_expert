@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
+import json
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
-from threading import Lock
+from queue import Queue
+from threading import Lock, Thread
 from time import perf_counter
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from book_expert.agent.graph import AgentError, AgentTimeoutError
@@ -45,6 +47,20 @@ class ChatBackend(Protocol):
         self, message: str, book_ids: Sequence[str] | None = None
     ) -> Answer: ...
 
+    def ask_advanced(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        progress: Callable[[dict[str, Any]], None] | None = None,
+    ) -> Answer: ...
+
+    def ask_super(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        progress: Callable[[dict[str, Any]], None] | None = None,
+    ) -> Answer: ...
+
     def ask_agent(self, message: str, book_ids: Sequence[str] | None = None) -> str: ...
 
     def close(self) -> None: ...
@@ -52,7 +68,7 @@ class ChatBackend(Protocol):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
-    mode: Literal["rag", "agent"] = "rag"
+    mode: Literal["rag", "advanced", "super", "agent"] = "rag"
     book_ids: list[Annotated[str, Field(max_length=MAX_BOOK_ID_CHARS)]] = Field(
         default_factory=list, max_length=MAX_BOOK_FILTERS
     )
@@ -88,12 +104,15 @@ class CitationOut(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    mode: Literal["rag", "agent"]
+    mode: Literal["rag", "advanced", "super", "agent"]
     answer: str
     refused: bool = False
     citations: list[CitationOut] = Field(default_factory=list)
     confidence: float | None = None
     route_reason: str | None = None
+    plan: list[str] = Field(default_factory=list)
+    rounds: int = 0
+    max_rounds: int = 0
     elapsed_ms: int
 
 
@@ -274,6 +293,12 @@ def create_app(
             if payload.mode == "rag":
                 answer = active.ask_rag(payload.message, book_ids)
                 response = _rag_response(answer)
+            elif payload.mode == "advanced":
+                answer = active.ask_advanced(payload.message, book_ids)
+                response = _rag_response(answer, mode="advanced")
+            elif payload.mode == "super":
+                answer = active.ask_super(payload.message, book_ids)
+                response = _rag_response(answer, mode="super")
             else:
                 text = active.ask_agent(payload.message, book_ids)
                 response = ChatResponse(mode="agent", answer=text, elapsed_ms=0)
@@ -287,6 +312,63 @@ def create_app(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         response.elapsed_ms = int((perf_counter() - started) * 1000)
         return response
+
+    @app.post("/api/chat/stream")
+    def chat_stream(payload: ChatRequest) -> StreamingResponse:
+        if payload.mode not in {"advanced", "super"}:
+            raise HTTPException(
+                status_code=400,
+                detail="streaming is available for advanced and super modes only",
+            )
+        book_ids = payload.book_ids or None
+        started = perf_counter()
+
+        def generate() -> Iterator[str]:
+            events: Queue[dict[str, Any] | None] = Queue()
+
+            def emit(event: dict[str, Any]) -> None:
+                events.put(event)
+
+            def worker() -> None:
+                try:
+                    backend = get_backend()
+                    if payload.mode == "super":
+                        answer = backend.ask_super(
+                            payload.message, book_ids, progress=emit
+                        )
+                    else:
+                        answer = backend.ask_advanced(
+                            payload.message, book_ids, progress=emit
+                        )
+                except Exception as exc:
+                    events.put({"type": "error", **_stream_error(exc)})
+                else:
+                    response = _rag_response(answer, mode=payload.mode)
+                    response.elapsed_ms = int((perf_counter() - started) * 1000)
+                    events.put(
+                        {
+                            "type": "done",
+                            "response": response.model_dump(),
+                        }
+                    )
+                finally:
+                    events.put(None)
+
+            Thread(target=worker, daemon=True).start()
+            while True:
+                event = events.get()
+                if event is None:
+                    break
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.get("/api/library", response_model=list[LibraryBookOut])
     def library_books() -> list[LibraryBookOut]:
@@ -461,9 +543,21 @@ def _book_out(book: Book) -> BookOut:
     )
 
 
-def _rag_response(answer: Answer) -> ChatResponse:
+def _stream_error(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, ProviderError):
+        return {"detail": str(exc), "status": 503}
+    if isinstance(exc, ValueError):
+        return {"detail": str(exc), "status": 400}
+    if isinstance(exc, AgentTimeoutError):
+        return {"detail": str(exc), "status": 504}
+    if isinstance(exc, AgentError):
+        return {"detail": str(exc), "status": 502}
+    return {"detail": "internal error", "status": 500}
+
+
+def _rag_response(answer: Answer, *, mode: str = "rag") -> ChatResponse:
     return ChatResponse(
-        mode="rag",
+        mode=mode,
         answer=answer.text,
         refused=answer.refused,
         citations=[
@@ -481,6 +575,9 @@ def _rag_response(answer: Answer) -> ChatResponse:
         ],
         confidence=answer.confidence,
         route_reason=answer.route_reason,
+        plan=list(answer.plan),
+        rounds=answer.rounds,
+        max_rounds=answer.max_rounds,
         elapsed_ms=0,
     )
 

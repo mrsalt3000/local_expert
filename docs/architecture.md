@@ -102,8 +102,17 @@ MCP stdio server отдаёт tools `search_books`, `ask_books`, `list_books`,
 
 `book-expert ui` поднимает FastAPI на loopback. `GET /api/books` отдаёт только
 `ready` книги; `POST /api/chat` с `mode=rag` вызывает `GroundedAnswerer.ask()`
-и возвращает citations, с `mode=agent` — `AgentRunner` с теми же tool-политиками
-и audit. История диалога живёт в `localStorage` браузера, серверных сессий нет;
+и возвращает citations, с `mode=advanced` — `AdvancedAnswerer`: планировщик
+строит 2–4 запроса, они последовательно выполняются в `HybridSearcher`,
+затем модель синтезирует развёрнутый ответ; в ответе есть `plan` и citations.
+Для UI есть `POST /api/chat/stream`: SSE-события `plan`, `query_start`,
+`query_done`, `round`, `synthesizing` и `done`, по ним рисуется процент,
+текущий запрос и номер раунда. Режим `mode=super` (`SuperAdvancedAnswerer`)
+после начального плана до `BOOK_EXPERT_SUPER_MAX_ROUNDS` (по умолчанию 5)
+раз спрашивает refiner-модель, каких аспектов не хватает, добавляет новые
+запросы, снова ищет и только затем синтезирует ответ.
+С `mode=agent` работает `AgentRunner` с теми же tool-политиками и audit.
+История диалога живёт в `localStorage` браузера, серверных сессий нет;
 ошибки провайдера возвращаются как 503 без traceback.
 
 ### Библиотека

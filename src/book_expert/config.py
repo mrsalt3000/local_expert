@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     strip_running_headers: bool = False
     top_k: int = 8
     router_confidence_threshold: float = 0.6
+    advanced_query_limit: int = 4
+    super_max_rounds: int = 5
     rrf_dense_weight: float = 1.0
     rrf_lexical_weight: float = 0.1
     max_upload_mb: int = 200
@@ -91,6 +93,8 @@ class Settings(BaseSettings):
         "agent_max_steps",
         "agent_timeout_s",
         "command_timeout_s",
+        "advanced_query_limit",
+        "super_max_rounds",
         "max_upload_mb",
         "import_max_files",
         "import_max_file_mb",

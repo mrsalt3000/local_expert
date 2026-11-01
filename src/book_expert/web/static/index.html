@@ -134,6 +134,13 @@
     color: var(--muted);
   }
   .sources { max-width: min(680px, 100%); margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .plan { margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .plan-title { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; list-style: none; }
+  .plan-title::-webkit-details-marker { display: none; }
+  .plan-title::before { content: "▸"; color: var(--accent); font-size: 11px; }
+  .plan[open] > .plan-title { margin-bottom: 6px; }
+  .plan[open] > .plan-title::before { content: "▾"; }
+  .plan-list { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
   .sources-title {
     display: flex; align-items: center; gap: 6px; cursor: pointer;
     margin: 2px 0 0 4px; font-size: 12px; color: var(--muted);
@@ -232,6 +239,9 @@
   .job.failed { color: var(--error); }
   .pending { color: var(--muted); font-size: 14px; padding: 0 4px; }
   .pending span { animation: pulse 1.2s ease-in-out infinite; }
+  .pending-advanced { display: flex; flex-direction: column; gap: 6px; min-width: min(360px, 100%); }
+  .pending-advanced .pending-text { font-size: 13px; color: var(--muted); }
+  .pending-advanced .progress { margin-top: 0; }
   @keyframes pulse { 50% { opacity: 0.35; } }
   @media (max-width: 640px) {
     header { padding: 10px 14px; }
@@ -254,7 +264,9 @@
     </select>
     <div class="modes" role="group" aria-label="Режим ответа">
       <button type="button" data-mode="rag" class="active" aria-pressed="true">RAG</button>
-      <button type="button" data-mode="agent" aria-pressed="false">Агент</button>
+      <button type="button" data-mode="agent" aria-pressed="false">Простой</button>
+      <button type="button" data-mode="advanced" aria-pressed="false">Продвинутый</button>
+      <button type="button" data-mode="super" aria-pressed="false">Супер</button>
     </div>
     <button type="button" id="clear" class="ghost">Очистить</button>
   </div>
@@ -349,6 +361,7 @@
     importPreview: null,
     importSource: null,
     scanToken: 0,
+    advancedProgress: null,
   };
 
   function loadState() {
@@ -364,7 +377,14 @@
             typeof item.text === "string"
         );
       }
-      if (saved.mode === "rag" || saved.mode === "agent") state.mode = saved.mode;
+      if (
+        saved.mode === "rag" ||
+        saved.mode === "advanced" ||
+        saved.mode === "super" ||
+        saved.mode === "agent"
+      ) {
+        state.mode = saved.mode;
+      }
       if (typeof saved.bookId === "string") state.bookId = saved.bookId;
       if (saved.tab === "chat" || saved.tab === "library") state.tab = saved.tab;
     } catch (error) {
@@ -404,8 +424,15 @@
       button.classList.toggle("active", active);
       button.setAttribute("aria-pressed", String(active));
     }
-    input.placeholder =
-      state.mode === "rag" ? "Спросите о книге…" : "Задача для агента…";
+    if (state.mode === "rag") {
+      input.placeholder = "Спросите о книге…";
+    } else if (state.mode === "advanced") {
+      input.placeholder = "Сложный вопрос: план поиска и развёрнутый ответ…";
+    } else if (state.mode === "super") {
+      input.placeholder = "Глубокий вопрос: план, дополнительные раунды и синтез…";
+    } else {
+      input.placeholder = "Задача для простого агента…";
+    }
   }
 
   function renderEmpty() {
@@ -668,6 +695,22 @@
     bubble.className = "bubble";
     if (message.role === "assistant" && !message.error) {
       bubble.classList.add("markdown");
+      if (Array.isArray(message.plan) && message.plan.length) {
+        const plan = document.createElement("details");
+        plan.className = "plan";
+        const summary = document.createElement("summary");
+        summary.className = "plan-title";
+        summary.textContent = `План поиска (${message.plan.length})`;
+        const list = document.createElement("ol");
+        list.className = "plan-list";
+        for (const query of message.plan) {
+          const item = document.createElement("li");
+          item.textContent = query;
+          list.append(item);
+        }
+        plan.append(summary, list);
+        bubble.append(plan);
+      }
       bubble.append(renderMarkdown(message.text));
     } else {
       bubble.textContent = message.text;
@@ -701,7 +744,21 @@
         const meta = document.createElement("div");
         meta.className = "meta";
         const parts = [];
-        if (message.mode) parts.push(message.mode === "rag" ? "RAG" : "агент");
+        if (message.mode) {
+          const label =
+            message.mode === "rag"
+              ? "RAG"
+              : message.mode === "advanced"
+                ? "Продвинутый"
+                : message.mode === "super"
+                  ? "Супер"
+                  : "Простой";
+          if (message.mode === "super" && message.max_rounds) {
+            parts.push(`${label} · раунды ${message.rounds}/${message.max_rounds}`);
+          } else {
+            parts.push(label);
+          }
+        }
         if (typeof message.elapsed_ms === "number") parts.push(`${(message.elapsed_ms / 1000).toFixed(1)} с`);
         meta.textContent = parts.join(" · ");
         wrapper.append(meta);
@@ -715,9 +772,48 @@
     wrapper.className = "msg assistant";
     const pending = document.createElement("div");
     pending.className = "pending";
-    const dots = document.createElement("span");
-    dots.textContent = state.mode === "rag" ? "Ищу по книге…" : "Агент работает…";
-    pending.append(dots);
+    if ((state.mode === "advanced" || state.mode === "super") && state.advancedProgress) {
+      const progress = state.advancedProgress;
+      const total = progress.total || 0;
+      const done = progress.done || 0;
+      const percent =
+        progress.phase === "synthesize"
+          ? 100
+          : total
+            ? Math.min(100, Math.floor((done / total) * 100))
+            : 0;
+      pending.classList.add("pending-advanced");
+      const text = document.createElement("span");
+      text.className = "pending-text";
+      const label = state.mode === "super" ? "Супер" : "Продвинутый";
+      const roundInfo =
+        state.mode === "super" && progress.maxRounds
+          ? ` · раунд ${progress.round || 0}/${progress.maxRounds}`
+          : "";
+      if (!total) {
+        text.textContent = `${label}: строю план запросов…`;
+      } else if (progress.phase === "synthesize") {
+        text.textContent = `${label}: ${done}/${total} (${percent}%)${roundInfo} · синтез ответа…`;
+      } else {
+        text.textContent = `${label}: ${done}/${total} (${percent}%)${roundInfo} · сейчас: ${progress.current || "…"}`;
+      }
+      const bar = document.createElement("div");
+      bar.className = "progress";
+      const fill = document.createElement("div");
+      fill.style.width = `${percent}%`;
+      bar.append(fill);
+      pending.append(text, bar);
+    } else {
+      const dots = document.createElement("span");
+      if (state.mode === "rag") {
+        dots.textContent = "Ищу по книге…";
+      } else if (state.mode === "advanced" || state.mode === "super") {
+        dots.textContent = "Строю план и ищу по книге…";
+      } else {
+        dots.textContent = "Простой агент работает…";
+      }
+      pending.append(dots);
+    }
     wrapper.append(pending);
     return wrapper;
   }
@@ -731,6 +827,8 @@
     }
     if (state.pending) thread.append(pendingElement());
     sendButton.disabled = state.pending;
+    bookSelect.disabled = state.pending;
+    for (const button of modeButtons) button.disabled = state.pending;
     messagesPane.scrollTop = messagesPane.scrollHeight;
   }
 
@@ -744,37 +842,158 @@
     input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
   }
 
+  function appendAssistant(data, mode) {
+    state.messages.push({
+      role: "assistant",
+      text: data.answer || "Пустой ответ.",
+      refused: Boolean(data.refused),
+      citations: Array.isArray(data.citations) ? data.citations : [],
+      mode: data.mode || mode,
+      plan: Array.isArray(data.plan) ? data.plan : [],
+      rounds: data.rounds || 0,
+      max_rounds: data.max_rounds || 0,
+      elapsed_ms: data.elapsed_ms,
+    });
+  }
+
+  async function streamAdvanced(text, bookIds, mode) {
+    const response = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, mode, book_ids: bookIds }),
+    });
+    if (!response.ok) {
+      let detail = `HTTP ${response.status}`;
+      try {
+        const payload = await response.json();
+        if (typeof payload.detail === "string") detail = payload.detail;
+      } catch (error) {
+        detail = `HTTP ${response.status}`;
+      }
+      throw new Error(detail);
+    }
+    if (!response.body) throw new Error("Поток ответа недоступен");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalData = null;
+    const handle = (event) => {
+      if (event.type === "plan") {
+        state.advancedProgress = {
+          total: event.total || 0,
+          done: 0,
+          current: "",
+          phase: "search",
+          round: 0,
+          maxRounds:
+            event.max_rounds ||
+            (state.advancedProgress ? state.advancedProgress.maxRounds : 0),
+        };
+        render();
+      } else if (event.type === "query_start") {
+        state.advancedProgress = {
+          total: event.total || 0,
+          done: Math.max(0, (event.index || 1) - 1),
+          current: event.query || "",
+          phase: "search",
+          round: state.advancedProgress ? state.advancedProgress.round : 0,
+          maxRounds: state.advancedProgress ? state.advancedProgress.maxRounds : 0,
+        };
+        render();
+      } else if (event.type === "query_done") {
+        state.advancedProgress = {
+          total: event.total || 0,
+          done: event.index || 0,
+          current: "",
+          phase: "search",
+          round: state.advancedProgress ? state.advancedProgress.round : 0,
+          maxRounds: state.advancedProgress ? state.advancedProgress.maxRounds : 0,
+        };
+        render();
+      } else if (event.type === "round") {
+        state.advancedProgress = {
+          total: event.total || 0,
+          done: state.advancedProgress ? state.advancedProgress.done : 0,
+          current: "дополнительные запросы",
+          phase: "search",
+          round: event.round || 0,
+          maxRounds: event.max_rounds || 0,
+        };
+        render();
+      } else if (event.type === "synthesizing") {
+        state.advancedProgress = {
+          total: event.total || 0,
+          done: event.total || 0,
+          current: "",
+          phase: "synthesize",
+          round: state.advancedProgress ? state.advancedProgress.round : 0,
+          maxRounds: state.advancedProgress ? state.advancedProgress.maxRounds : 0,
+        };
+        render();
+      } else if (event.type === "error") {
+        throw new Error(event.detail || "Ошибка продвинутого режима");
+      } else if (event.type === "done") {
+        finalData = event.response || null;
+      }
+    };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+        for (const part of parts) {
+          const line = part
+            .split("\n")
+            .find((item) => item.startsWith("data: "));
+          if (!line) continue;
+          handle(JSON.parse(line.slice(6)));
+        }
+      }
+    } catch (error) {
+      try {
+        await reader.cancel();
+      } catch (cancelError) {
+        // поток уже закрыт сервером
+      }
+      throw error;
+    }
+    if (!finalData) throw new Error("Поток завершился без ответа");
+    return finalData;
+  }
+
   async function ask(text) {
     const mode = state.mode;
     const bookIds = state.bookId ? [state.bookId] : [];
     state.messages.push({ role: "user", text });
     state.pending = true;
+    state.advancedProgress = null;
     showError("");
     persistAndRender();
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, mode, book_ids: bookIds }),
-      });
-      let data = {};
-      try {
-        data = await response.json();
-      } catch (error) {
+      let data;
+      if (mode === "advanced" || mode === "super") {
+        data = await streamAdvanced(text, bookIds, mode);
+      } else {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, mode, book_ids: bookIds }),
+        });
         data = {};
+        try {
+          data = await response.json();
+        } catch (error) {
+          data = {};
+        }
+        if (!response.ok) {
+          const detail =
+            typeof data.detail === "string" ? data.detail : `HTTP ${response.status}`;
+          throw new Error(detail);
+        }
       }
-      if (!response.ok) {
-        const detail = typeof data.detail === "string" ? data.detail : `HTTP ${response.status}`;
-        throw new Error(detail);
-      }
-      state.messages.push({
-        role: "assistant",
-        text: data.answer || "Пустой ответ.",
-        refused: Boolean(data.refused),
-        citations: Array.isArray(data.citations) ? data.citations : [],
-        mode: data.mode || mode,
-        elapsed_ms: data.elapsed_ms,
-      });
+      appendAssistant(data, mode);
     } catch (error) {
       state.messages.push({
         role: "assistant",
@@ -783,6 +1002,7 @@
       });
     } finally {
       state.pending = false;
+      state.advancedProgress = null;
       persistAndRender();
       input.focus();
     }

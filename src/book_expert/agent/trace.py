@@ -14,7 +14,7 @@ from book_expert.config import Settings
 class TraceRecorder:
     """Append-only JSONL; по умолчанию пишет только метаданные."""
 
-    REDACTED_KEYS = {"query", "text", "answer", "quote"}
+    REDACTED_KEYS = {"query", "queries", "plan", "text", "answer", "quote"}
 
     def __init__(self, path: Path, *, include_text: bool = False) -> None:
         self.path = path

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
@@ -52,11 +53,32 @@ class FakeBackend:
             book_ids=("b1",),
             route_reason="single book",
         )
+        self.super_answer = Answer(
+            text="Супер ответ [1].",
+            citations=self.rag_answer.citations,
+            confidence=0.8,
+            book_ids=("b1",),
+            route_reason="single book",
+            plan=("запрос 1", "запрос 2", "доп"),
+            rounds=1,
+            max_rounds=5,
+        )
+        self.advanced_answer = Answer(
+            text="Развернутый ответ [1].",
+            citations=self.rag_answer.citations,
+            confidence=0.8,
+            book_ids=("b1",),
+            route_reason="single book",
+            plan=("запрос 1", "запрос 2"),
+        )
         self.agent_text = "Агентный ответ"
         self.rag_error: Exception | None = None
+        self.advanced_error: Exception | None = None
         self.agent_error: Exception | None = None
         self.books_error: Exception | None = None
         self.rag_calls: list[tuple[str, Sequence[str] | None]] = []
+        self.advanced_calls: list[tuple[str, Sequence[str] | None]] = []
+        self.super_calls: list[tuple[str, Sequence[str] | None]] = []
         self.agent_calls: list[tuple[str, Sequence[str] | None]] = []
         self.closed = False
 
@@ -70,6 +92,65 @@ class FakeBackend:
         if self.rag_error is not None:
             raise self.rag_error
         return self.rag_answer
+
+    def ask_advanced(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        progress=None,  # type: ignore[no-untyped-def]
+    ) -> Answer:
+        self.advanced_calls.append((message, book_ids))
+        if self.advanced_error is not None:
+            raise self.advanced_error
+        if progress is not None:
+            progress({"type": "plan", "queries": ["запрос 1", "запрос 2"], "total": 2})
+            progress(
+                {"type": "query_start", "index": 1, "query": "запрос 1", "total": 2}
+            )
+            progress(
+                {
+                    "type": "query_done",
+                    "index": 1,
+                    "query": "запрос 1",
+                    "hits": 1,
+                    "total": 2,
+                }
+            )
+            progress({"type": "synthesizing", "total": 2, "hits": 1})
+        return self.advanced_answer
+
+    def ask_super(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        progress=None,  # type: ignore[no-untyped-def]
+    ) -> Answer:
+        self.super_calls.append((message, book_ids))
+        if progress is not None:
+            progress({"type": "plan", "queries": ["запрос 1", "запрос 2"], "total": 2})
+            progress(
+                {"type": "query_start", "index": 1, "query": "запрос 1", "total": 2}
+            )
+            progress(
+                {
+                    "type": "query_done",
+                    "index": 1,
+                    "query": "запрос 1",
+                    "hits": 1,
+                    "total": 2,
+                }
+            )
+            progress(
+                {
+                    "type": "round",
+                    "round": 1,
+                    "max_rounds": 5,
+                    "queries": ["доп"],
+                    "total": 3,
+                }
+            )
+            progress({"type": "synthesizing", "total": 3, "hits": 1})
+        return self.super_answer
 
     def ask_agent(self, message: str, book_ids: Sequence[str] | None = None) -> str:
         self.agent_calls.append((message, book_ids))
@@ -240,3 +321,112 @@ def test_index_renders_markdown_safely(client: TestClient) -> None:
     assert "const fence = line.match(/^\\s*```(.*)$/)" in html
     assert 'document.createElement("details")' in html
     assert "sources-title" in html
+
+
+def test_advanced_mode_returns_plan_and_citations(
+    client: TestClient, backend: FakeBackend
+) -> None:
+    response = client.post(
+        "/api/chat",
+        json={"message": "  Сложный вопрос  ", "mode": "advanced"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mode"] == "advanced"
+    assert data["plan"] == ["запрос 1", "запрос 2"]
+    assert data["citations"][0]["number"] == 1
+    assert backend.advanced_calls == [("Сложный вопрос", None)]
+
+
+def test_advanced_stream_emits_progress_and_response(
+    client: TestClient, backend: FakeBackend
+) -> None:
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"message": "Сложный вопрос", "mode": "advanced"},
+    ) as response:
+        assert response.status_code == 200
+        body = "".join(response.iter_text())
+    events = [
+        json.loads(line[len("data: ") :])
+        for line in body.splitlines()
+        if line.startswith("data: ")
+    ]
+    types = [event["type"] for event in events]
+    assert types == [
+        "plan",
+        "query_start",
+        "query_done",
+        "synthesizing",
+        "done",
+    ]
+    assert events[-1]["response"]["plan"] == ["запрос 1", "запрос 2"]
+
+
+def test_advanced_stream_rejects_other_modes(client: TestClient) -> None:
+    response = client.post("/api/chat/stream", json={"message": "q", "mode": "rag"})
+    assert response.status_code == 400
+
+
+def test_advanced_stream_error_event(client: TestClient, backend: FakeBackend) -> None:
+    backend.advanced_error = ProviderUnavailableError("ollama is down")
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"message": "Сложный вопрос", "mode": "advanced"},
+    ) as response:
+        assert response.headers["cache-control"] == "no-store"
+        body = "".join(response.iter_text())
+    events = [
+        json.loads(line[len("data: ") :])
+        for line in body.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[-1]["type"] == "error"
+    assert events[-1]["status"] == 503
+
+
+def test_super_mode_returns_rounds_and_plan(
+    client: TestClient, backend: FakeBackend
+) -> None:
+    response = client.post(
+        "/api/chat", json={"message": "Глубокий вопрос", "mode": "super"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mode"] == "super"
+    assert data["rounds"] == 1
+    assert data["max_rounds"] == 5
+    assert data["plan"] == ["запрос 1", "запрос 2", "доп"]
+    assert backend.super_calls == [("Глубокий вопрос", None)]
+
+
+def test_super_stream_emits_round_event(
+    client: TestClient, backend: FakeBackend
+) -> None:
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"message": "Глубокий вопрос", "mode": "super"},
+    ) as response:
+        assert response.status_code == 200
+        body = "".join(response.iter_text())
+    events = [
+        json.loads(line[len("data: ") :])
+        for line in body.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert "round" in [event["type"] for event in events]
+    assert events[-1]["type"] == "done"
+    assert events[-1]["response"]["mode"] == "super"
+    assert events[-1]["response"]["rounds"] == 1
+
+
+def test_mode_buttons_are_ordered_by_complexity(client: TestClient) -> None:
+    html = client.get("/").text
+    modes = ["rag", "agent", "advanced", "super"]
+    positions = [html.index(f'data-mode="{mode}"') for mode in modes]
+    assert positions == sorted(positions)

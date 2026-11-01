@@ -98,3 +98,6 @@ class Answer:
     confidence: float | None = None
     book_ids: tuple[str, ...] = ()
     route_reason: str | None = None
+    plan: tuple[str, ...] = ()
+    rounds: int = 0
+    max_rounds: int = 0
