@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     strip_running_headers: bool = False
     top_k: int = 8
     router_confidence_threshold: float = 0.6
+    relevance_filter_min_ratio: float = 0.5
     advanced_query_limit: int = 4
     super_max_rounds: int = 5
     rrf_dense_weight: float = 1.0
@@ -72,11 +73,11 @@ class Settings(BaseSettings):
     def _expand_path(cls, value: Path) -> Path:
         return value.expanduser()
 
-    @field_validator("router_confidence_threshold")
+    @field_validator("router_confidence_threshold", "relevance_filter_min_ratio")
     @classmethod
     def _check_threshold(cls, value: float) -> float:
         if not 0.0 <= value <= 1.0:
-            raise ValueError("router_confidence_threshold must be in [0, 1]")
+            raise ValueError("threshold must be in [0, 1]")
         return value
 
     @field_validator("rrf_dense_weight", "rrf_lexical_weight")

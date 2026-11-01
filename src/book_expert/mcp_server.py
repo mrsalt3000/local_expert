@@ -112,6 +112,7 @@ class BookExpertMCP:
                 question,
                 book_ids=_books(book_ids),
                 limit=result_limit,
+                relevance_filter=True,
             )
             return _answer_payload(answer)
 

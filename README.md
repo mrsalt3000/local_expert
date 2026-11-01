@@ -58,7 +58,10 @@ uv run book-expert mcp
 
 Инструменты: `list_books`, `get_outline`, `search_books`, `ask_books`.
 `ask_books` по умолчанию берёт top-5 источников (параметр `limit` можно
-задать явно), чтобы в citations не попадал хвостовой шум retrieval.
+задать явно) и отбрасывает источники, слабо покрывающие редкие термины
+вопроса: остаются хиты с IDF-score не ниже
+`BOOK_EXPERT_RELEVANCE_FILTER_MIN_RATIO` (по умолчанию 0.5) от лучшего.
+Так в citations не попадает хвостовой шум retrieval.
 Shell, файлы и git через MCP не отдаются. Для Qwen Code из корня проекта:
 
 ```bash

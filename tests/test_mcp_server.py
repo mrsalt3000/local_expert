@@ -76,6 +76,7 @@ class FakeAnswerer:
     def __init__(self, answer: Answer) -> None:
         self.answer = answer
         self.calls: list[tuple[str, list[str] | None, int | None]] = []
+        self.filters: list[bool] = []
 
     def ask(
         self,
@@ -84,8 +85,10 @@ class FakeAnswerer:
         book_ids: list[str] | None = None,
         auto_route: bool = True,
         limit: int | None = None,
+        relevance_filter: bool = False,
     ) -> Answer:
         self.calls.append((question, book_ids, limit))
+        self.filters.append(relevance_filter)
         return self.answer
 
 
@@ -228,6 +231,7 @@ def test_ask_books(tmp_path: Path) -> None:
     assert payload["answer"] == "Grounded answer [1]."
     assert payload["citations"][0]["chunk_id"] == "c1"
     assert answerer.calls == [("What?", ["book-1"], 5)]
+    assert answerer.filters == [True]
 
     result = _call(
         runtime,
@@ -236,6 +240,7 @@ def test_ask_books(tmp_path: Path) -> None:
     )
     assert result.is_error is False
     assert answerer.calls[-1] == ("What?", ["book-1"], 3)
+    assert answerer.filters[-1] is True
 
 
 def test_close_releases_services(tmp_path: Path) -> None:

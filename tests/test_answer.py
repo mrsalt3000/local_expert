@@ -18,7 +18,11 @@ from book_expert.providers import (
     ProviderError,
     ProviderHealth,
 )
-from book_expert.retrieval.answer import REFUSAL, GroundedAnswerer
+from book_expert.retrieval.answer import (
+    REFUSAL,
+    GroundedAnswerer,
+    filter_relevant_hits,
+)
 from book_expert.retrieval.hybrid import SearchOutcome
 from book_expert.retrieval.router import BookRoute
 
@@ -157,6 +161,96 @@ def test_citation_carries_format_and_section(tmp_path: Path) -> None:
 
     assert answer.citations[0].format == "fb2"
     assert answer.citations[0].section_path == "Пролог"
+
+
+def test_relevance_filter_keeps_sources_with_rare_query_terms() -> None:
+    hits = (
+        SearchHit(
+            chunk_id="c1",
+            book_id="book-1",
+            book_title="Book",
+            text="Kubernetes deployment pipelines and rollout strategies.",
+            score=0.6,
+            pdf_page_index=0,
+        ),
+        SearchHit(
+            chunk_id="c2",
+            book_id="book-1",
+            book_title="Book",
+            text="A generic chapter about the history of databases.",
+            score=0.5,
+            pdf_page_index=0,
+        ),
+        SearchHit(
+            chunk_id="c3",
+            book_id="book-1",
+            book_title="Book",
+            text="Deployment is mentioned once here.",
+            score=0.4,
+            pdf_page_index=0,
+        ),
+    )
+
+    kept = filter_relevant_hits(
+        "Kubernetes deployment pipelines",
+        hits,
+        min_ratio=0.8,
+    )
+
+    assert [hit.chunk_id for hit in kept] == ["c1"]
+
+
+def test_relevance_filter_keeps_all_without_term_overlap() -> None:
+    hits = (
+        SearchHit(
+            chunk_id="c1",
+            book_id="book-1",
+            book_title="Book",
+            text="Alpha beta gamma.",
+            score=0.6,
+            pdf_page_index=0,
+        ),
+        SearchHit(
+            chunk_id="c2",
+            book_id="book-1",
+            book_title="Book",
+            text="Delta epsilon zeta.",
+            score=0.5,
+            pdf_page_index=0,
+        ),
+    )
+
+    kept = filter_relevant_hits("unrelated question", hits)
+
+    assert [hit.chunk_id for hit in kept] == ["c1", "c2"]
+
+
+def test_relevance_filter_keeps_single_hit() -> None:
+    hit = SearchHit(
+        chunk_id="c1",
+        book_id="book-1",
+        book_title="Book",
+        text="Anything.",
+        score=0.6,
+        pdf_page_index=0,
+    )
+
+    assert filter_relevant_hits("query", (hit,)) == (hit,)
+
+
+def test_answer_relevance_filter_limits_citations(tmp_path: Path) -> None:
+    provider = FakeProvider("Answer [1].")
+    searcher = FakeSearcher(_hits())
+    answerer = _answerer(tmp_path, provider, searcher)
+
+    answer = answerer.ask(
+        "How does retrieval work?",
+        book_ids=["book-1"],
+        relevance_filter=True,
+    )
+
+    assert [citation.chunk_id for citation in answer.citations] == ["c1"]
+    assert "Beta extra passage." not in provider.messages[1].content
 
 
 def test_answer_uses_context_and_citations(tmp_path: Path) -> None:

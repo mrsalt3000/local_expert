@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 
 from book_expert.agent.trace import TraceRecorder
@@ -53,6 +54,7 @@ class GroundedAnswerer:
         limit: int | None = None,
         dense: bool = True,
         history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+        relevance_filter: bool = False,
     ) -> Answer:
         selected = book_ids
         route = None
@@ -63,13 +65,28 @@ class GroundedAnswerer:
         outcome = self.searcher.search(
             query, book_ids=selected, limit=limit, dense=dense
         )
-        answer_books = (
-            tuple(selected) if selected is not None else _hit_book_ids(outcome.hits)
-        )
+        hits: tuple[SearchHit, ...] = outcome.hits
+        if relevance_filter:
+            hits = filter_relevant_hits(
+                query,
+                hits,
+                min_ratio=self.settings.relevance_filter_min_ratio,
+            )
+            if self.trace is not None:
+                self.trace.write(
+                    "relevance_filter",
+                    kept=[hit.chunk_id for hit in hits],
+                    dropped=[
+                        hit.chunk_id
+                        for hit in outcome.hits
+                        if hit.chunk_id not in {item.chunk_id for item in hits}
+                    ],
+                )
+        answer_books = tuple(selected) if selected is not None else _hit_book_ids(hits)
         confidence = route.confidence if route is not None else None
         route_reason = route.reason if route is not None else None
 
-        if not outcome.hits:
+        if not hits:
             return self._record(
                 Answer(
                     text=REFUSAL,
@@ -86,7 +103,7 @@ class GroundedAnswerer:
                 ChatMessage(role="system", content=SYSTEM_PROMPT),
                 ChatMessage(
                     role="user",
-                    content=_context_prompt(query, outcome.hits, history),
+                    content=_context_prompt(query, hits, history),
                 ),
             ],
             temperature=0.0,
@@ -103,18 +120,18 @@ class GroundedAnswerer:
                     route_reason=route_reason,
                 ),
                 query,
-                outcome.hits,
+                hits,
             )
         return self._record(
             Answer(
                 text=text,
-                citations=_citations(text, outcome.hits),
+                citations=_citations(text, hits),
                 confidence=confidence,
                 book_ids=answer_books,
                 route_reason=route_reason,
             ),
             query,
-            outcome.hits,
+            hits,
         )
 
     def _record(
@@ -140,6 +157,45 @@ class GroundedAnswerer:
 def _is_insufficient(text: str) -> bool:
     """Модель может добавить объяснение вокруг маркера — ловим его в любом месте."""
     return INSUFFICIENT in text.upper()
+
+
+def filter_relevant_hits(
+    query: str,
+    hits: tuple[SearchHit, ...],
+    *,
+    min_ratio: float = 0.5,
+) -> tuple[SearchHit, ...]:
+    """Оставляет источники, покрывающие редкие термины вопроса (IDF)."""
+    if len(hits) <= 1:
+        return hits
+    query_tokens = _terms(query)
+    if not query_tokens:
+        return hits
+    documents = [_terms(hit.text) for hit in hits]
+    count = len(documents)
+    scores = []
+    for tokens in documents:
+        matched = query_tokens & tokens
+        if not matched:
+            scores.append(0.0)
+            continue
+        score = sum(
+            math.log((count + 1) / (sum(token in doc for doc in documents) + 1))
+            for token in matched
+        )
+        scores.append(score)
+    best = max(scores)
+    if best <= 0:
+        return hits
+    threshold = best * max(0.0, min(1.0, min_ratio))
+    kept = tuple(
+        hit for hit, score in zip(hits, scores) if score >= threshold and score > 0
+    )
+    return kept or (hits[0],)
+
+
+def _terms(text: str) -> set[str]:
+    return {word[:5] for word in re.findall(r"[а-яёa-z0-9]{4,}", text.lower())}
 
 
 def sources_prompt(hits: tuple[SearchHit, ...]) -> str:
