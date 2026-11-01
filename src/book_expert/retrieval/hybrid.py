@@ -122,9 +122,31 @@ class HybridSearcher:
             fused = tuple(lexical_hits[:candidate_limit])
 
         hits, note, reranked = self._rerank(text, fused, result_limit)
+        if self.settings.page_context_enabled:
+            hits = self._with_page_context(hits)
         if reranked:
             sources.append("rerank")
         return SearchOutcome(hits=hits, sources=tuple(sources), note=note)
+
+    def _with_page_context(
+        self,
+        hits: tuple[SearchHit, ...],
+    ) -> tuple[SearchHit, ...]:
+        expanded = []
+        seen_pages: set[tuple[str, int]] = set()
+        for hit in hits:
+            key = (hit.book_id, hit.pdf_page_index)
+            if key in seen_pages:
+                expanded.append(hit)
+                continue
+            seen_pages.add(key)
+            context = self.catalog.page_text(
+                hit.book_id,
+                hit.pdf_page_index,
+                focus_chunk_id=hit.chunk_id,
+            )
+            expanded.append(replace(hit, context=context) if context else hit)
+        return tuple(expanded)
 
     def _rerank(
         self, query: str, hits: Sequence[SearchHit], limit: int

@@ -75,6 +75,7 @@ class SearchHit:
     book_title: str | None = None
     book_format: str = "pdf"
     source: SearchSource = SearchSource.fused
+    context: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

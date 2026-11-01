@@ -144,7 +144,7 @@ class BookIndexer:
                     "no extractable text (OCR is not enabled; scanned pages are skipped)"
                 )
             self.ensure_collection()
-            embeddings = self._embed(result.chunks)
+            embeddings = self._embed(result.chunks, pending.title)
             self._delete_points(book_id)
             self.client.upsert(
                 collection_name=self.collection,
@@ -216,11 +216,15 @@ class BookIndexer:
         )
         return result.count
 
-    def _embed(self, chunks: Sequence[Chunk]) -> list[tuple[float, ...]]:
+    def _embed(
+        self,
+        chunks: Sequence[Chunk],
+        book_title: str,
+    ) -> list[tuple[float, ...]]:
         vectors: list[tuple[float, ...]] = []
         for batch in _batched(chunks, self.batch_size):
             result: EmbeddingResult = self.provider.embed(
-                [chunk.text for chunk in batch]
+                [_contextual_text(book_title, chunk) for chunk in batch]
             )
             if result.dim != self.settings.embedding_dim:
                 raise IndexingError(
@@ -246,6 +250,14 @@ class BookIndexer:
             self._delete_points(book_id)
         except Exception:
             pass
+
+
+def _contextual_text(book_title: str, chunk: Chunk) -> str:
+    parts = [f"Книга: {book_title}"]
+    if chunk.section_path:
+        parts.append(f"Раздел: {chunk.section_path}")
+    parts.append(chunk.text)
+    return "\n".join(parts)
 
 
 def _qdrant_client(settings: Settings) -> QdrantClient:

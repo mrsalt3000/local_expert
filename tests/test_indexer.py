@@ -150,6 +150,8 @@ def test_ingest_indexes_book(
     assert book.page_count == 2
     assert book.chunk_count == 2
     assert provider.calls == 1
+    assert any("Книга: Synthetic Book" in text for text in provider.texts)
+    assert any("Раздел:" in text for text in provider.texts)
     assert catalog.stats()["chunks"] == 2
     assert indexer.count_points(book.id) == 2
 

@@ -22,6 +22,7 @@ from book_expert.retrieval.answer import (
     REFUSAL,
     GroundedAnswerer,
     filter_relevant_hits,
+    sources_prompt,
 )
 from book_expert.retrieval.hybrid import SearchOutcome
 from book_expert.retrieval.router import BookRoute
@@ -456,6 +457,23 @@ def test_answer_adds_missing_selected_book_to_context(tmp_path: Path) -> None:
 
     assert searcher.calls[-1]["book_ids"] == ["book-2"]
     assert [citation.chunk_id for citation in answer.citations] == ["c4"]
+
+
+def test_sources_prompt_prefers_page_context() -> None:
+    hit = SearchHit(
+        chunk_id="c1",
+        book_id="book-1",
+        book_title="Book",
+        text="chunk text",
+        score=0.5,
+        pdf_page_index=0,
+        context="full page context",
+    )
+
+    prompt = sources_prompt((hit,))
+
+    assert "full page context" in prompt
+    assert "chunk text" not in prompt
 
 
 def test_answer_uses_context_and_citations(tmp_path: Path) -> None:

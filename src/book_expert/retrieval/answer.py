@@ -286,7 +286,7 @@ def sources_prompt(hits: tuple[SearchHit, ...]) -> str:
             f'<source id="{index}" book="{_escape(hit.book_title or hit.book_id)}" '
             f'page="{_escape(page)}" '
             f'section="{_escape(hit.section_path or "")}">\n'
-            f"{hit.text}\n</source>"
+            f"{hit.context or hit.text}\n</source>"
         )
     return "Фрагменты:\n" + "\n\n".join(blocks)
 

@@ -140,6 +140,30 @@ def test_partial_lemma_index_falls_back_to_text_fts(tmp_path: Path) -> None:
     }
 
 
+def test_page_text_windows_around_focus_chunk(tmp_path: Path) -> None:
+    catalog = _catalog(tmp_path)
+    catalog.upsert_book(_book(tmp_path))
+    long_prefix = "старт " * 400
+    focus = "нужный фрагмент"
+    catalog.replace_chunks(
+        "book-1",
+        [
+            _chunk("book-1", 0, long_prefix, page=0),
+            _chunk("book-1", 1, focus, page=0),
+        ],
+    )
+
+    text = catalog.page_text(
+        "book-1",
+        0,
+        focus_chunk_id="book-1-chunk-1",
+        max_chars=200,
+    )
+
+    assert focus in text
+    assert len(text) <= 200
+
+
 def test_upsert_is_idempotent(tmp_path: Path) -> None:
     catalog = _catalog(tmp_path)
     catalog.upsert_book(_book(tmp_path))

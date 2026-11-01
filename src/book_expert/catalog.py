@@ -324,6 +324,37 @@ class Catalog:
             ).fetchone()
         return row is None
 
+    def page_text(
+        self,
+        book_id: str,
+        pdf_page_index: int,
+        *,
+        focus_chunk_id: str | None = None,
+        max_chars: int = 2000,
+    ) -> str:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, text FROM chunks
+                WHERE book_id = ? AND pdf_page_index = ?
+                ORDER BY ordinal
+                """,
+                (book_id, pdf_page_index),
+            ).fetchall()
+        full = "\n\n".join(row["text"] for row in rows)
+        if len(full) <= max_chars:
+            return full
+        if focus_chunk_id:
+            focus = next(
+                (row["text"] for row in rows if row["id"] == focus_chunk_id),
+                "",
+            )
+            position = full.find(focus) if focus else -1
+            if position >= 0:
+                start = max(0, position - max_chars // 3)
+                return full[start : start + max_chars]
+        return full[:max_chars]
+
     def set_status(
         self, book_id: str, status: BookStatus, *, description: str | None = None
     ) -> None:
