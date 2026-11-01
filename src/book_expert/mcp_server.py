@@ -104,9 +104,15 @@ class BookExpertMCP:
         def ask_books(
             question: str,
             book_ids: list[str] | None = None,
+            limit: int = 5,
         ) -> dict[str, Any]:
-            """Отвечает по книгам с проверяемыми citations."""
-            answer = self.answerer.ask(question, book_ids=_books(book_ids))
+            """Отвечает по книгам с проверяемыми citations (top-N источников)."""
+            result_limit = max(1, min(limit, MAX_LIMIT))
+            answer = self.answerer.ask(
+                question,
+                book_ids=_books(book_ids),
+                limit=result_limit,
+            )
             return _answer_payload(answer)
 
     def close(self) -> None:

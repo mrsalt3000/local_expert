@@ -96,9 +96,11 @@ LangGraph react-цикл: `rag_search` / `rag_ask` + `shell` / `read_file` /
 
 MCP stdio server отдаёт **только RAG-tools** `search_books`, `ask_books`,
 `list_books`, `get_outline`, чтобы внешние агенты (Qwen Code, Claude Code)
-могли получать знания из библиотеки без собственного ingestion. Shell,
-файловые и git-инструменты через MCP не публикуются. Для Qwen Code есть
-project-scope `.qwen/settings.json` с сервером `book-expert`.
+могли получать знания из библиотеки без собственного ingestion. `ask_books`
+по умолчанию использует top-5 источников (`limit` настраивается), чтобы
+citations не захватывали хвостовой шум retrieval. Shell, файловые и
+git-инструменты через MCP не публикуются. Для Qwen Code есть project-scope
+`.qwen/settings.json` с сервером `book-expert`.
 
 ### Веб-чат
 

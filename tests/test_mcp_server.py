@@ -75,7 +75,7 @@ class FakeSearcher:
 class FakeAnswerer:
     def __init__(self, answer: Answer) -> None:
         self.answer = answer
-        self.calls: list[tuple[str, list[str] | None]] = []
+        self.calls: list[tuple[str, list[str] | None, int | None]] = []
 
     def ask(
         self,
@@ -85,7 +85,7 @@ class FakeAnswerer:
         auto_route: bool = True,
         limit: int | None = None,
     ) -> Answer:
-        self.calls.append((question, book_ids))
+        self.calls.append((question, book_ids, limit))
         return self.answer
 
 
@@ -227,7 +227,15 @@ def test_ask_books(tmp_path: Path) -> None:
     assert result.is_error is False
     assert payload["answer"] == "Grounded answer [1]."
     assert payload["citations"][0]["chunk_id"] == "c1"
-    assert answerer.calls == [("What?", ["book-1"])]
+    assert answerer.calls == [("What?", ["book-1"], 5)]
+
+    result = _call(
+        runtime,
+        "ask_books",
+        {"question": "What?", "book_ids": ["book-1"], "limit": 3},
+    )
+    assert result.is_error is False
+    assert answerer.calls[-1] == ("What?", ["book-1"], 3)
 
 
 def test_close_releases_services(tmp_path: Path) -> None:
