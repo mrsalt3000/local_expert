@@ -166,11 +166,18 @@ def _hit_payload(index: int, hit: SearchHit) -> dict[str, Any]:
 
 
 def _answer_payload(answer: Answer) -> dict[str, Any]:
+    cited_books = {citation.book_id for citation in answer.citations}
+    if cited_books:
+        book_ids = [
+            book_id for book_id in answer.book_ids if book_id in cited_books
+        ] or sorted(cited_books)
+    else:
+        book_ids = list(answer.book_ids)[:5]
     return {
         "answer": answer.text,
         "refused": answer.refused,
         "confidence": answer.confidence,
-        "book_ids": list(answer.book_ids),
+        "book_ids": book_ids,
         "citations": [asdict(citation) for citation in answer.citations],
     }
 

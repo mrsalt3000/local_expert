@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
-from book_expert.mcp_server import RAG_TOOL_NAMES, BookExpertMCP
+from book_expert.mcp_server import RAG_TOOL_NAMES, BookExpertMCP, _answer_payload
 from book_expert.models import Answer, Book, Citation, SearchHit
 from book_expert.providers import (
     ChatMessage,
@@ -241,6 +241,37 @@ def test_ask_books(tmp_path: Path) -> None:
     assert result.is_error is False
     assert answerer.calls[-1] == ("What?", ["book-1"], 3)
     assert answerer.filters[-1] is True
+
+
+def test_answer_payload_limits_book_ids_to_citations() -> None:
+    answer = Answer(
+        text="Answer [1].",
+        citations=(
+            Citation(
+                book_id="book-2",
+                book_title="Second",
+                pdf_page_index=0,
+                chunk_id="c2",
+            ),
+        ),
+        book_ids=tuple(f"book-{index}" for index in range(1, 21)),
+    )
+
+    payload = _answer_payload(answer)
+
+    assert payload["book_ids"] == ["book-2"]
+
+
+def test_answer_payload_caps_book_ids_without_citations() -> None:
+    answer = Answer(
+        text="INSUFFICIENT_CONTEXT",
+        refused=True,
+        book_ids=tuple(f"book-{index}" for index in range(1, 21)),
+    )
+
+    payload = _answer_payload(answer)
+
+    assert len(payload["book_ids"]) == 5
 
 
 def test_close_releases_services(tmp_path: Path) -> None:
