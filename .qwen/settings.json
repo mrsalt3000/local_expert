@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "book-expert": {
+      "command": "uv",
+      "args": [
+        "run",
+        "book-expert",
+        "mcp"
+      ],
+      "description": "Local RAG-only book expert: search_books, ask_books, list_books, get_outline"
+    }
+  },
+  "$version": 4
+}

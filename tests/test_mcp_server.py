@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
-from book_expert.mcp_server import BookExpertMCP
+from book_expert.mcp_server import RAG_TOOL_NAMES, BookExpertMCP
 from book_expert.models import Answer, Book, Citation, SearchHit
 from book_expert.providers import (
     ChatMessage,
@@ -171,7 +171,13 @@ def _payload(result: Any) -> Any:
 def test_tools_are_registered(tmp_path: Path) -> None:
     runtime, _, _, _ = _runtime(tmp_path)
     names = {tool.name for tool in asyncio.run(runtime.server.list_tools())}
-    assert names == {"list_books", "get_outline", "search_books", "ask_books"}
+    assert set(RAG_TOOL_NAMES) == {
+        "list_books",
+        "get_outline",
+        "search_books",
+        "ask_books",
+    }
+    assert names == set(RAG_TOOL_NAMES)
 
 
 def test_list_books(tmp_path: Path) -> None:

@@ -50,11 +50,23 @@ uv run book-expert search "ключевой термин" --book <book_id>
 uv run book-expert chat
 ```
 
-MCP-сервер для внешних агентов:
+MCP-сервер для внешних агентов — **только RAG**:
 
 ```bash
 uv run book-expert mcp
 ```
+
+Инструменты: `list_books`, `get_outline`, `search_books`, `ask_books`.
+Shell, файлы и git через MCP не отдаются. Для Qwen Code из корня проекта:
+
+```bash
+qwen mcp add -s project book-expert uv run book-expert mcp
+```
+
+Готовый project-scope конфиг лежит в `.qwen/settings.json`; после изменения
+конфигурации перезапустите Qwen Code или выполните `qwen mcp reconnect`.
+При первом подключении Qwen Code пометит сервер как «Pending approval» —
+подтвердите его командой `qwen mcp approve book-expert` (или в интерфейсе).
 
 ## Веб-чат
 
