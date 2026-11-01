@@ -35,6 +35,11 @@ dev = [
 [project.scripts]
 book-expert = "book_expert.cli:app"
 
+[project.optional-dependencies]
+docling = [
+    "docling>=2.145.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

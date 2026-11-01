@@ -77,6 +77,35 @@ local-only sample реальной книги. Каждая страница о�
 - Table structure extraction — отдельный измеряемый параметр, не часть
   `text_coverage`.
 
+## Docling vs PyMuPDF (2026-11-01)
+
+Docling подключён как optional extra (`uv sync --extra docling`), адаптер —
+`ingestion/docling.py`, сравнение — `scripts/parser_compare.py`.
+
+На локальном sample из 5 страниц реальной книги; оба парсера таймились
+только на этих страницах:
+
+| Метрика | PyMuPDF | Docling |
+| --- | ---: | ---: |
+| nonempty coverage | 1.0 | 1.0 |
+| chars | 17 992 | 10 675 |
+| blocks | 87 | 30 |
+| elapsed, ms | ~218 | ~6 154 |
+
+`mean_token_jaccard` = **0.854**, `mean_token_recall` = **0.846** (multiset,
+без потери повторов). Две страницы дали token recall **0.63** и **0.73**:
+Docling классифицировал часть body text как `PictureItem`, а при
+`do_ocr=false` этот текст теряется; `force_backend_text=true` этого не
+исправляет. Картинки теперь не добавляют placeholder в текст.
+
+Вывод: **PyMuPDF остаётся baseline для текста**. Docling можно использовать
+только как дополнительный structural parser с OCR/table extraction и ручной
+проверкой; заменять им native-text path нельзя.
+
+Реальные page indices есть только в git-ignored локальном отчёте
+`data/artifacts/parser-compare.local.json`; текст книги и пути в него не
+пишутся.
+
 ## Ссылки
 
 - Manifest schema: `../schemas/parser-assessment-manifest.schema.json`

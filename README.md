@@ -233,7 +233,17 @@ uv run book-expert eval path/to/cases.json --k 5
 ```
 
 Parser assessment (Docling/PyMuPDF) описан в
-[docs/parsing-assessment.md](docs/parsing-assessment.md). Локальный прогон:
+[docs/parsing-assessment.md](docs/parsing-assessment.md). Для локального
+сравнения на выбранных страницах:
+
+```bash
+uv sync --extra docling
+uv run python scripts/parser_compare.py data/raw/books/<book>.pdf --pages 50-54
+```
+
+Отчёт пишется в `data/artifacts/parser-compare.local.json` (git-ignored) и
+содержит counts, runtime, page indices и token similarity; текста книги и
+путей в нём нет. Ручной review по 9 критериям остаётся обязательным. Локальный прогон:
 
 ```bash
 uv run python scripts/parser_assessment.py data/raw/book.pdf --pages 1-20

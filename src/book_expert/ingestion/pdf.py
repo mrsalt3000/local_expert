@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -48,6 +48,7 @@ def extract_pdf(
     *,
     password: str | None = None,
     strip_running_lines: bool = True,
+    pages: Iterable[int] | None = None,
 ) -> PdfDocument:
     """Извлекает native text постранично. OCR не выполняется."""
     pdf_path = Path(path).expanduser()
@@ -67,9 +68,14 @@ def extract_pdf(
             if not document.authenticate(password):
                 raise PdfEncryptedError("invalid PDF password")
 
-        pages = tuple(_extract_page(page, index) for index, page in enumerate(document))
+        selected = set(pages) if pages is not None else None
+        page_items = tuple(
+            _extract_page(page, index)
+            for index, page in enumerate(document)
+            if selected is None or index in selected
+        )
         if strip_running_lines:
-            pages = strip_running_lines_from_pages(pages)
+            page_items = strip_running_lines_from_pages(page_items)
         metadata = {
             key: value.strip()
             for key, value in (document.metadata or {}).items()
@@ -79,7 +85,7 @@ def extract_pdf(
             path=pdf_path.resolve(),
             content_hash=content_hash,
             page_count=document.page_count,
-            pages=pages,
+            pages=page_items,
             title=_optional(metadata.get("title")),
             author=_optional(metadata.get("author")),
             metadata=metadata,

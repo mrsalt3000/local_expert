@@ -76,6 +76,23 @@ def test_extract_pages_and_labels(tmp_path: Path) -> None:
     assert document.path == pdf.resolve()
 
 
+def test_extract_selected_pages_keeps_absolute_indices(tmp_path: Path) -> None:
+    pdf = _make_pdf(
+        tmp_path / "selected.pdf",
+        [
+            (["First page"], None),
+            (["Second page"], None),
+            (["Third page"], None),
+        ],
+    )
+
+    document = extract_pdf(pdf, pages=[1, 2])
+
+    assert document.page_count == 3
+    assert [page.pdf_page_index for page in document.pages] == [1, 2]
+    assert "Second page" in document.pages[0].text
+
+
 def test_content_hash_matches_file_bytes(tmp_path: Path) -> None:
     pdf = _make_pdf(tmp_path / "synthetic.pdf", [(["alpha"], "1")])
     expected = hashlib.sha256(pdf.read_bytes()).hexdigest()
