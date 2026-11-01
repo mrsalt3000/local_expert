@@ -82,7 +82,6 @@ class GroundedAnswerer:
                         if hit.chunk_id not in {item.chunk_id for item in hits}
                     ],
                 )
-        answer_books = tuple(selected) if selected is not None else _hit_book_ids(hits)
         confidence = route.confidence if route is not None else None
         route_reason = route.reason if route is not None else None
 
@@ -92,24 +91,29 @@ class GroundedAnswerer:
                     text=REFUSAL,
                     refused=True,
                     confidence=confidence,
-                    book_ids=answer_books,
+                    book_ids=(
+                        tuple(selected) if selected is not None else _hit_book_ids(hits)
+                    ),
                     route_reason=route_reason,
                 ),
                 query,
                 (),
             )
-        response = self.provider.chat(
-            [
-                ChatMessage(role="system", content=SYSTEM_PROMPT),
-                ChatMessage(
-                    role="user",
-                    content=_context_prompt(query, hits, history),
-                ),
-            ],
-            temperature=0.0,
-            max_tokens=MAX_ANSWER_TOKENS,
-        )
-        text = response.text.strip()
+        text = self._complete(query, hits, history)
+        if (
+            relevance_filter
+            and hits != outcome.hits
+            and (not text or _is_insufficient(text))
+        ):
+            if self.trace is not None:
+                self.trace.write(
+                    "relevance_filter_fallback",
+                    hits=[hit.chunk_id for hit in outcome.hits],
+                )
+            hits = outcome.hits
+            text = self._complete(query, hits, history)
+
+        answer_books = tuple(selected) if selected is not None else _hit_book_ids(hits)
         if not text or _is_insufficient(text):
             return self._record(
                 Answer(
@@ -133,6 +137,25 @@ class GroundedAnswerer:
             query,
             hits,
         )
+
+    def _complete(
+        self,
+        query: str,
+        hits: tuple[SearchHit, ...],
+        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None,
+    ) -> str:
+        response = self.provider.chat(
+            [
+                ChatMessage(role="system", content=SYSTEM_PROMPT),
+                ChatMessage(
+                    role="user",
+                    content=_context_prompt(query, hits, history),
+                ),
+            ],
+            temperature=0.0,
+            max_tokens=MAX_ANSWER_TOKENS,
+        )
+        return response.text.strip()
 
     def _record(
         self,
@@ -164,8 +187,9 @@ def filter_relevant_hits(
     hits: tuple[SearchHit, ...],
     *,
     min_ratio: float = 0.5,
+    min_keep: int = 3,
 ) -> tuple[SearchHit, ...]:
-    """Оставляет источники, покрывающие редкие термины вопроса (IDF)."""
+    """Оставляет источники по IDF, но не менее min_keep лучших из них."""
     if len(hits) <= 1:
         return hits
     query_tokens = _terms(query)
@@ -188,10 +212,13 @@ def filter_relevant_hits(
     if best <= 0:
         return hits
     threshold = best * max(0.0, min(1.0, min_ratio))
-    kept = tuple(
-        hit for hit, score in zip(hits, scores) if score >= threshold and score > 0
-    )
-    return kept or (hits[0],)
+    selected = {
+        index for index, score in enumerate(scores) if score >= threshold and score > 0
+    }
+    if len(selected) < min_keep:
+        ranked = sorted(range(len(scores)), key=lambda index: (-scores[index], index))
+        selected.update(ranked[: max(0, min_keep)])
+    return tuple(hit for index, hit in enumerate(hits) if index in selected)
 
 
 def _terms(text: str) -> set[str]:

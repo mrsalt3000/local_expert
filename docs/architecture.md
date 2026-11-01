@@ -99,10 +99,12 @@ MCP stdio server отдаёт **только RAG-tools** `search_books`, `ask_bo
 могли получать знания из библиотеки без собственного ingestion. `ask_books`
 по умолчанию использует top-5 источников (`limit` настраивается) и
 relevance-фильтр: IDF-покрытие редких терминов вопроса, порог
-`BOOK_EXPERT_RELEVANCE_FILTER_MIN_RATIO` от лучшего хита. Это не даёт
-citations захватывать хвостовой шум retrieval. Shell, файловые и
-git-инструменты через MCP не публикуются. Для Qwen Code есть project-scope
-`.qwen/settings.json` с сервером `book-expert`.
+`BOOK_EXPERT_RELEVANCE_FILTER_MIN_RATIO` от лучшего хита, но не меньше трёх
+источников. Если по ним модель вернула `INSUFFICIENT_CONTEXT`, ответ
+повторяется на полном top-5. Это не даёт citations захватывать хвостовой шум
+retrieval, но и не приводит к отказам из-за слишком узкого контекста. Shell,
+файловые и git-инструменты через MCP не публикуются. Для Qwen Code есть
+project-scope `.qwen/settings.json` с сервером `book-expert`.
 
 ### Веб-чат
 

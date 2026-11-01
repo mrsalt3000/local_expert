@@ -58,6 +58,26 @@ class FakeProvider:
         return ProviderHealth(ok=True, detail="fake")
 
 
+class SequenceProvider(FakeProvider):
+    def __init__(self, texts: Sequence[str]) -> None:
+        super().__init__(texts[0])
+        self.texts = list(texts)
+
+    def chat(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> ChatResult:
+        self.text = self.texts[min(self.calls, len(self.texts) - 1)]
+        return super().chat(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+
 class FakeSearcher:
     def __init__(self, hits: Sequence[SearchHit] = ()) -> None:
         self.hits = tuple(hits)
@@ -195,9 +215,64 @@ def test_relevance_filter_keeps_sources_with_rare_query_terms() -> None:
         "Kubernetes deployment pipelines",
         hits,
         min_ratio=0.8,
+        min_keep=1,
     )
 
     assert [hit.chunk_id for hit in kept] == ["c1"]
+
+
+def test_relevance_filter_keeps_at_least_three_sources_by_idf() -> None:
+    hits = (
+        SearchHit(
+            chunk_id="c1",
+            book_id="book-1",
+            book_title="Book",
+            text="Kubernetes deployment pipelines and rollout strategies.",
+            score=0.6,
+            pdf_page_index=0,
+        ),
+        SearchHit(
+            chunk_id="c2",
+            book_id="book-1",
+            book_title="Book",
+            text="A generic chapter about the history of databases.",
+            score=0.5,
+            pdf_page_index=0,
+        ),
+        SearchHit(
+            chunk_id="c3",
+            book_id="book-1",
+            book_title="Book",
+            text="Deployment is mentioned once here.",
+            score=0.4,
+            pdf_page_index=0,
+        ),
+        SearchHit(
+            chunk_id="c4",
+            book_id="book-1",
+            book_title="Book",
+            text="Pipelines are mentioned once here.",
+            score=0.3,
+            pdf_page_index=0,
+        ),
+        SearchHit(
+            chunk_id="c5",
+            book_id="book-1",
+            book_title="Book",
+            text="Another generic passage.",
+            score=0.2,
+            pdf_page_index=0,
+        ),
+    )
+
+    kept = filter_relevant_hits(
+        "Kubernetes deployment pipelines",
+        hits,
+        min_ratio=0.9,
+        min_keep=3,
+    )
+
+    assert [hit.chunk_id for hit in kept] == ["c1", "c3", "c4"]
 
 
 def test_relevance_filter_keeps_all_without_term_overlap() -> None:
@@ -239,8 +314,34 @@ def test_relevance_filter_keeps_single_hit() -> None:
 
 
 def test_answer_relevance_filter_limits_citations(tmp_path: Path) -> None:
+    hits = _hits() + (
+        SearchHit(
+            chunk_id="c3",
+            book_id="book-1",
+            book_title="Book One",
+            text="Gamma generic passage.",
+            score=0.4,
+            pdf_page_index=3,
+        ),
+        SearchHit(
+            chunk_id="c4",
+            book_id="book-1",
+            book_title="Book One",
+            text="Delta generic passage.",
+            score=0.3,
+            pdf_page_index=4,
+        ),
+        SearchHit(
+            chunk_id="c5",
+            book_id="book-1",
+            book_title="Book One",
+            text="Epsilon generic passage.",
+            score=0.2,
+            pdf_page_index=5,
+        ),
+    )
     provider = FakeProvider("Answer [1].")
-    searcher = FakeSearcher(_hits())
+    searcher = FakeSearcher(hits)
     answerer = _answerer(tmp_path, provider, searcher)
 
     answer = answerer.ask(
@@ -250,7 +351,52 @@ def test_answer_relevance_filter_limits_citations(tmp_path: Path) -> None:
     )
 
     assert [citation.chunk_id for citation in answer.citations] == ["c1"]
-    assert "Beta extra passage." not in provider.messages[1].content
+    assert "Epsilon generic passage." not in provider.messages[1].content
+    assert provider.calls == 1
+
+
+def test_relevance_filter_retries_with_all_hits_on_refusal(tmp_path: Path) -> None:
+    hits = _hits() + (
+        SearchHit(
+            chunk_id="c3",
+            book_id="book-1",
+            book_title="Book One",
+            text="Gamma generic passage.",
+            score=0.4,
+            pdf_page_index=3,
+        ),
+        SearchHit(
+            chunk_id="c4",
+            book_id="book-1",
+            book_title="Book One",
+            text="Delta generic passage.",
+            score=0.3,
+            pdf_page_index=4,
+        ),
+        SearchHit(
+            chunk_id="c5",
+            book_id="book-1",
+            book_title="Book One",
+            text="Epsilon generic passage.",
+            score=0.2,
+            pdf_page_index=5,
+        ),
+    )
+    provider = SequenceProvider(["INSUFFICIENT_CONTEXT", "Fallback answer [5]."])
+    searcher = FakeSearcher(hits)
+    answerer = _answerer(tmp_path, provider, searcher)
+
+    answer = answerer.ask(
+        "How does retrieval work?",
+        book_ids=["book-1"],
+        relevance_filter=True,
+    )
+
+    assert answer.refused is False
+    assert answer.text == "Fallback answer [5]."
+    assert [citation.chunk_id for citation in answer.citations] == ["c5"]
+    assert provider.calls == 2
+    assert "Epsilon generic passage." in provider.messages[1].content
 
 
 def test_answer_uses_context_and_citations(tmp_path: Path) -> None:
