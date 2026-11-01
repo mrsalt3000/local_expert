@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,7 @@ from book_expert.agent.tools.rag import build_rag_tools
 from book_expert.agent.trace import TraceRecorder
 from book_expert.catalog import Catalog
 from book_expert.catalog_audit import audit_catalog
+from book_expert.catalog_dedupe import build_dedupe_plan
 from book_expert.config import Settings
 from book_expert.eval.metrics import load_cases, run_answer_eval, run_retrieval_eval
 from book_expert.eval.synthetic import seed_synthetic_corpus
@@ -193,6 +196,98 @@ def catalog_audit_report(
         or len(report.missing_files) > limit
     ):
         console.print(f"[dim]показаны первые {limit}; полный отчёт — --json[/dim]")
+
+
+@app.command("catalog-dedupe")
+def catalog_dedupe(
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Убрать проигравшие копии из RAG; файлы остаются на диске.",
+    ),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Показать или применить план дедупликации каталога."""
+    settings = Settings()
+    settings.ensure_dirs()
+    catalog = _load_catalog(settings)
+    plan = build_dedupe_plan(catalog.list_books())
+    if not apply:
+        if json_output:
+            typer.echo(json.dumps(plan.to_dict(), ensure_ascii=False))
+            return
+        console.print(
+            f"групп дублей: {len(plan.groups)}, к удалению из RAG: {len(plan.removals)}"
+        )
+        for removal in plan.removals:
+            console.print(
+                f"[yellow]убрать[/yellow] {removal.book.id[:8]}  "
+                f"{removal.book.title}  "
+                f"(keep {removal.keep_id[:8]})"
+            )
+        console.print("[dim]это dry-run; для применения добавьте --apply[/dim]")
+        return
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    backup = catalog.path.with_name(f"{catalog.path.name}.bak-{stamp}")
+    shutil.copy2(catalog.path, backup)
+    provider: Provider | None = None
+    indexer: BookIndexer | None = None
+    removed: list[dict[str, str]] = []
+    errors: list[dict[str, str]] = []
+    try:
+        provider = get_provider(settings)
+        indexer = BookIndexer(settings, provider, catalog)
+        for removal in plan.removals:
+            try:
+                deleted = indexer.delete_book(removal.book.id)
+            except Exception as exc:
+                errors.append({"id": removal.book.id, "error": str(exc)[:300]})
+            else:
+                if not deleted:
+                    errors.append({"id": removal.book.id, "error": "book not found"})
+                    continue
+                removed.append({"id": removal.book.id, "title": removal.book.title})
+    finally:
+        if indexer is not None:
+            indexer.close()
+        close = getattr(provider, "close", None)
+        if callable(close):
+            close()
+
+    report = settings.artifacts_dir / f"catalog-dedupe-{stamp}.json"
+    report.write_text(
+        json.dumps(
+            {
+                "backup": str(backup),
+                "removed": removed,
+                "errors": errors,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "backup": str(backup),
+                    "report": str(report),
+                    "removed": len(removed),
+                    "errors": errors,
+                },
+                ensure_ascii=False,
+            )
+        )
+    else:
+        console.print(
+            f"убрано из RAG: {len(removed)}, ошибок: {len(errors)}; "
+            f"backup: {backup}; отчёт: {report}"
+        )
+    if errors:
+        raise typer.Exit(code=1)
 
 
 @app.command("audit-verify")
