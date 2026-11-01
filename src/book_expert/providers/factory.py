@@ -6,6 +6,7 @@ import httpx
 
 from book_expert.config import Settings
 from book_expert.providers.base import Provider
+from book_expert.providers.deepseek import DeepSeekProvider
 from book_expert.providers.ollama import OllamaProvider
 from book_expert.providers.openai_compat import OpenAICompatibleProvider
 
@@ -21,5 +22,7 @@ def get_provider(
             return OllamaProvider(settings, client=client)
         case "openai":
             return OpenAICompatibleProvider(settings, client=client)
+        case "deepseek":
+            return DeepSeekProvider(settings, client=client)
         case _:
             raise ValueError(f"unknown provider: {settings.provider!r}")

@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ProviderName = Literal["ollama", "openai"]
+ProviderName = Literal["ollama", "openai", "deepseek"]
 LexicalQueryMode = Literal["and", "or_prefix5"]
 
 
@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     openai_base_url: str | None = None
     openai_chat_model: str = "gpt-4o-mini"
     openai_embedding_model: str = "text-embedding-3-small"
+
+    deepseek_api_key: SecretStr | None = None
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    deepseek_chat_model: str = "deepseek-chat"
 
     chunk_size: int = 1000
     chunk_overlap: int = 150

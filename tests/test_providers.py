@@ -16,6 +16,7 @@ from book_expert.providers import (
     get_provider,
 )
 from book_expert.providers.ollama import OllamaProvider
+from book_expert.providers.deepseek import DeepSeekProvider
 from book_expert.providers.openai_compat import OpenAICompatibleProvider
 
 Handler = Any
@@ -42,6 +43,51 @@ def openai_settings(**overrides: Any) -> Settings:
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
+
+
+def deepseek_settings(**overrides: Any) -> Settings:
+    values: dict[str, Any] = {
+        "provider": "deepseek",
+        "deepseek_base_url": "http://deepseek.test/v1",
+        "deepseek_api_key": "sk-deepseek",
+        "ollama_base_url": "http://ollama.test",
+        "embedding_model": "bge-m3",
+        "embedding_dim": 2,
+    }
+    values.update(overrides)
+    return Settings(_env_file=None, **values)
+
+
+def test_deepseek_chat_and_local_embed_delegate() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if request.url.path.endswith("/chat/completions"):
+            return httpx.Response(
+                200,
+                json={
+                    "model": "deepseek-chat",
+                    "choices": [{"message": {"content": "облако"}}],
+                    "usage": {"total_tokens": 3},
+                },
+            )
+        if request.url.path.endswith("/api/embed"):
+            return httpx.Response(
+                200,
+                json={"embeddings": [[0.1, 0.2]], "model": "bge-m3"},
+            )
+        return httpx.Response(500, json={})
+
+    provider = DeepSeekProvider(deepseek_settings(), client=make_client(handler))
+    chat = provider.chat([ChatMessage(role="user", content="hi")])
+    embed = provider.embed(["текст"])
+
+    assert chat.text == "облако"
+    assert chat.model == "deepseek-chat"
+    assert embed.dim == 2
+    assert any("/chat/completions" in url for url in calls)
+    assert any("/api/embed" in url for url in calls)
 
 
 def test_ollama_chat_payload_and_parsing() -> None:
@@ -335,11 +381,14 @@ def test_get_provider_selects_adapter() -> None:
     with make_client(handler) as client:
         ollama = get_provider(ollama_settings(), client=client)
         openai = get_provider(openai_settings(), client=client)
+        deepseek = get_provider(deepseek_settings(), client=client)
 
     assert isinstance(ollama, OllamaProvider)
     assert isinstance(openai, OpenAICompatibleProvider)
+    assert isinstance(deepseek, DeepSeekProvider)
     assert ollama.name == "ollama"
     assert openai.name == "openai"
+    assert deepseek.name == "deepseek"
 
 
 def test_get_provider_rejects_unknown_provider() -> None:

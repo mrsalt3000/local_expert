@@ -137,11 +137,16 @@ def check_directories(settings: Settings) -> CheckResult:
 
 
 def check_provider(settings: Settings) -> CheckResult:
-    if settings.provider == "openai":
+    if settings.provider in {"openai", "deepseek"}:
+        detail = (
+            "включён DeepSeek: chat уходит в облако, embeddings локальные"
+            if settings.provider == "deepseek"
+            else "включён облачный OpenAI-compatible провайдер"
+        )
         return CheckResult(
             "provider",
             WARN,
-            "включён облачный OpenAI-compatible провайдер",
+            detail,
             "фрагменты книг уйдут наружу; используйте только с явного согласия",
         )
     return CheckResult("provider", OK, "локальный ollama")
@@ -277,10 +282,15 @@ def check_ollama(
         ]
 
     results = [CheckResult("ollama", OK, f"{base}: моделей {len(names)}")]
-    for role, model in (
-        ("chat", settings.chat_model),
-        ("embedding", settings.embedding_model),
-    ):
+    roles: tuple[tuple[str, str], ...] = ()
+    if settings.provider == "ollama":
+        roles = (
+            ("chat", settings.chat_model),
+            ("embedding", settings.embedding_model),
+        )
+    elif settings.provider == "deepseek":
+        roles = (("embedding", settings.embedding_model),)
+    for role, model in roles:
         if _has_model(names, model):
             results.append(CheckResult(f"ollama:{role}", OK, f"{model} доступна"))
         else:
