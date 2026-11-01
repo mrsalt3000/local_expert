@@ -30,6 +30,7 @@ from book_expert.models import Answer, Book, SearchHit
 from book_expert.providers import Provider, ProviderError, get_provider
 from book_expert.retrieval.advanced import AdvancedAnswerer
 from book_expert.retrieval.answer import GroundedAnswerer
+from book_expert.retrieval.book_profiles import build_profiles
 from book_expert.retrieval.super_advanced import SuperAdvancedAnswerer
 from book_expert.retrieval.hybrid import HybridSearcher, SearchOutcome
 from book_expert.retrieval.router import BookRouter
@@ -196,6 +197,39 @@ def catalog_audit_report(
         or len(report.missing_files) > limit
     ):
         console.print(f"[dim]показаны первые {limit}; полный отчёт — --json[/dim]")
+
+
+@app.command("router-index")
+def router_index(
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Построить book-level профили для routing."""
+    settings = Settings()
+    settings.ensure_dirs()
+    catalog = _load_catalog(settings)
+    provider = get_provider(settings)
+    try:
+        if provider.name == "ollama":
+            console.print(
+                "[yellow]профили используются только облачным router; "
+                "для local Ollama они не загружаются[/yellow]"
+            )
+        count = build_profiles(settings, catalog, provider)
+    except (ProviderError, ValueError, OSError) as exc:
+        _fail(str(exc), json_output)
+    finally:
+        close = getattr(provider, "close", None)
+        if callable(close):
+            close()
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {"books": count, "path": str(settings.book_profiles_path)},
+                ensure_ascii=False,
+            )
+        )
+    else:
+        console.print(f"профилей: {count}; {settings.book_profiles_path}")
 
 
 @app.command("catalog-dedupe")

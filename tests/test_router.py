@@ -249,6 +249,31 @@ def test_router_keeps_lexical_candidate_before_title_matches(tmp_path: Path) -> 
     assert "ML Deployment Handbook" in provider.messages[1].content
 
 
+def test_router_loads_profiles_only_for_cloud(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    settings.ensure_dirs()
+    settings.book_profiles_path.write_text(
+        json.dumps(
+            {
+                "model": "fake-embed",
+                "dim": 2,
+                "profiles": [
+                    {"book_id": "book-1", "title": "Book", "vector": [1.0, 0.0]}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    catalog = _catalog(tmp_path)
+    provider = FakeProvider()
+
+    provider.name = "ollama"
+    assert BookRouter(settings, provider, catalog).profiles is None
+
+    provider.name = "deepseek"
+    assert BookRouter(settings, provider, catalog).profiles is not None
+
+
 def test_empty_library_skips_llm(tmp_path: Path) -> None:
     catalog = Catalog(tmp_path / "empty.sqlite3")
     catalog.initialize()

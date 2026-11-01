@@ -238,3 +238,51 @@
 | 2026-10-31 | T01–T18 | accepted | независимая приёмка: 179 tests, doctor ok |
 | 2026-10-31 | T19 | review | FastAPI UI + RAG/агент, 206 tests; live ask упёрся в SW Power Cap GPU |
 | 2026-10-31 | T19 | accepted | live smoke в браузере (RAG + агент, 200), 214 tests; приёмка нашла и закрыла 500 в agent-режиме при недоступном провайдере |
+| 2026-11-01 | T20 | accepted | book profiles 1150; DeepSeek routing top1 0.533, local 4B 0.500 без профилей; 356 tests |
+
+### T20 — Book-level routing index
+
+- [x] Статус: `accepted` (2026-11-01; повторная приёмка после D1/D2)
+- Scope: `retrieval/book_profiles.py`, `retrieval/router.py`, CLI
+  `router-index`, local-only `data/artifacts/book_profiles.local.json`,
+  `tests/test_book_profiles.py`, routing eval.
+- Acceptance: profile index строится по title/author/section headings;
+  `BookRouter` использует его до lexical fallback; routing eval показывает
+  candidate recall и top-1 не хуже текущего; без файла — прежнее поведение.
+- Verify: targeted tests, `router_eval`, `pytest`, ruff/pre-commit.
+
+### T21 — Лемматизация FTS5 для русской морфологии
+
+- [ ] Статус: `todo`
+- Scope: dependency `pymorphy3`, lemma-normalization query/index, reindex
+  strategy, migration tests, eval на 76 кейсах.
+- Acceptance: `сон/сна`, `модель/модели` находят друг друга; нет регрессии
+  page recall@5; лексический вес остаётся настраиваемым.
+- Verify: 76-case eval, targeted tests, full checks.
+
+### T22 — Contextual chunks и parent-child retrieval
+
+- [ ] Статус: `todo`
+- Scope: контекст `title + section_path` перед embedding, parent page/section
+  в ответе, reindex one book A/B, eval.
+- Acceptance: chunk recall@5 и citation precision растут или не падают;
+  citations остаются проверяемыми.
+- Verify: A/B eval, full checks.
+
+### T23 — Reranking top-20
+
+- [ ] Статус: `todo`
+- Scope: пересмотреть reranker после прошлого провала Jina; сравнить
+  cross-encoder/DeepSeek listwise на top-20, latency и качество.
+- Acceptance: измеримый прирост page recall@5/citation precision без
+  неприемлемой задержки; иначе default остаётся off.
+- Verify: eval + latency benchmark, full checks.
+
+### T24 — Расширение eval до 5 книг / 150 вопросов
+
+- [ ] Статус: `todo`
+- Scope: human-review вопросы по 3–5 книгам, per-stage routing/retrieval/
+  citation metrics, local-only dataset.
+- Acceptance: ≥100 reviewed cases, routing и retrieval метрики считаются
+  раздельно, draft не смешивается с reviewed.
+- Verify: dataset integrity, eval runs, full checks.

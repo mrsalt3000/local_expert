@@ -163,6 +163,10 @@ class Settings(BaseSettings):
         return self.artifacts_dir / "catalog.sqlite3"
 
     @property
+    def book_profiles_path(self) -> Path:
+        return self.artifacts_dir / "book_profiles.local.json"
+
+    @property
     def qdrant_storage_path(self) -> Path:
         return self.artifacts_dir / "qdrant"
 

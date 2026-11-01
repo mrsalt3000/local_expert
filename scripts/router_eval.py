@@ -74,7 +74,14 @@ def evaluate(path: Path) -> dict[str, Any]:
             ):
                 raise ValueError(f"case {index}: expected_book_ids must be non-empty")
             candidates = {
-                book.id for book in _candidate_books(question, books, catalog)
+                book.id
+                for book in _candidate_books(
+                    question,
+                    books,
+                    catalog,
+                    profiles=router.profiles,
+                    provider=provider,
+                )
             }
             route = router.route(question)
             ids = list(route.book_ids)
@@ -96,6 +103,9 @@ def evaluate(path: Path) -> dict[str, Any]:
     n = len(rows)
     return {
         "cases": n,
+        "provider": settings.provider,
+        "chat_model": provider.chat_model,
+        "profiles": router.profiles is not None,
         "top1": round(sum(row["top1"] for row in rows) / n, 4),
         "recall_at_3": round(
             sum(row["recall_at_3"] for row in rows) / n,

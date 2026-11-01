@@ -153,6 +153,7 @@ BOOK_EXPERT_SUPER_MAX_ROUNDS=5
 | `books` | Список книг, статусов и размеров индекса |
 | `catalog-audit` | Дубли по названию, подозрительные имена и пропавшие файлы; ничего не удаляет |
 | `catalog-dedupe` | План/применение удаления дублей из RAG; файлы остаются, `--apply` делает backup |
+| `router-index` | Построить book-level профили для выбора книг |
 | `audit-verify` | Проверка hash chain audit-лога tool-calls |
 | `search <query>` | Гибридный поиск (dense + lexical + RRF); `--lexical-only` без Qdrant |
 | `ask <question>` | Ответ с citations; авто-routing; `--lexical-only` без Qdrant |

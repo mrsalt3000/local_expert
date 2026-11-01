@@ -12,6 +12,7 @@ from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.models import Book, BookStatus
 from book_expert.providers import ChatMessage, Provider, ProviderError
+from book_expert.retrieval.book_profiles import PROFILE_LIMIT, BookProfileStore
 
 OUTLINE_LIMIT = 8
 CANDIDATE_LIMIT = 12
@@ -71,6 +72,16 @@ class BookRouter:
         self.provider = provider
         self.catalog = catalog
         self.trace = trace
+        loaded = (
+            BookProfileStore.load(settings.book_profiles_path)
+            if provider.name != "ollama"
+            else None
+        )
+        self.profiles = (
+            loaded
+            if loaded is not None and loaded.model == provider.embedding_model
+            else None
+        )
 
     def route(self, query: str, *, books: list[Book] | None = None) -> BookRoute:
         route = self._route(query, books)
@@ -100,7 +111,13 @@ class BookRouter:
                 "single ready book; routing skipped",
             )
 
-        candidates = _candidate_books(query, candidates, self.catalog)
+        candidates = _candidate_books(
+            query,
+            candidates,
+            self.catalog,
+            profiles=self.profiles,
+            provider=self.provider,
+        )
         messages = [
             ChatMessage(role="system", content=SYSTEM_PROMPT),
             ChatMessage(
@@ -151,11 +168,28 @@ def _candidate_books(
     query: str,
     books: list[Book],
     catalog: Catalog,
+    *,
+    profiles: BookProfileStore | None = None,
+    provider: Provider | None = None,
 ) -> list[Book]:
     """Сужает каталог до правдоподобных книг до вызова LLM."""
     by_id = {book.id: book for book in books}
     ordered: list[Book] = []
     seen: set[str] = set()
+
+    if profiles is not None and provider is not None:
+        try:
+            vector = provider.embed([query]).vectors[0]
+            profile_ids = profiles.search(vector, limit=PROFILE_LIMIT)
+        except Exception:
+            profile_ids = []
+        for book_id in profile_ids:
+            book = by_id.get(book_id)
+            if book is not None and book.id not in seen:
+                ordered.append(book)
+                seen.add(book.id)
+            if len(ordered) >= CANDIDATE_LIMIT:
+                break
 
     try:
         hits = catalog.search_lexical(
@@ -170,7 +204,7 @@ def _candidate_books(
         if book is not None and book.id not in seen:
             ordered.append(book)
             seen.add(book.id)
-            if len(ordered) >= LEXICAL_CANDIDATES:
+            if len(ordered) >= CANDIDATE_LIMIT:
                 break
 
     query_tokens = _meta_tokens(query)
