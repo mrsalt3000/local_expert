@@ -240,7 +240,7 @@
 | 2026-10-31 | T19 | accepted | live smoke в браузере (RAG + агент, 200), 214 tests; приёмка нашла и закрыла 500 в agent-режиме при недоступном провайдере |
 | 2026-11-01 | T20 | accepted | book profiles 1150; DeepSeek routing top1 0.533, local 4B 0.500 без профилей; 356 tests |
 | 2026-11-01 | T21 | accepted | lemma-FTS5 547946 chunks; `сон/сна`; page recall@5 0.8947; `_lemma_ready` 0.2 ms после partial index |
-| 2026-11-01 | T24 | review | 100 reviewed на 3 книгах; third-book page recall@5 0.958, citation precision 0.771 |
+| 2026-11-01 | T24 | accepted | 100 reviewed на 3 книгах; page recall@5 0.910, citation precision 0.533/recall 0.643, 5 отказов |
 | 2026-11-01 | T22 | accepted | contextual embeddings (books_ctx): chunk recall@5 0.5865, page recall@10 0.9615; page-context default off; 361 tests |
 | 2026-11-01 | T23 | accepted | BAAI/bge-reranker-v2-m3-int8 не уложился в 10 мин на 52 кейсах; default off |
 
@@ -284,7 +284,7 @@
 
 ### T24 — Расширение eval до 5 книг / 150 вопросов
 
-- [ ] Статус: `review` (2026-11-01; 100 reviewed на 3 книгах; 24 third-book draft проверены вручную)
+- [x] Статус: `accepted` (2026-11-01; 100 reviewed на 3 книгах, финальный прогон)
 - Scope: human-review вопросы по 3–5 книгам, per-stage routing/retrieval/
   citation metrics, local-only dataset.
 - Acceptance: ≥100 reviewed cases, routing и retrieval метрики считаются
