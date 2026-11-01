@@ -230,7 +230,11 @@ BOOK_EXPERT_RERANK_TOP_N=20
 uv run pytest
 uv run book-expert eval --synthetic
 uv run book-expert eval path/to/cases.json --k 5
+uv run python scripts/router_eval.py data/eval/router-eval.local.json
 ```
+
+`router_eval` проверяет выбор книги без явного `book_ids`: top-1, recall@3 и
+попадание target в prefilter-кандидаты. Датасет — local-only `*.local.json`.
 
 Parser assessment (Docling/PyMuPDF) описан в
 [docs/parsing-assessment.md](docs/parsing-assessment.md). Для локального
