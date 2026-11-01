@@ -10,7 +10,7 @@ from qdrant_client import QdrantClient, models
 from qdrant_client.http import exceptions as qdrant_exceptions
 
 from book_expert.catalog import Catalog
-from book_expert.config import Settings
+from book_expert.config import LexicalQueryMode, Settings
 from book_expert.models import BookStatus, SearchHit, SearchSource
 from book_expert.providers import Provider, ProviderUnavailableError
 from book_expert.retrieval.rerank import RerankError, Reranker, create_reranker
@@ -59,6 +59,7 @@ class HybridSearcher:
         limit: int | None = None,
         dense: bool = True,
         lexical: bool = True,
+        lexical_query_mode: LexicalQueryMode | None = None,
     ) -> SearchOutcome:
         text = query.strip()
         if not text:
@@ -102,7 +103,7 @@ class HybridSearcher:
                 text,
                 book_ids=book_ids,
                 limit=candidate_limit,
-                query_mode=self.settings.lexical_query_mode,
+                query_mode=lexical_query_mode or self.settings.lexical_query_mode,
             )
             sources.append("lexical")
 

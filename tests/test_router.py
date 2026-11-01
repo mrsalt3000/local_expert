@@ -169,6 +169,41 @@ def test_provider_error_falls_back(tmp_path: Path) -> None:
     assert "router unavailable" in route.reason
 
 
+def test_router_prefilters_large_catalog_before_llm(tmp_path: Path) -> None:
+    catalog = Catalog(tmp_path / "large.sqlite3")
+    catalog.initialize()
+    for index in range(30):
+        catalog.upsert_book(
+            Book(
+                id=f"book-{index}",
+                title=f"Unrelated Topic {index}",
+                path=tmp_path / f"{index}.pdf",
+                content_hash=f"hash-{index}",
+                status=BookStatus.ready,
+            )
+        )
+    catalog.upsert_book(
+        Book(
+            id="sleep",
+            title="Sleep Science",
+            path=tmp_path / "sleep.pdf",
+            content_hash="hash-sleep",
+            status=BookStatus.ready,
+        )
+    )
+    provider = FakeProvider(
+        '{"book_ids": ["sleep"], "confidence": 0.95, "reason": "sleep topic"}'
+    )
+    router = BookRouter(_settings(tmp_path), provider, catalog)
+
+    route = router.route("How can I improve deep sleep?")
+
+    assert route.book_ids == ("sleep",)
+    prompt = provider.messages[1].content
+    assert "Sleep Science" in prompt
+    assert "Unrelated Topic 29" not in prompt
+
+
 def test_empty_library_skips_llm(tmp_path: Path) -> None:
     catalog = Catalog(tmp_path / "empty.sqlite3")
     catalog.initialize()

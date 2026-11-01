@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,7 +13,29 @@ from book_expert.config import Settings
 from book_expert.models import Book, BookStatus
 from book_expert.providers import ChatMessage, Provider, ProviderError
 
-OUTLINE_LIMIT = 20
+OUTLINE_LIMIT = 8
+CANDIDATE_LIMIT = 12
+CANDIDATE_HITS = 50
+_META_STOPWORDS = {
+    "and",
+    "does",
+    "for",
+    "how",
+    "the",
+    "what",
+    "why",
+    "with",
+    "your",
+    "без",
+    "все",
+    "для",
+    "как",
+    "или",
+    "при",
+    "про",
+    "что",
+    "это",
+}
 SYSTEM_PROMPT = (
     "Ты — компонент маршрутизации локальной RAG-системы по книгам. "
     "Выбери книги, которые нужны для ответа на вопрос пользователя. "
@@ -76,6 +99,7 @@ class BookRouter:
                 "single ready book; routing skipped",
             )
 
+        candidates = _candidate_books(query, candidates, self.catalog)
         messages = [
             ChatMessage(role="system", content=SYSTEM_PROMPT),
             ChatMessage(
@@ -120,6 +144,63 @@ class BookRouter:
             reason=reason,
             fallback=True,
         )
+
+
+def _candidate_books(
+    query: str,
+    books: list[Book],
+    catalog: Catalog,
+) -> list[Book]:
+    """Сужает каталог до правдоподобных книг до вызова LLM."""
+    by_id = {book.id: book for book in books}
+    ordered: list[Book] = []
+    seen: set[str] = set()
+
+    query_tokens = _meta_tokens(query)
+    if query_tokens:
+        scored = sorted(
+            ((_metadata_score(book, query_tokens), book) for book in books),
+            key=lambda item: (-item[0], item[1].title.casefold()),
+        )
+        for score, book in scored:
+            if score <= 0 or len(ordered) >= CANDIDATE_LIMIT:
+                break
+            ordered.append(book)
+            seen.add(book.id)
+
+    try:
+        hits = catalog.search_lexical(
+            query,
+            limit=CANDIDATE_HITS,
+            query_mode="or_prefix5",
+        )
+    except Exception:
+        hits = []
+    for hit in hits:
+        book = by_id.get(hit.book_id)
+        if book is not None and book.id not in seen:
+            ordered.append(book)
+            seen.add(book.id)
+            if len(ordered) >= CANDIDATE_LIMIT:
+                break
+
+    if not ordered:
+        ordered = books[:CANDIDATE_LIMIT]
+    return ordered[:CANDIDATE_LIMIT]
+
+
+def _meta_tokens(text: str) -> set[str]:
+    return {
+        word[:5]
+        for word in re.findall(r"[а-яёa-z0-9]{3,}", text.casefold())
+        if word not in _META_STOPWORDS
+    }
+
+
+def _metadata_score(book: Book, query_tokens: set[str]) -> int:
+    title_tokens = _meta_tokens(book.title)
+    text_tokens = _meta_tokens(" ".join(filter(None, (book.author, book.description))))
+    return 3 * len(query_tokens & title_tokens) + len(query_tokens & text_tokens)
 
 
 def _routing_payload(query: str, books: list[Book], catalog: Catalog) -> str:

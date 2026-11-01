@@ -65,6 +65,7 @@ class GroundedAnswerer:
         outcome = self.searcher.search(
             query, book_ids=selected, limit=limit, dense=dense
         )
+        result_limit = self.settings.top_k if limit is None else limit
         hits: tuple[SearchHit, ...] = outcome.hits
         if relevance_filter:
             hits = filter_relevant_hits(
@@ -82,6 +83,13 @@ class GroundedAnswerer:
                         if hit.chunk_id not in {item.chunk_id for item in hits}
                     ],
                 )
+        hits = self._cover_selected_books(
+            query,
+            hits,
+            selected,
+            result_limit,
+            dense,
+        )
         confidence = route.confidence if route is not None else None
         route_reason = route.reason if route is not None else None
 
@@ -137,6 +145,51 @@ class GroundedAnswerer:
             query,
             hits,
         )
+
+    def _cover_selected_books(
+        self,
+        query: str,
+        hits: tuple[SearchHit, ...],
+        selected: list[str] | None,
+        limit: int,
+        dense: bool,
+    ) -> tuple[SearchHit, ...]:
+        if selected is None or len(selected) < 2 or limit <= 0:
+            return hits
+        present = {hit.book_id for hit in hits}
+        missing = [book_id for book_id in selected if book_id not in present]
+        if not missing:
+            return hits
+        extras: list[SearchHit] = []
+        for book_id in missing[:limit]:
+            try:
+                extra = self.searcher.search(
+                    query,
+                    book_ids=[book_id],
+                    limit=1,
+                    dense=False,
+                    lexical_query_mode="or_prefix5",
+                ).hits
+                if not extra and dense:
+                    extra = self.searcher.search(
+                        query,
+                        book_ids=[book_id],
+                        limit=1,
+                    ).hits
+            except Exception:
+                continue
+            if extra and extra[0].chunk_id not in {hit.chunk_id for hit in hits}:
+                extras.append(extra[0])
+        if not extras:
+            return hits
+        keep = max(0, limit - len(extras))
+        merged = list(hits[:keep]) + extras
+        if self.trace is not None:
+            self.trace.write(
+                "book_coverage",
+                added=[hit.book_id for hit in extras],
+            )
+        return tuple(merged[:limit])
 
     def _complete(
         self,

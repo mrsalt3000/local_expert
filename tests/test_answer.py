@@ -91,6 +91,7 @@ class FakeSearcher:
         limit: int | None = None,
         dense: bool = True,
         lexical: bool = True,
+        lexical_query_mode: str | None = None,
     ) -> SearchOutcome:
         self.calls.append(
             {
@@ -99,6 +100,7 @@ class FakeSearcher:
                 "limit": limit,
                 "dense": dense,
                 "lexical": lexical,
+                "lexical_query_mode": lexical_query_mode,
             }
         )
         return SearchOutcome(hits=self.hits)
@@ -397,6 +399,63 @@ def test_relevance_filter_retries_with_all_hits_on_refusal(tmp_path: Path) -> No
     assert [citation.chunk_id for citation in answer.citations] == ["c5"]
     assert provider.calls == 2
     assert "Epsilon generic passage." in provider.messages[1].content
+
+
+def test_answer_adds_missing_selected_book_to_context(tmp_path: Path) -> None:
+    class PerBookSearcher(FakeSearcher):
+        def __init__(self) -> None:
+            super().__init__()
+            self.book_hits = {
+                "book-1": tuple(
+                    SearchHit(
+                        chunk_id=f"c{index}",
+                        book_id="book-1",
+                        book_title="Book One",
+                        text=f"Book one passage {index}.",
+                        score=0.9 - index / 10,
+                        pdf_page_index=index,
+                    )
+                    for index in range(1, 4)
+                ),
+                "book-2": (
+                    SearchHit(
+                        chunk_id="c4",
+                        book_id="book-2",
+                        book_title="Book Two",
+                        text="Book two sleep passage.",
+                        score=0.8,
+                        pdf_page_index=0,
+                    ),
+                ),
+            }
+
+        def search(
+            self,
+            query: str,
+            *,
+            book_ids=None,
+            limit=None,
+            dense=True,
+            lexical=True,
+            lexical_query_mode=None,
+        ):
+            self.calls.append({"book_ids": book_ids, "limit": limit})
+            ids = book_ids or ["book-1", "book-2"]
+            pool = self.book_hits.get(ids[0], ())
+            return SearchOutcome(hits=tuple(pool[: limit or len(pool)]))
+
+    provider = FakeProvider("Answer [3].")
+    searcher = PerBookSearcher()
+    answerer = _answerer(tmp_path, provider, searcher)
+
+    answer = answerer.ask(
+        "How to improve sleep?",
+        book_ids=["book-1", "book-2"],
+        limit=3,
+    )
+
+    assert searcher.calls[-1]["book_ids"] == ["book-2"]
+    assert [citation.chunk_id for citation in answer.citations] == ["c4"]
 
 
 def test_answer_uses_context_and_citations(tmp_path: Path) -> None:
