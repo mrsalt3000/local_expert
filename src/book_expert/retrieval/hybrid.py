@@ -99,7 +99,10 @@ class HybridSearcher:
         lexical_hits: list[SearchHit] = []
         if lexical:
             lexical_hits = self.catalog.search_lexical(
-                text, book_ids=book_ids, limit=candidate_limit
+                text,
+                book_ids=book_ids,
+                limit=candidate_limit,
+                query_mode=self.settings.lexical_query_mode,
             )
             sources.append("lexical")
 

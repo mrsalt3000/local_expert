@@ -9,6 +9,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ProviderName = Literal["ollama", "openai"]
+LexicalQueryMode = Literal["and", "or_prefix5"]
 
 
 class Settings(BaseSettings):
@@ -51,6 +52,7 @@ class Settings(BaseSettings):
     super_max_rounds: int = 5
     rrf_dense_weight: float = 1.0
     rrf_lexical_weight: float = 0.1
+    lexical_query_mode: LexicalQueryMode = "and"
     max_upload_mb: int = 200
     import_max_files: int = 500
     import_max_file_mb: int = 500

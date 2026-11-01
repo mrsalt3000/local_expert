@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from book_expert.config import LexicalQueryMode
 from book_expert.models import (
     Book,
     BookStatus,
@@ -346,13 +347,20 @@ class Catalog:
         *,
         book_ids: Sequence[str] | None = None,
         limit: int = 20,
+        query_mode: LexicalQueryMode = "and",
     ) -> list[SearchHit]:
         tokens = _tokens(query)
         if not tokens or limit <= 0:
             return []
         if book_ids is not None and not book_ids:
             return []
-        match = " ".join(f'"{token}"' for token in tokens)
+        if query_mode == "or_prefix5":
+            match = " OR ".join(
+                f'"{token[:5]}"*' if len(token) >= 5 else f'"{token}"'
+                for token in tokens
+            )
+        else:
+            match = " ".join(f'"{token}"' for token in tokens)
         sql = """
             SELECT
                 c.id, c.book_id, c.text, c.pdf_page_index,

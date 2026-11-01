@@ -51,13 +51,14 @@ class FakeProvider:
         return ProviderHealth(ok=True, detail="fake")
 
 
-def _settings(tmp_path: Path) -> Settings:
+def _settings(tmp_path: Path, **overrides: Any) -> Settings:
     return Settings(
         _env_file=None,
         workspace=tmp_path,
         data_dir=tmp_path / "data",
         embedding_dim=2,
         top_k=3,
+        **overrides,
     )
 
 
@@ -182,6 +183,23 @@ def test_lexical_only(searcher: HybridSearcher) -> None:
     assert outcome.sources == ("lexical",)
     assert {hit.chunk_id for hit in outcome.hits} == {"c1", "c3"}
     assert all(hit.source is SearchSource.lexical for hit in outcome.hits)
+
+
+def test_lexical_query_mode_or_prefix5(tmp_path: Path) -> None:
+    catalog = _catalog(tmp_path)
+    client = QdrantClient(":memory:")
+    instance = HybridSearcher(
+        _settings(tmp_path, lexical_query_mode="or_prefix5"),
+        FakeProvider(),
+        catalog,
+        client=client,
+    )
+    try:
+        outcome = instance.search("neural cooking", dense=False, book_ids=["book-1"])
+    finally:
+        client.close()
+
+    assert {hit.chunk_id for hit in outcome.hits} == {"c1", "c2"}
 
 
 def test_book_filter(searcher: HybridSearcher) -> None:

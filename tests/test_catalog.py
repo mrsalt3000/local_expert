@@ -154,6 +154,17 @@ def test_lexical_search(tmp_path: Path) -> None:
     assert hits[0].book_title == "Synthetic Book"
     assert hits[0].score >= 0
 
+    assert catalog.search_lexical("retrieval unrelated") == []
+    or_hits = catalog.search_lexical(
+        "retrieval unrelated",
+        book_ids=["book-1"],
+        query_mode="or_prefix5",
+    )
+    assert {hit.chunk_id for hit in or_hits} == {
+        "book-1-chunk-0",
+        "book-1-chunk-1",
+    }
+
     filtered = catalog.search_lexical("retrieval", book_ids=["book-2"])
     assert [hit.chunk_id for hit in filtered] == ["book-2-chunk-0"]
 

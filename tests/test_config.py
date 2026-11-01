@@ -16,6 +16,7 @@ def test_defaults(tmp_path: Path) -> None:
     assert settings.chunk_overlap == 150
     assert settings.qdrant_url == "http://127.0.0.1:6333"
     assert settings.ollama_num_ctx == 8192
+    assert settings.lexical_query_mode == "and"
     assert settings.autonomy is True
     assert settings.allow_remote is False
 
