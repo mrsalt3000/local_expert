@@ -16,6 +16,7 @@ from book_expert.agent.tools.coding import build_coding_tools
 from book_expert.agent.tools.rag import build_rag_tools
 from book_expert.agent.trace import TraceRecorder
 from book_expert.catalog import Catalog
+from book_expert.catalog_audit import audit_catalog
 from book_expert.config import Settings
 from book_expert.eval.metrics import load_cases, run_answer_eval, run_retrieval_eval
 from book_expert.eval.synthetic import seed_synthetic_corpus
@@ -148,6 +149,50 @@ def books(json_output: bool = typer.Option(False, "--json")) -> None:
             f"{book.id[:8]}  {book.status.value:<8}  {book.title}  "
             f"({book.page_count} pages, {book.chunk_count} chunks)"
         )
+
+
+@app.command("catalog-audit")
+def catalog_audit_report(
+    limit: int = typer.Option(20, "--limit", min=1, max=200),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Показать дубли, подозрительные названия и пропавшие файлы."""
+    settings = Settings()
+    settings.ensure_dirs()
+    report = audit_catalog(_load_catalog(settings).list_books())
+    if json_output:
+        typer.echo(json.dumps(report.to_dict(), ensure_ascii=False))
+        return
+    console.print(
+        f"книг: {report.total}, ready: {report.ready}, "
+        f"pending: {report.pending}, indexing: {report.indexing}, "
+        f"failed: {report.failed}"
+    )
+    console.print(
+        f"дублей: {len(report.duplicates)}, "
+        f"подозрительных названий: {len(report.suspicious)}, "
+        f"пропавших файлов: {len(report.missing_files)}"
+    )
+    for group in report.duplicates[:limit]:
+        console.print(f"[yellow]дубль[/yellow] {group.key}")
+        for book in group.books:
+            marker = "*" if book.id == group.keep_id else " "
+            console.print(
+                f" {marker} {book.id[:8]}  {book.title}  "
+                f"({book.page_count} pages, {book.chunk_count} chunks)"
+            )
+    for book, reason in report.suspicious[:limit]:
+        console.print(
+            f"[yellow]название[/yellow] {book.id[:8]}  {book.title}  ({reason})"
+        )
+    for book in report.missing_files[:limit]:
+        console.print(f"[red]нет файла[/red] {book.id[:8]}  {book.title}")
+    if (
+        len(report.duplicates) > limit
+        or len(report.suspicious) > limit
+        or len(report.missing_files) > limit
+    ):
+        console.print(f"[dim]показаны первые {limit}; полный отчёт — --json[/dim]")
 
 
 @app.command()
