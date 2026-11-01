@@ -217,3 +217,17 @@ def test_all_plan_queries_run_but_hits_are_capped(tmp_path: Path) -> None:
     assert len(searcher.calls) == 4
     prompt = provider.calls[-1][1].content
     assert prompt.count("<source ") == 10
+
+
+def test_history_is_included_in_planner_and_synthesis(tmp_path: Path) -> None:
+    provider = FakeProvider(['{"queries": ["q1"]}', "Ответ [1]."])
+    searcher = FakeSearcher({"вопрос": (_hit("c1"),), "q1": (_hit("c2"),)})
+
+    _answerer(tmp_path, provider, searcher).ask(
+        "А подробнее?",
+        book_ids=["book-1"],
+        history=[("user", "Что такое поиск?")],
+    )
+
+    assert "Что такое поиск?" in provider.calls[0][1].content
+    assert "Предыдущий диалог" in provider.calls[-1][1].content

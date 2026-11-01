@@ -325,3 +325,19 @@ def test_citations_keep_marker_numbers(tmp_path: Path) -> None:
     answer = answerer.ask("Вопрос?", book_ids=["book-1"])
 
     assert [citation.number for citation in answer.citations] == [1, 2]
+
+
+def test_history_is_included_in_answer_prompt(tmp_path: Path) -> None:
+    provider = FakeProvider("Ответ [1].")
+    answerer = _answerer(tmp_path, provider, FakeSearcher(_hits()))
+
+    answerer.ask(
+        "А подробнее?",
+        book_ids=["book-1"],
+        history=[("user", "Что такое поиск?"), ("assistant", "Это про фрагменты.")],
+    )
+
+    prompt = provider.messages[-1].content
+    assert "Предыдущий диалог" in prompt
+    assert "Что такое поиск?" in prompt
+    assert "А подробнее?" in prompt

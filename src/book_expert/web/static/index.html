@@ -124,6 +124,13 @@
   .bubble.markdown table { display: block; width: 100%; margin: 0 0 8px; border-collapse: collapse; overflow-x: auto; }
   .bubble.markdown th, .bubble.markdown td { padding: 4px 6px; border: 1px solid var(--line); text-align: left; }
   .bubble.markdown hr { margin: 10px 0; border: 0; border-top: 1px solid var(--line); }
+  .expand-btn {
+    margin-left: 8px; padding: 1px 8px; border: 1px solid var(--line);
+    border-radius: 999px; background: var(--bg); color: var(--accent);
+    font-size: 11px; line-height: 1.6; cursor: pointer; vertical-align: middle;
+  }
+  .expand-btn:hover { border-color: var(--accent); }
+  .bubble.markdown li .expand-btn { margin-left: 6px; }
   .meta { font-size: 12px; color: var(--muted); padding: 0 4px; }
   .badge {
     display: inline-block;
@@ -205,6 +212,18 @@
   .tab.active { background: var(--accent); color: var(--accent-ink); }
   .view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .view[hidden] { display: none; }
+  .chat-layout { display: flex; flex: 1; width: 100%; max-width: 1180px; margin: 0 auto; min-height: 0; }
+  .chat-sidebar { width: 220px; flex: 0 0 220px; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-right: 1px solid var(--line); min-height: 0; }
+  .chat-sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .chat-sidebar-head button { padding: 2px 9px; font-size: 16px; line-height: 1.2; background: var(--bg); cursor: pointer; }
+  .chat-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+  .chat-item { display: flex; align-items: center; gap: 4px; border-radius: 8px; }
+  .chat-item.active { background: var(--panel); }
+  .chat-item-main { flex: 1; min-width: 0; padding: 7px 8px; border: 0; background: transparent; color: var(--text); text-align: left; font-size: 13px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-item-main:disabled { cursor: default; opacity: 0.6; }
+  .chat-delete { padding: 2px 6px; border: 0; background: transparent; color: var(--muted); font-size: 15px; cursor: pointer; }
+  .chat-delete:hover { color: var(--error); }
+  .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   .library { width: min(980px, 100%); margin: 0 auto; padding: 24px 20px; overflow-y: auto; }
   .lib-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
   .import-box { margin-bottom: 14px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
@@ -249,6 +268,12 @@
     footer { padding: 8px 14px 12px; }
     .brand .sub { display: none; }
   }
+  @media (max-width: 760px) {
+    .chat-layout { flex-direction: column; }
+    .chat-sidebar { width: 100%; flex: 0 0 auto; max-height: 128px; border-right: 0; border-bottom: 1px solid var(--line); }
+    .chat-list { flex-direction: row; overflow-x: auto; }
+    .chat-item { min-width: 150px; }
+  }
 </style>
 </head>
 <body>
@@ -275,17 +300,28 @@
 <div id="error" class="error" role="alert" hidden></div>
 
 <div id="view-chat" class="view">
-  <main id="messages" aria-live="polite">
-    <div class="thread" id="thread"></div>
-  </main>
+  <div class="chat-layout">
+    <aside class="chat-sidebar">
+      <div class="chat-sidebar-head">
+        <span>Чаты</span>
+        <button type="button" id="new-chat" title="Новый чат">+</button>
+      </div>
+      <div id="chat-list" class="chat-list"></div>
+    </aside>
+    <div class="chat-main">
+      <main id="messages" aria-live="polite">
+        <div class="thread" id="thread"></div>
+      </main>
 
-  <footer>
-    <form id="form" class="composer">
-      <textarea id="input" rows="1" maxlength="4000" placeholder="Спросите о книге…" aria-label="Вопрос"></textarea>
-      <button id="send" type="submit">Отправить</button>
-    </form>
-    <div class="hint">Enter — отправить, Shift+Enter — новая строка. История хранится только в этом браузере.</div>
-  </footer>
+      <footer>
+        <form id="form" class="composer">
+          <textarea id="input" rows="1" maxlength="4000" placeholder="Спросите о книге…" aria-label="Вопрос"></textarea>
+          <button id="send" type="submit">Отправить</button>
+        </form>
+        <div class="hint">Enter — отправить, Shift+Enter — новая строка. История хранится только в этом браузере.</div>
+      </footer>
+    </div>
+  </div>
 </div>
 
 <div id="view-library" class="view" hidden>
@@ -321,6 +357,7 @@
   "use strict";
 
   const STORAGE_KEY = "book-expert-chat-v1";
+  const CHATS_KEY = "book-expert-chats-v1";
   const thread = document.getElementById("thread");
   const messagesPane = document.getElementById("messages");
   const bookSelect = document.getElementById("book");
@@ -349,11 +386,15 @@
   const importStartButton = document.getElementById("import-start");
   const importPreviewBox = document.getElementById("import-preview");
   const importProgress = document.getElementById("import-progress");
+  const chatList = document.getElementById("chat-list");
+  const newChatButton = document.getElementById("new-chat");
 
   const state = {
     mode: "rag",
     bookId: "",
     messages: [],
+    chats: [],
+    activeChatId: null,
     pending: false,
     tab: "chat",
     library: [],
@@ -364,48 +405,218 @@
     advancedProgress: null,
   };
 
+  function validMode(value) {
+    return value === "rag" || value === "advanced" || value === "super" || value === "agent";
+  }
+
+  function sanitizeMessages(items) {
+    return (Array.isArray(items) ? items : []).filter(
+      (item) =>
+        item &&
+        (item.role === "user" || item.role === "assistant") &&
+        typeof item.text === "string"
+    );
+  }
+
+  function makeChat() {
+    const id =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return {
+      id,
+      title: "Новый чат",
+      mode: "rag",
+      bookId: "",
+      messages: [],
+      updatedAt: Date.now(),
+    };
+  }
+
+  function activeChat() {
+    return state.chats.find((chat) => chat.id === state.activeChatId) || null;
+  }
+
+  function chatTitleFromMessages(messages) {
+    const first = messages.find(
+      (item) => item.role === "user" && item.text.trim()
+    );
+    return first ? first.text.trim().slice(0, 48) : "Новый чат";
+  }
+
+  function syncChat() {
+    const chat = activeChat();
+    if (!chat) return;
+    chat.messages = state.messages;
+    chat.mode = state.mode;
+    chat.bookId = state.bookId;
+    chat.updatedAt = Date.now();
+    if (!chat.title || chat.title === "Новый чат") {
+      chat.title = chatTitleFromMessages(chat.messages);
+    }
+  }
+
   function loadState() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw);
-      if (Array.isArray(saved.messages)) {
-        state.messages = saved.messages.filter(
-          (item) =>
-            item &&
-            (item.role === "user" || item.role === "assistant") &&
-            typeof item.text === "string"
-        );
+      const raw = localStorage.getItem(CHATS_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        const chats = Array.isArray(saved.chats)
+          ? saved.chats
+              .filter((chat) => chat && typeof chat.id === "string")
+              .map((chat) => ({
+                id: chat.id,
+                title:
+                  typeof chat.title === "string" && chat.title
+                    ? chat.title
+                    : "Новый чат",
+                mode: validMode(chat.mode) ? chat.mode : "rag",
+                bookId: typeof chat.bookId === "string" ? chat.bookId : "",
+                messages: sanitizeMessages(chat.messages),
+                updatedAt:
+                  typeof chat.updatedAt === "number"
+                    ? chat.updatedAt
+                    : Date.now(),
+              }))
+          : [];
+        state.chats = chats;
+        if (typeof saved.activeChatId === "string") {
+          state.activeChatId = saved.activeChatId;
+        }
+        if (saved.tab === "chat" || saved.tab === "library") state.tab = saved.tab;
+      } else {
+        const legacyRaw = localStorage.getItem(STORAGE_KEY);
+        if (legacyRaw) {
+          const saved = JSON.parse(legacyRaw);
+          const messages = sanitizeMessages(saved.messages);
+          const chat = makeChat();
+          chat.messages = messages;
+          chat.mode = validMode(saved.mode) ? saved.mode : "rag";
+          chat.bookId = typeof saved.bookId === "string" ? saved.bookId : "";
+          chat.title = chatTitleFromMessages(messages);
+          chat.updatedAt = Date.now();
+          state.chats = [chat];
+          state.activeChatId = chat.id;
+          if (saved.tab === "chat" || saved.tab === "library") state.tab = saved.tab;
+        }
       }
-      if (
-        saved.mode === "rag" ||
-        saved.mode === "advanced" ||
-        saved.mode === "super" ||
-        saved.mode === "agent"
-      ) {
-        state.mode = saved.mode;
+      if (!state.chats.length) state.chats = [makeChat()];
+      if (!state.chats.some((chat) => chat.id === state.activeChatId)) {
+        state.activeChatId = state.chats[0].id;
       }
-      if (typeof saved.bookId === "string") state.bookId = saved.bookId;
-      if (saved.tab === "chat" || saved.tab === "library") state.tab = saved.tab;
+      const chat = activeChat();
+      if (chat) {
+        state.messages = chat.messages;
+        state.mode = chat.mode;
+        state.bookId = chat.bookId;
+      }
     } catch (error) {
-      localStorage.removeItem(STORAGE_KEY);
+      state.chats = [makeChat()];
+      state.activeChatId = state.chats[0].id;
+      state.messages = state.chats[0].messages;
     }
   }
 
   function saveState() {
     try {
+      syncChat();
       localStorage.setItem(
-        STORAGE_KEY,
+        CHATS_KEY,
         JSON.stringify({
-          mode: state.mode,
-          bookId: state.bookId,
+          chats: state.chats,
+          activeChatId: state.activeChatId,
           tab: state.tab,
-          messages: state.messages,
         })
       );
+      localStorage.removeItem(STORAGE_KEY);
     } catch (error) {
       /* приватный режим или переполнение — история просто не сохранится */
     }
+  }
+
+  function renderChatList() {
+    if (!chatList) return;
+    chatList.replaceChildren();
+    const chats = [...state.chats].sort((a, b) => b.updatedAt - a.updatedAt);
+    for (const chat of chats) {
+      const row = document.createElement("div");
+      row.className = `chat-item${chat.id === state.activeChatId ? " active" : ""}`;
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "chat-item-main";
+      open.textContent = chat.title || "Новый чат";
+      open.title = chat.title || "Новый чат";
+      open.disabled = state.pending;
+      open.addEventListener("click", () => switchChat(chat.id));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "chat-delete";
+      remove.textContent = "×";
+      remove.title = "Удалить чат";
+      remove.disabled = state.pending;
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        deleteChat(chat.id);
+      });
+      row.append(open, remove);
+      chatList.append(row);
+    }
+    newChatButton.disabled = state.pending;
+  }
+
+  function switchChat(chatId) {
+    if (state.pending || chatId === state.activeChatId) return;
+    syncChat();
+    const chat = state.chats.find((item) => item.id === chatId);
+    if (!chat) return;
+    state.activeChatId = chat.id;
+    state.messages = chat.messages;
+    state.mode = chat.mode;
+    state.bookId = chat.bookId;
+    state.advancedProgress = null;
+    bookSelect.value = state.bookId;
+    applyMode();
+    saveState();
+    render();
+    input.focus();
+  }
+
+  function createChat() {
+    if (state.pending) return;
+    syncChat();
+    const chat = makeChat();
+    state.chats.push(chat);
+    state.activeChatId = chat.id;
+    state.messages = chat.messages;
+    state.mode = "rag";
+    state.bookId = "";
+    state.advancedProgress = null;
+    bookSelect.value = "";
+    applyMode();
+    saveState();
+    render();
+    input.focus();
+  }
+
+  function deleteChat(chatId) {
+    if (state.pending) return;
+    const chat = state.chats.find((item) => item.id === chatId);
+    if (!chat) return;
+    if (!window.confirm(`Удалить чат «${chat.title || "Новый чат"}»?`)) return;
+    state.chats = state.chats.filter((item) => item.id !== chatId);
+    if (!state.chats.length) state.chats.push(makeChat());
+    if (!state.chats.some((item) => item.id === state.activeChatId)) {
+      const next = state.chats[0];
+      state.activeChatId = next.id;
+      state.messages = next.messages;
+      state.mode = next.mode;
+      state.bookId = next.bookId;
+      bookSelect.value = state.bookId;
+      applyMode();
+    }
+    saveState();
+    render();
+    input.focus();
   }
 
   function showError(message) {
@@ -445,7 +656,7 @@
       "Ответы строятся только по проиндексированным книгам, с цитатами на страницы.";
     const second = document.createElement("p");
     second.textContent =
-      "RAG — быстрый ответ по фрагментам. Агент — react-цикл с поиском и инструментами.";
+      "RAG — быстрый ответ; Простой — агент; Продвинутый — план запросов; Супер — дополнительные раунды.";
     box.append(title, first, second);
     return box;
   }
@@ -565,7 +776,7 @@
       .map((cell) => cell.trim());
   }
 
-  function renderMarkdown(text) {
+  function renderMarkdown(text, onExpand = null) {
     const fragment = document.createDocumentFragment();
     const lines = String(text).replace(/\r\n?/g, "\n").split("\n");
     let index = 0;
@@ -602,6 +813,7 @@
       if (heading) {
         const element = document.createElement(`h${heading[1].length}`);
         appendInline(element, heading[2]);
+        appendExpandButton(element, onExpand, readableBlockText(element));
         fragment.append(element);
         index += 1;
         continue;
@@ -660,6 +872,7 @@
         while (index < lines.length && marker.test(lines[index])) {
           const item = document.createElement("li");
           appendInline(item, lines[index].replace(marker, ""));
+          appendExpandButton(item, onExpand, readableBlockText(item));
           list.append(item);
           index += 1;
         }
@@ -683,9 +896,42 @@
       }
       const paragraph = document.createElement("p");
       appendInline(paragraph, paragraphLines.join("\n"));
+      appendExpandButton(paragraph, onExpand, readableBlockText(paragraph));
       fragment.append(paragraph);
     }
     return fragment;
+  }
+
+  function readableBlockText(element) {
+    let text = "";
+    for (const node of element.childNodes) {
+      text += node.nodeName === "BR" ? " " : node.textContent;
+    }
+    return text;
+  }
+
+  function appendExpandButton(parent, onExpand, text) {
+    if (!onExpand) return;
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (clean.length < 20) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "expand-btn";
+    button.textContent = "Подробнее";
+    button.addEventListener("click", () => onExpand(clean));
+    parent.append(button);
+  }
+
+  function expandBlock(blockText) {
+    const clean = blockText.replace(/\s+/g, " ").trim();
+    if (!clean) return;
+    const snippet = Array.from(clean).slice(0, 80).join("");
+    const promptText = Array.from(clean).slice(0, 3000).join("");
+    ask(
+      `Раскрой подробнее следующий раздел предыдущего ответа:\n«${promptText}»\n\n` +
+        "Дай больше деталей, примеров и связей с другими разделами.",
+      { displayText: `Подробнее: ${snippet}` }
+    );
   }
 
   function messageElement(message) {
@@ -711,7 +957,7 @@
         plan.append(summary, list);
         bubble.append(plan);
       }
-      bubble.append(renderMarkdown(message.text));
+      bubble.append(renderMarkdown(message.text, expandBlock));
     } else {
       bubble.textContent = message.text;
     }
@@ -829,6 +1075,7 @@
     sendButton.disabled = state.pending;
     bookSelect.disabled = state.pending;
     for (const button of modeButtons) button.disabled = state.pending;
+    renderChatList();
     messagesPane.scrollTop = messagesPane.scrollHeight;
   }
 
@@ -856,11 +1103,11 @@
     });
   }
 
-  async function streamAdvanced(text, bookIds, mode) {
+  async function streamAdvanced(text, bookIds, mode, history) {
     const response = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, mode, book_ids: bookIds }),
+      body: JSON.stringify({ message: text, mode, book_ids: bookIds, history }),
     });
     if (!response.ok) {
       let detail = `HTTP ${response.status}`;
@@ -963,10 +1210,24 @@
     return finalData;
   }
 
-  async function ask(text) {
+  async function ask(text, options = {}) {
+    if (state.pending) return;
     const mode = state.mode;
+    const displayText = options.displayText || text;
     const bookIds = state.bookId ? [state.bookId] : [];
-    state.messages.push({ role: "user", text });
+    const history = state.messages
+      .filter(
+        (message) =>
+          !message.error &&
+          typeof message.text === "string" &&
+          message.text.trim()
+      )
+      .slice(-12)
+      .map((message) => ({
+        role: message.role,
+        content: Array.from(message.text).slice(-4000).join(""),
+      }));
+    state.messages.push({ role: "user", text: displayText });
     state.pending = true;
     state.advancedProgress = null;
     showError("");
@@ -974,12 +1235,12 @@
     try {
       let data;
       if (mode === "advanced" || mode === "super") {
-        data = await streamAdvanced(text, bookIds, mode);
+        data = await streamAdvanced(text, bookIds, mode, history);
       } else {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, mode, book_ids: bookIds }),
+          body: JSON.stringify({ message: text, mode, book_ids: bookIds, history }),
         });
         data = {};
         try {
@@ -1469,6 +1730,7 @@
     });
   });
 
+  newChatButton.addEventListener("click", createChat);
   uploadButton.addEventListener("click", uploadPdf);
   refreshButton.addEventListener("click", loadLibrary);
   importScanButton.addEventListener("click", scanImport);
@@ -1497,8 +1759,10 @@
 
   clearButton.addEventListener("click", () => {
     if (!state.messages.length) return;
-    if (!window.confirm("Очистить историю диалога в этом браузере?")) return;
+    if (!window.confirm("Очистить этот чат?")) return;
     state.messages = [];
+    const chat = activeChat();
+    if (chat) chat.title = "Новый чат";
     persistAndRender();
     input.focus();
   });

@@ -16,6 +16,7 @@ from book_expert.retrieval.answer import (
     _citations,
     _hit_book_ids,
     _is_insufficient,
+    history_prompt,
     sources_prompt,
 )
 from book_expert.retrieval.hybrid import HybridSearcher
@@ -68,9 +69,10 @@ class AdvancedAnswerer:
         auto_route: bool = True,
         dense: bool = True,
         progress: ProgressCallback | None = None,
+        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
     ) -> Answer:
         selected, route = self._route(query, book_ids, auto_route)
-        plan = self._plan(query)
+        plan = self._plan(query, history)
         if self.trace is not None:
             self.trace.write("advanced_plan", query=query, queries=list(plan))
         if progress is not None:
@@ -92,6 +94,7 @@ class AdvancedAnswerer:
             route,
             progress,
             mode="advanced",
+            history=history,
         )
 
     def _route(self, query: str, book_ids: list[str] | None, auto_route: bool):
@@ -171,6 +174,7 @@ class AdvancedAnswerer:
         mode: str,
         rounds: int = 0,
         max_rounds: int = 0,
+        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
     ) -> Answer:
         answer_books = (
             tuple(selected) if selected is not None else _hit_book_ids(tuple(hits))
@@ -209,7 +213,7 @@ class AdvancedAnswerer:
                 ChatMessage(role="system", content=ADVANCED_SYSTEM_PROMPT),
                 ChatMessage(
                     role="user",
-                    content=_advanced_prompt(query, tuple(plan), tuple(hits)),
+                    content=_advanced_prompt(query, tuple(plan), tuple(hits), history),
                 ),
             ],
             temperature=0.0,
@@ -248,10 +252,17 @@ class AdvancedAnswerer:
             mode=mode,
         )
 
-    def _plan(self, query: str) -> tuple[str, ...]:
+    def _plan(
+        self,
+        query: str,
+        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+    ) -> tuple[str, ...]:
         messages = [
             ChatMessage(role="system", content=PLAN_PROMPT),
-            ChatMessage(role="user", content=query.strip()),
+            ChatMessage(
+                role="user",
+                content=history_prompt(history) + query.strip(),
+            ),
         ]
         try:
             response = self.provider.chat(
@@ -294,11 +305,14 @@ class AdvancedAnswerer:
 
 
 def _advanced_prompt(
-    query: str, plan: tuple[str, ...], hits: tuple[SearchHit, ...]
+    query: str,
+    plan: tuple[str, ...],
+    hits: tuple[SearchHit, ...],
+    history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
 ) -> str:
     plan_text = "\n".join(f"{index}. {item}" for index, item in enumerate(plan, 1))
     return (
-        f"Исходный вопрос:\n{query.strip()}\n\n"
+        history_prompt(history) + f"Исходный вопрос:\n{query.strip()}\n\n"
         f"План поиска:\n{plan_text}\n\n" + sources_prompt(hits)
     )
 

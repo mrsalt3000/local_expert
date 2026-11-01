@@ -10,6 +10,7 @@ from book_expert.retrieval.advanced import (
     ProgressCallback,
     _close_json,
 )
+from book_expert.retrieval.answer import history_prompt
 from book_expert.providers import ChatMessage, ProviderError
 
 REFINE_PROMPT = (
@@ -37,9 +38,10 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
         auto_route: bool = True,
         dense: bool = True,
         progress: ProgressCallback | None = None,
+        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
     ):
         selected, route = self._route(query, book_ids, auto_route)
-        plan = list(self._plan(query))
+        plan = list(self._plan(query, history))
         if self.trace is not None:
             self.trace.write("advanced_plan", query=query, queries=list(plan))
         if progress is not None:
@@ -64,7 +66,7 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
         rounds = 0
         max_rounds = self.settings.super_max_rounds
         while rounds < max_rounds and len(hits) < SUPER_MAX_HITS:
-            done, proposed = self._refine(query, plan, hits)
+            done, proposed = self._refine(query, plan, hits, history)
             if self.trace is not None:
                 self.trace.write(
                     "super_refine",
@@ -116,10 +118,15 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
             mode="super",
             rounds=rounds,
             max_rounds=max_rounds,
+            history=history,
         )
 
     def _refine(
-        self, query: str, plan: list[str], hits
+        self,
+        query: str,
+        plan: list[str],
+        hits,
+        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
     ) -> tuple[bool, tuple[str, ...]]:
         briefs = []
         for index, hit in enumerate(hits[:SUPER_MAX_HITS], start=1):
@@ -130,7 +137,7 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
             )
         plan_text = "\n".join(f"{i}. {item}" for i, item in enumerate(plan, 1))
         prompt = (
-            f"Вопрос:\n{query.strip()}\n\n"
+            history_prompt(history) + f"Вопрос:\n{query.strip()}\n\n"
             f"Уже выполненные запросы:\n{plan_text}\n\n"
             "Кратко о найденном:\n" + ("\n".join(briefs) if briefs else "пока ничего")
         )

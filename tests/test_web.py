@@ -77,6 +77,7 @@ class FakeBackend:
         self.agent_error: Exception | None = None
         self.books_error: Exception | None = None
         self.rag_calls: list[tuple[str, Sequence[str] | None]] = []
+        self.rag_history = None
         self.advanced_calls: list[tuple[str, Sequence[str] | None]] = []
         self.super_calls: list[tuple[str, Sequence[str] | None]] = []
         self.agent_calls: list[tuple[str, Sequence[str] | None]] = []
@@ -87,8 +88,14 @@ class FakeBackend:
             raise self.books_error
         return list(self.books)
 
-    def ask_rag(self, message: str, book_ids: Sequence[str] | None = None) -> Answer:
+    def ask_rag(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        history=None,  # type: ignore[no-untyped-def]
+    ) -> Answer:
         self.rag_calls.append((message, book_ids))
+        self.rag_history = history
         if self.rag_error is not None:
             raise self.rag_error
         return self.rag_answer
@@ -98,6 +105,7 @@ class FakeBackend:
         message: str,
         book_ids: Sequence[str] | None = None,
         progress=None,  # type: ignore[no-untyped-def]
+        history=None,  # type: ignore[no-untyped-def]
     ) -> Answer:
         self.advanced_calls.append((message, book_ids))
         if self.advanced_error is not None:
@@ -124,6 +132,7 @@ class FakeBackend:
         message: str,
         book_ids: Sequence[str] | None = None,
         progress=None,  # type: ignore[no-untyped-def]
+        history=None,  # type: ignore[no-untyped-def]
     ) -> Answer:
         self.super_calls.append((message, book_ids))
         if progress is not None:
@@ -152,7 +161,12 @@ class FakeBackend:
             progress({"type": "synthesizing", "total": 3, "hits": 1})
         return self.super_answer
 
-    def ask_agent(self, message: str, book_ids: Sequence[str] | None = None) -> str:
+    def ask_agent(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        history=None,  # type: ignore[no-untyped-def]
+    ) -> str:
         self.agent_calls.append((message, book_ids))
         if self.agent_error is not None:
             raise self.agent_error
@@ -430,3 +444,39 @@ def test_mode_buttons_are_ordered_by_complexity(client: TestClient) -> None:
     modes = ["rag", "agent", "advanced", "super"]
     positions = [html.index(f'data-mode="{mode}"') for mode in modes]
     assert positions == sorted(positions)
+
+
+def test_chat_history_is_forwarded(client: TestClient, backend: FakeBackend) -> None:
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "А подробнее?",
+            "mode": "rag",
+            "history": [
+                {"role": "user", "content": "Что такое пайплайн?"},
+                {"role": "assistant", "content": "Это этапы обучения."},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert backend.rag_history == [
+        ("user", "Что такое пайплайн?"),
+        ("assistant", "Это этапы обучения."),
+    ]
+
+
+def test_index_has_separate_chat_sessions(client: TestClient) -> None:
+    html = client.get("/").text
+
+    assert 'id="chat-list"' in html
+    assert 'id="new-chat"' in html
+    assert "book-expert-chats-v1" in html
+
+
+def test_index_has_expand_buttons(client: TestClient) -> None:
+    html = client.get("/").text
+
+    assert "expand-btn" in html
+    assert "function expandBlock" in html
+    assert "Подробнее" in html

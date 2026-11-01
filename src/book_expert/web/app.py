@@ -44,7 +44,10 @@ class ChatBackend(Protocol):
     def list_books(self) -> list[Book]: ...
 
     def ask_rag(
-        self, message: str, book_ids: Sequence[str] | None = None
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer: ...
 
     def ask_advanced(
@@ -52,6 +55,7 @@ class ChatBackend(Protocol):
         message: str,
         book_ids: Sequence[str] | None = None,
         progress: Callable[[dict[str, Any]], None] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer: ...
 
     def ask_super(
@@ -59,15 +63,27 @@ class ChatBackend(Protocol):
         message: str,
         book_ids: Sequence[str] | None = None,
         progress: Callable[[dict[str, Any]], None] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer: ...
 
-    def ask_agent(self, message: str, book_ids: Sequence[str] | None = None) -> str: ...
+    def ask_agent(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
+    ) -> str: ...
 
     def close(self) -> None: ...
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=20)
     mode: Literal["rag", "advanced", "super", "agent"] = "rag"
     book_ids: list[Annotated[str, Field(max_length=MAX_BOOK_ID_CHARS)]] = Field(
         default_factory=list, max_length=MAX_BOOK_FILTERS
@@ -287,20 +303,21 @@ def create_app(
     @app.post("/api/chat", response_model=ChatResponse)
     def chat(payload: ChatRequest) -> ChatResponse:
         book_ids = payload.book_ids or None
+        history = [(turn.role, turn.content) for turn in payload.history[-12:]]
         started = perf_counter()
         try:
             active = get_backend()
             if payload.mode == "rag":
-                answer = active.ask_rag(payload.message, book_ids)
+                answer = active.ask_rag(payload.message, book_ids, history=history)
                 response = _rag_response(answer)
             elif payload.mode == "advanced":
-                answer = active.ask_advanced(payload.message, book_ids)
+                answer = active.ask_advanced(payload.message, book_ids, history=history)
                 response = _rag_response(answer, mode="advanced")
             elif payload.mode == "super":
-                answer = active.ask_super(payload.message, book_ids)
+                answer = active.ask_super(payload.message, book_ids, history=history)
                 response = _rag_response(answer, mode="super")
             else:
-                text = active.ask_agent(payload.message, book_ids)
+                text = active.ask_agent(payload.message, book_ids, history=history)
                 response = ChatResponse(mode="agent", answer=text, elapsed_ms=0)
         except ProviderError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -321,6 +338,7 @@ def create_app(
                 detail="streaming is available for advanced and super modes only",
             )
         book_ids = payload.book_ids or None
+        history = [(turn.role, turn.content) for turn in payload.history[-12:]]
         started = perf_counter()
 
         def generate() -> Iterator[str]:
@@ -334,11 +352,17 @@ def create_app(
                     backend = get_backend()
                     if payload.mode == "super":
                         answer = backend.ask_super(
-                            payload.message, book_ids, progress=emit
+                            payload.message,
+                            book_ids,
+                            progress=emit,
+                            history=history,
                         )
                     else:
                         answer = backend.ask_advanced(
-                            payload.message, book_ids, progress=emit
+                            payload.message,
+                            book_ids,
+                            progress=emit,
+                            history=history,
                         )
                 except Exception as exc:
                     events.put({"type": "error", **_stream_error(exc)})

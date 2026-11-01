@@ -52,6 +52,7 @@ class GroundedAnswerer:
         auto_route: bool = True,
         limit: int | None = None,
         dense: bool = True,
+        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
     ) -> Answer:
         selected = book_ids
         route = None
@@ -85,7 +86,7 @@ class GroundedAnswerer:
                 ChatMessage(role="system", content=SYSTEM_PROMPT),
                 ChatMessage(
                     role="user",
-                    content=_context_prompt(query, outcome.hits),
+                    content=_context_prompt(query, outcome.hits, history),
                 ),
             ],
             temperature=0.0,
@@ -154,8 +155,42 @@ def sources_prompt(hits: tuple[SearchHit, ...]) -> str:
     return "Фрагменты:\n" + "\n\n".join(blocks)
 
 
-def _context_prompt(query: str, hits: tuple[SearchHit, ...]) -> str:
-    return "Вопрос:\n" + query.strip() + "\n\n" + sources_prompt(hits)
+def _context_prompt(
+    query: str,
+    hits: tuple[SearchHit, ...],
+    history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+) -> str:
+    return (
+        history_prompt(history)
+        + "Вопрос:\n"
+        + query.strip()
+        + "\n\n"
+        + sources_prompt(hits)
+    )
+
+
+def history_prompt(
+    history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None,
+    *,
+    max_chars: int = 6000,
+) -> str:
+    """Форматирует последние реплики в пределах бюджета символов."""
+    if not history:
+        return ""
+    selected: list[tuple[str, str]] = []
+    total = 0
+    for role, content in reversed(list(history)):
+        if total + len(content) > max_chars:
+            break
+        selected.append((role, content))
+        total += len(content)
+    if not selected:
+        return ""
+    lines = ["Предыдущий диалог:"]
+    for role, content in reversed(selected):
+        label = "Пользователь" if role == "user" else "Ассистент"
+        lines.append(f"{label}: {content.strip()}")
+    return "\n".join(lines) + "\n\n"
 
 
 def _citations(text: str, hits: tuple[SearchHit, ...]) -> tuple[Citation, ...]:

@@ -63,11 +63,17 @@ class BookChatBackend:
     def list_books(self) -> list[Book]:
         return ready_books(self.catalog.list_books())
 
-    def ask_rag(self, message: str, book_ids: Sequence[str] | None = None) -> Answer:
+    def ask_rag(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
+    ) -> Answer:
         return self.answerer.ask(
             message,
             book_ids=list(book_ids) if book_ids else None,
             auto_route=True,
+            history=history,
         )
 
     def ask_advanced(
@@ -75,12 +81,14 @@ class BookChatBackend:
         message: str,
         book_ids: Sequence[str] | None = None,
         progress: Callable[[dict[str, Any]], None] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer:
         return self.advanced.ask(
             message,
             book_ids=list(book_ids) if book_ids else None,
             auto_route=True,
             progress=progress,
+            history=history,
         )
 
     def ask_super(
@@ -88,16 +96,31 @@ class BookChatBackend:
         message: str,
         book_ids: Sequence[str] | None = None,
         progress: Callable[[dict[str, Any]], None] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer:
         return self.super_advanced.ask(
             message,
             book_ids=list(book_ids) if book_ids else None,
             auto_route=True,
             progress=progress,
+            history=history,
         )
 
-    def ask_agent(self, message: str, book_ids: Sequence[str] | None = None) -> str:
-        return self._agent_runner().run(message, book_ids=book_ids or None).text
+    def ask_agent(
+        self,
+        message: str,
+        book_ids: Sequence[str] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
+    ) -> str:
+        return (
+            self._agent_runner()
+            .run(
+                message,
+                book_ids=book_ids or None,
+                history=history,
+            )
+            .text
+        )
 
     def close(self) -> None:
         self.searcher.close()

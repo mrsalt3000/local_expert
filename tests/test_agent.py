@@ -294,3 +294,21 @@ def test_rag_tools_write_audit(tmp_path: Path) -> None:
     assert record["ok"] is True
     assert record["args"]["query"] == "<12 chars>"
     assert "secret query" not in audit.path.read_text(encoding="utf-8")
+
+
+def test_agent_accepts_conversation_history(tmp_path: Path) -> None:
+    model = ToolFakeModel(messages=iter([AIMessage(content="Понял контекст.")]))
+    runner = AgentRunner(_settings(tmp_path), [], model=model)
+
+    result = runner.run(
+        "А подробнее?",
+        history=[("user", "Что такое поиск?"), ("assistant", "Это про фрагменты.")],
+    )
+
+    assert [message.type for message in result.messages[:3]] == [
+        "human",
+        "ai",
+        "human",
+    ]
+    assert result.messages[0].content == "Что такое поиск?"
+    assert result.messages[2].content == "А подробнее?"

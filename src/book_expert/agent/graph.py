@@ -64,19 +64,34 @@ class AgentRunner:
         query: str,
         *,
         book_ids: Sequence[str] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
         timeout: float | None = None,
     ) -> AgentResult:
         trace = self._trace or TraceRecorder.create(self.settings)
         model = self._model or build_chat_model(self.settings)
+        prior: list[BaseMessage] = []
+        total_chars = 0
+        for role, content in reversed(list(history or ())):
+            if total_chars + len(content) > 6000:
+                break
+            if role == "user":
+                prior.append(HumanMessage(content=content))
+            elif role == "assistant":
+                prior.append(AIMessage(content=content))
+            total_chars += len(content)
+        prior.reverse()
         trace.write(
             "agent_start",
             query=query,
             book_ids=list(book_ids) if book_ids else [],
             model=self._model_name(model),
             max_steps=self.settings.agent_max_steps,
+            history_messages=len(prior),
         )
         graph = create_agent(model, self.tools, system_prompt=SYSTEM_PROMPT)
-        payload = {"messages": [HumanMessage(content=_user_prompt(query, book_ids))]}
+        payload = {
+            "messages": [*prior, HumanMessage(content=_user_prompt(query, book_ids))]
+        }
         config = {"recursion_limit": self.settings.agent_max_steps * 2 + 1}
         try:
             state = invoke_with_timeout(
