@@ -138,6 +138,7 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
             base_url=settings.ollama_base_url,
             temperature=0.0,
             reasoning=settings.ollama_think,
+            num_ctx=settings.ollama_num_ctx,
         )
     from langchain_openai import ChatOpenAI
 

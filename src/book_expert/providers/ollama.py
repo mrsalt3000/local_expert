@@ -38,6 +38,7 @@ class OllamaProvider:
         self.embedding_model = settings.embedding_model
         self._base_url = settings.ollama_base_url.rstrip("/")
         self._think = settings.ollama_think
+        self._num_ctx = settings.ollama_num_ctx
         self._client = client if client is not None else httpx.Client()
         self._owns_client = client is None
 
@@ -66,7 +67,10 @@ class OllamaProvider:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> ChatResult:
-        options: dict[str, Any] = {"temperature": temperature}
+        options: dict[str, Any] = {
+            "temperature": temperature,
+            "num_ctx": self._num_ctx,
+        }
         if max_tokens is not None:
             options["num_predict"] = max_tokens
         payload = self._post(

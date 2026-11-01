@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     provider: ProviderName = "ollama"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_think: bool = False
+    ollama_num_ctx: int = 8192
     chat_model: str = "qwen3.5:4b"
     embedding_model: str = "bge-m3"
     embedding_dim: int = 1024
@@ -91,6 +92,7 @@ class Settings(BaseSettings):
         "chunk_size",
         "top_k",
         "rerank_top_n",
+        "ollama_num_ctx",
         "agent_max_steps",
         "agent_timeout_s",
         "command_timeout_s",

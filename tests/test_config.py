@@ -15,6 +15,7 @@ def test_defaults(tmp_path: Path) -> None:
     assert settings.chunk_size == 1000
     assert settings.chunk_overlap == 150
     assert settings.qdrant_url == "http://127.0.0.1:6333"
+    assert settings.ollama_num_ctx == 8192
     assert settings.autonomy is True
     assert settings.allow_remote is False
 
@@ -72,6 +73,11 @@ def test_overlap_must_be_smaller_than_chunk_size(tmp_path: Path) -> None:
             chunk_size=100,
             chunk_overlap=100,
         )
+
+
+def test_ollama_num_ctx_must_be_positive(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="ollama_num_ctx"):
+        Settings(_env_file=None, workspace=tmp_path, ollama_num_ctx=0)
 
 
 def test_threshold_range(tmp_path: Path) -> None:

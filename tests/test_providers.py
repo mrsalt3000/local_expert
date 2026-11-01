@@ -81,7 +81,7 @@ def test_ollama_chat_payload_and_parsing() -> None:
         ],
         "stream": False,
         "think": False,
-        "options": {"temperature": 0.2, "num_predict": 64},
+        "options": {"temperature": 0.2, "num_ctx": 8192, "num_predict": 64},
     }
     assert result.text == "привет"
     assert result.model == "qwen3.5:4b"
@@ -105,9 +105,28 @@ def test_ollama_chat_omits_num_predict_without_max_tokens() -> None:
     provider = OllamaProvider(ollama_settings(), client=make_client(handler))
     result = provider.chat([ChatMessage(role="user", content="hi")])
 
-    assert captured["body"]["options"] == {"temperature": 0.0}
+    assert captured["body"]["options"] == {"temperature": 0.0, "num_ctx": 8192}
     assert result.usage == {}
     assert result.text == "ok"
+
+
+def test_ollama_chat_uses_configured_num_ctx() -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"model": "qwen3.5:4b", "message": {"content": "ok"}},
+        )
+
+    provider = OllamaProvider(
+        ollama_settings(ollama_num_ctx=12288),
+        client=make_client(handler),
+    )
+    provider.chat([ChatMessage(role="user", content="hi")])
+
+    assert captured["body"]["options"]["num_ctx"] == 12288
 
 
 def test_ollama_embed_multiple_texts() -> None:

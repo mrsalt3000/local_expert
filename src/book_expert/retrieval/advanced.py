@@ -217,7 +217,7 @@ class AdvancedAnswerer:
                 ),
             ],
             temperature=0.0,
-            max_tokens=1400,
+            max_tokens=2000,
         )
         text = response.text.strip()
         if not text or _is_insufficient(text):

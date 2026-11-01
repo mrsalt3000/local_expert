@@ -273,9 +273,11 @@ def test_build_chat_model_applies_ollama_think(tmp_path: Path) -> None:
         workspace=tmp_path,
         data_dir=tmp_path / "data",
         ollama_think=True,
+        ollama_num_ctx=12288,
     )
     model = build_chat_model(settings)
     assert getattr(model, "reasoning", None) is True
+    assert getattr(model, "num_ctx", None) == 12288
 
 
 def test_rag_tools_write_audit(tmp_path: Path) -> None:
