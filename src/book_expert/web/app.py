@@ -84,7 +84,7 @@ class ChatTurn(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     history: list[ChatTurn] = Field(default_factory=list, max_length=20)
-    mode: Literal["rag", "advanced", "super", "agent"] = "rag"
+    mode: Literal["rag", "advanced", "super", "agent"] = "super"
     book_ids: list[Annotated[str, Field(max_length=MAX_BOOK_ID_CHARS)]] = Field(
         default_factory=list, max_length=MAX_BOOK_FILTERS
     )

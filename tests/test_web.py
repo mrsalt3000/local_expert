@@ -241,16 +241,27 @@ def test_rag_answer_returns_citations(client: TestClient, backend: FakeBackend) 
 
 
 def test_rag_receives_book_filter(client: TestClient, backend: FakeBackend) -> None:
-    response = client.post("/api/chat", json={"message": "q", "book_ids": ["b1"]})
+    response = client.post(
+        "/api/chat", json={"message": "q", "mode": "rag", "book_ids": ["b1"]}
+    )
     assert response.status_code == 200
     assert backend.rag_calls == [("q", ["b1"])]
 
 
 def test_rag_refusal_has_no_citations(client: TestClient, backend: FakeBackend) -> None:
     backend.rag_answer = Answer(text="мало контекста", refused=True)
-    data = client.post("/api/chat", json={"message": "q"}).json()
+    data = client.post("/api/chat", json={"message": "q", "mode": "rag"}).json()
     assert data["refused"] is True
     assert data["citations"] == []
+
+
+def test_chat_defaults_to_super(client: TestClient, backend: FakeBackend) -> None:
+    response = client.post("/api/chat", json={"message": "q"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mode"] == "super"
+    assert backend.super_calls == [("q", None)]
 
 
 def test_agent_mode_returns_text(client: TestClient, backend: FakeBackend) -> None:
@@ -285,7 +296,7 @@ def test_invalid_requests_are_rejected(
 
 def test_provider_error_is_503(client: TestClient, backend: FakeBackend) -> None:
     backend.rag_error = ProviderUnavailableError("ollama is unavailable")
-    response = client.post("/api/chat", json={"message": "q"})
+    response = client.post("/api/chat", json={"message": "q", "mode": "rag"})
     assert response.status_code == 503
     assert "ollama is unavailable" in response.json()["detail"]
 
@@ -306,7 +317,7 @@ def test_agent_error_is_502(client: TestClient, backend: FakeBackend) -> None:
 
 def test_value_error_is_400(client: TestClient, backend: FakeBackend) -> None:
     backend.rag_error = ValueError("bad book filter")
-    response = client.post("/api/chat", json={"message": "q"})
+    response = client.post("/api/chat", json={"message": "q", "mode": "rag"})
     assert response.status_code == 400
     assert "bad book filter" in response.json()["detail"]
 
@@ -384,6 +395,24 @@ def test_advanced_stream_rejects_other_modes(client: TestClient) -> None:
     assert response.status_code == 400
 
 
+def test_stream_defaults_to_super(client: TestClient, backend: FakeBackend) -> None:
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"message": "Глубокий вопрос"},
+    ) as response:
+        assert response.status_code == 200
+        body = "".join(response.iter_text())
+    events = [
+        json.loads(line[len("data: ") :])
+        for line in body.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[-1]["type"] == "done"
+    assert events[-1]["response"]["mode"] == "super"
+    assert backend.super_calls == [("Глубокий вопрос", None)]
+
+
 def test_advanced_stream_error_event(client: TestClient, backend: FakeBackend) -> None:
     backend.advanced_error = ProviderUnavailableError("ollama is down")
     with client.stream(
@@ -437,6 +466,13 @@ def test_super_stream_emits_round_event(
     assert events[-1]["type"] == "done"
     assert events[-1]["response"]["mode"] == "super"
     assert events[-1]["response"]["rounds"] == 1
+
+
+def test_default_mode_is_super(client: TestClient) -> None:
+    html = client.get("/").text
+
+    assert 'data-mode="super" class="active"' in html
+    assert 'mode: "super"' in html
 
 
 def test_mode_buttons_are_ordered_by_complexity(client: TestClient) -> None:

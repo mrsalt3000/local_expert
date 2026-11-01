@@ -288,10 +288,10 @@
       <option value="">Все книги (авто-выбор)</option>
     </select>
     <div class="modes" role="group" aria-label="Режим ответа">
-      <button type="button" data-mode="rag" class="active" aria-pressed="true">RAG</button>
+      <button type="button" data-mode="rag" aria-pressed="false">RAG</button>
       <button type="button" data-mode="agent" aria-pressed="false">Простой</button>
       <button type="button" data-mode="advanced" aria-pressed="false">Продвинутый</button>
-      <button type="button" data-mode="super" aria-pressed="false">Супер</button>
+      <button type="button" data-mode="super" class="active" aria-pressed="true">Супер</button>
     </div>
     <button type="button" id="clear" class="ghost">Очистить</button>
   </div>
@@ -390,7 +390,7 @@
   const newChatButton = document.getElementById("new-chat");
 
   const state = {
-    mode: "rag",
+    mode: "super",
     bookId: "",
     messages: [],
     chats: [],
@@ -426,7 +426,7 @@
     return {
       id,
       title: "Новый чат",
-      mode: "rag",
+      mode: "super",
       bookId: "",
       messages: [],
       updatedAt: Date.now(),
@@ -470,7 +470,7 @@
                   typeof chat.title === "string" && chat.title
                     ? chat.title
                     : "Новый чат",
-                mode: validMode(chat.mode) ? chat.mode : "rag",
+                mode: validMode(chat.mode) ? chat.mode : "super",
                 bookId: typeof chat.bookId === "string" ? chat.bookId : "",
                 messages: sanitizeMessages(chat.messages),
                 updatedAt:
@@ -491,7 +491,7 @@
           const messages = sanitizeMessages(saved.messages);
           const chat = makeChat();
           chat.messages = messages;
-          chat.mode = validMode(saved.mode) ? saved.mode : "rag";
+          chat.mode = validMode(saved.mode) ? saved.mode : "super";
           chat.bookId = typeof saved.bookId === "string" ? saved.bookId : "";
           chat.title = chatTitleFromMessages(messages);
           chat.updatedAt = Date.now();
@@ -588,7 +588,7 @@
     state.chats.push(chat);
     state.activeChatId = chat.id;
     state.messages = chat.messages;
-    state.mode = "rag";
+    state.mode = chat.mode;
     state.bookId = "";
     state.advancedProgress = null;
     bookSelect.value = "";
