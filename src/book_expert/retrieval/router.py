@@ -16,6 +16,7 @@ from book_expert.providers import ChatMessage, Provider, ProviderError
 OUTLINE_LIMIT = 8
 CANDIDATE_LIMIT = 12
 CANDIDATE_HITS = 50
+LEXICAL_CANDIDATES = 8
 _META_STOPWORDS = {
     "and",
     "does",
@@ -156,18 +157,6 @@ def _candidate_books(
     ordered: list[Book] = []
     seen: set[str] = set()
 
-    query_tokens = _meta_tokens(query)
-    if query_tokens:
-        scored = sorted(
-            ((_metadata_score(book, query_tokens), book) for book in books),
-            key=lambda item: (-item[0], item[1].title.casefold()),
-        )
-        for score, book in scored:
-            if score <= 0 or len(ordered) >= CANDIDATE_LIMIT:
-                break
-            ordered.append(book)
-            seen.add(book.id)
-
     try:
         hits = catalog.search_lexical(
             query,
@@ -181,8 +170,24 @@ def _candidate_books(
         if book is not None and book.id not in seen:
             ordered.append(book)
             seen.add(book.id)
-            if len(ordered) >= CANDIDATE_LIMIT:
+            if len(ordered) >= LEXICAL_CANDIDATES:
                 break
+
+    query_tokens = _meta_tokens(query)
+    if query_tokens and len(ordered) < CANDIDATE_LIMIT:
+        scored = sorted(
+            (
+                (_metadata_score(book, query_tokens), book)
+                for book in books
+                if book.id not in seen
+            ),
+            key=lambda item: (-item[0], item[1].title.casefold()),
+        )
+        for score, book in scored:
+            if score <= 0 or len(ordered) >= CANDIDATE_LIMIT:
+                break
+            ordered.append(book)
+            seen.add(book.id)
 
     if not ordered:
         ordered = books[:CANDIDATE_LIMIT]

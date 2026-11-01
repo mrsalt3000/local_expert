@@ -9,7 +9,7 @@ from typing import Sequence
 from book_expert.agent.trace import TraceRecorder
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
-from book_expert.models import Book, BookStatus, Section
+from book_expert.models import Book, BookStatus, Chunk, Section
 from book_expert.providers import (
     ChatMessage,
     ChatResult,
@@ -202,6 +202,51 @@ def test_router_prefilters_large_catalog_before_llm(tmp_path: Path) -> None:
     prompt = provider.messages[1].content
     assert "Sleep Science" in prompt
     assert "Unrelated Topic 29" not in prompt
+
+
+def test_router_keeps_lexical_candidate_before_title_matches(tmp_path: Path) -> None:
+    catalog = Catalog(tmp_path / "lexical.sqlite3")
+    catalog.initialize()
+    for index in range(30):
+        catalog.upsert_book(
+            Book(
+                id=f"model-{index}",
+                title=f"Model Business {index}",
+                path=tmp_path / f"model-{index}.pdf",
+                content_hash=f"model-hash-{index}",
+                status=BookStatus.ready,
+            )
+        )
+    catalog.upsert_book(
+        Book(
+            id="deploy",
+            title="ML Deployment Handbook",
+            path=tmp_path / "deploy.pdf",
+            content_hash="deploy-hash",
+            status=BookStatus.ready,
+        )
+    )
+    catalog.replace_chunks(
+        "deploy",
+        [
+            Chunk(
+                id="deploy-chunk",
+                book_id="deploy",
+                text="Deployment pipelines for ML models in production.",
+                pdf_page_index=0,
+                ordinal=0,
+            )
+        ],
+    )
+    provider = FakeProvider(
+        '{"book_ids": ["deploy"], "confidence": 0.95, "reason": "deployment"}'
+    )
+    router = BookRouter(_settings(tmp_path), provider, catalog)
+
+    route = router.route("deployment pipelines for ML models in production")
+
+    assert route.book_ids == ("deploy",)
+    assert "ML Deployment Handbook" in provider.messages[1].content
 
 
 def test_empty_library_skips_llm(tmp_path: Path) -> None:
