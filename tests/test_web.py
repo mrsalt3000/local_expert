@@ -530,3 +530,74 @@ def test_index_has_expand_buttons(client: TestClient) -> None:
     assert "expand-btn" in html
     assert "function expandBlock" in html
     assert "Подробнее" in html
+
+
+def test_health_reports_requests_and_latency(
+    client: TestClient, backend: FakeBackend
+) -> None:
+    client.post("/api/chat", json={"message": "вопрос", "mode": "rag"})
+
+    payload = client.get("/api/health").json()
+
+    assert payload["ok"] is True
+    assert payload["requests"] == 1
+    assert payload["refusals"] == 0
+    assert payload["errors"] == 0
+    assert payload["modes"] == {"rag": 1}
+    assert payload["latency_ms"]["p50"] is not None
+
+
+def test_health_counts_refusals_and_errors(
+    client: TestClient, backend: FakeBackend
+) -> None:
+    backend.rag_answer = Answer(text="мало контекста", refused=True)
+    client.post("/api/chat", json={"message": "вопрос", "mode": "rag"})
+
+    backend.rag_error = ProviderUnavailableError("down")
+    client.post("/api/chat", json={"message": "вопрос", "mode": "rag"})
+
+    payload = client.get("/api/health").json()
+    assert payload["requests"] == 2
+    assert payload["refusals"] == 1
+    assert payload["errors"] == 1
+
+
+def test_feedback_is_written_without_answer_text(
+    client: TestClient, tmp_path: Path
+) -> None:
+    response = client.post(
+        "/api/feedback",
+        json={
+            "chat_id": "chat-1",
+            "message_index": 3,
+            "rating": "down",
+            "mode": "super",
+        },
+    )
+
+    assert response.status_code == 200
+    path = tmp_path / "data" / "artifacts" / "feedback.local.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    entry = json.loads(lines[0])
+    assert entry["rating"] == "down"
+    assert entry["message_index"] == 3
+    assert entry["mode"] == "super"
+    assert "answer" not in entry
+    assert "text" not in entry
+
+
+def test_feedback_rejects_unknown_rating(client: TestClient) -> None:
+    response = client.post(
+        "/api/feedback", json={"chat_id": "c", "message_index": 1, "rating": "meh"}
+    )
+
+    assert response.status_code == 422
+
+
+def test_index_has_feedback_buttons(client: TestClient) -> None:
+    html = client.get("/").text
+
+    assert "feedback-btn" in html
+    assert "/api/feedback" in html
+    assert "sendFeedback" in html

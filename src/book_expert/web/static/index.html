@@ -157,6 +157,19 @@
   .expand-btn:hover { border-color: var(--accent); }
   .bubble.markdown li .expand-btn { margin-left: 6px; }
   .meta { font-size: 12px; color: var(--muted); padding: 0 4px; }
+  .feedback { display: flex; gap: 6px; padding: 2px 4px; }
+  .feedback-btn {
+    border: 1px solid var(--line);
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 4px 8px;
+    opacity: .6;
+  }
+  .feedback-btn:hover { opacity: 1; }
+  .feedback-btn.active { opacity: 1; border-color: var(--accent); }
   .badge {
     display: inline-block;
     font-size: 12px;
@@ -1025,8 +1038,54 @@
         meta.textContent = parts.join(" · ");
         wrapper.append(meta);
       }
+      wrapper.append(feedbackElement(message));
     }
     return wrapper;
+  }
+
+  function feedbackElement(message) {
+    const row = document.createElement("div");
+    row.className = "feedback";
+    for (const rating of ["up", "down"]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `feedback-btn${message.feedback === rating ? " active" : ""}`;
+      button.dataset.rating = rating;
+      button.title = rating === "up" ? "Ответ полезен" : "Ответ неверен или не по теме";
+      button.textContent = rating === "up" ? "👍" : "👎";
+      button.addEventListener("click", () => sendFeedback(message, rating, button));
+      row.append(button);
+    }
+    return row;
+  }
+
+  async function sendFeedback(message, rating, button) {
+    const chat = activeChat();
+    if (!chat) return;
+    const index = state.messages.indexOf(message);
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chat.id,
+          message_index: index,
+          rating,
+          mode: message.mode || state.mode,
+        }),
+      });
+      if (!response.ok) throw new Error("feedback failed");
+      message.feedback = rating;
+      const row = button.parentElement;
+      if (row) {
+        row.querySelectorAll(".feedback-btn").forEach((item) => {
+          item.classList.toggle("active", item === button);
+        });
+      }
+      save();
+    } catch (error) {
+      /* Обратная связь не должна ломать чат. */
+    }
   }
 
   function pendingElement() {

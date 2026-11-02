@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from queue import Queue
 from threading import Lock, Thread
@@ -20,6 +21,7 @@ from book_expert.config import Settings
 from book_expert.models import Answer, Book
 from book_expert.providers import ProviderError, ProviderUnavailableError
 from book_expert.web.backend import BookChatBackend
+from book_expert.web.metrics import RequestMetrics
 from book_expert.web.library import (
     ImportPreview,
     LibraryConflictError,
@@ -211,6 +213,25 @@ class OkResponse(BaseModel):
     ok: bool = True
 
 
+class HealthOut(BaseModel):
+    ok: bool = True
+    uptime_s: float
+    requests: int
+    refusals: int
+    errors: int
+    window: int
+    latency_ms: dict[str, int | None]
+    modes: dict[str, int]
+
+
+class FeedbackRequest(BaseModel):
+    chat_id: str = Field(default="", max_length=MAX_BOOK_ID_CHARS)
+    message_index: int = Field(default=-1, ge=-1, le=10_000)
+    rating: Literal["up", "down"]
+    mode: str = Field(default="", max_length=32)
+    comment: str = Field(default="", max_length=500)
+
+
 def create_app(
     settings: Settings | None = None,
     backend: ChatBackend | None = None,
@@ -239,6 +260,16 @@ def create_app(
         app.state.library = library
     backend_lock = Lock()
     library_lock = Lock()
+    feedback_lock = Lock()
+    metrics = RequestMetrics()
+
+    def write_feedback(entry: dict[str, Any]) -> None:
+        path = app.state.settings.artifacts_dir / "feedback.local.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(entry, ensure_ascii=False) + "\n"
+        with feedback_lock:
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(line)
 
     def get_backend() -> ChatBackend:
         active = getattr(app.state, "backend", None)
@@ -305,28 +336,45 @@ def create_app(
         book_ids = payload.book_ids or None
         history = [(turn.role, turn.content) for turn in payload.history[-12:]]
         started = perf_counter()
+        refused = False
+        failed = False
         try:
             active = get_backend()
             if payload.mode == "rag":
                 answer = active.ask_rag(payload.message, book_ids, history=history)
                 response = _rag_response(answer)
+                refused = answer.refused
             elif payload.mode == "advanced":
                 answer = active.ask_advanced(payload.message, book_ids, history=history)
                 response = _rag_response(answer, mode="advanced")
+                refused = answer.refused
             elif payload.mode == "super":
                 answer = active.ask_super(payload.message, book_ids, history=history)
                 response = _rag_response(answer, mode="super")
+                refused = answer.refused
             else:
                 text = active.ask_agent(payload.message, book_ids, history=history)
                 response = ChatResponse(mode="agent", answer=text, elapsed_ms=0)
         except ProviderError as exc:
+            failed = True
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except AgentTimeoutError as exc:
+            failed = True
             raise HTTPException(status_code=504, detail=str(exc)) from exc
         except AgentError as exc:
+            failed = True
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         except ValueError as exc:
+            failed = True
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            elapsed_ms = (perf_counter() - started) * 1000
+            metrics.record(
+                mode=payload.mode,
+                elapsed_ms=elapsed_ms,
+                refused=refused,
+                error=failed,
+            )
         response.elapsed_ms = int((perf_counter() - started) * 1000)
         return response
 
@@ -496,6 +544,24 @@ def create_app(
         except Exception as exc:
             raise_library_error(exc)
         return _job_out(job)
+
+    @app.get("/api/health", response_model=HealthOut)
+    def health() -> HealthOut:
+        return HealthOut(**metrics.snapshot())
+
+    @app.post("/api/feedback", response_model=OkResponse)
+    def feedback(payload: FeedbackRequest) -> OkResponse:
+        write_feedback(
+            {
+                "chat_id": payload.chat_id,
+                "message_index": payload.message_index,
+                "rating": payload.rating,
+                "mode": payload.mode,
+                "comment": payload.comment,
+                "recorded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            }
+        )
+        return OkResponse()
 
     return app
 
