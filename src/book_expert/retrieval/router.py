@@ -73,11 +73,7 @@ class BookRouter:
         self.provider = provider
         self.catalog = catalog
         self.trace = trace
-        loaded = (
-            BookProfileStore.load(settings.book_profiles_path)
-            if provider.name != "ollama"
-            else None
-        )
+        loaded = BookProfileStore.load(settings.book_profiles_path)
         self.profiles = (
             loaded
             if loaded is not None and loaded.model == provider.embedding_model
@@ -186,20 +182,10 @@ def _candidate_books(
     ordered: list[Book] = []
     seen: set[str] = set()
 
-    if profiles is not None and provider is not None:
-        try:
-            vector = provider.embed([query]).vectors[0]
-            profile_ids = profiles.search(vector, limit=PROFILE_LIMIT)
-        except Exception:
-            profile_ids = []
-        for book_id in profile_ids:
-            book = by_id.get(book_id)
-            if book is not None and book.id not in seen:
-                ordered.append(book)
-                seen.add(book.id)
-            if len(ordered) >= CANDIDATE_LIMIT:
-                break
-
+    # Лексика идёт первой: на 120 кейсах она ставит ожидаемую книгу на rank 1.5,
+    # тогда как профильные эмбеддинги — на 8.1 и вытесняют её из 12 слотов.
+    # Профили остаются запасным источником, когда лексика и метаданные не
+    # заполнили scope.
     try:
         hits = catalog.search_lexical(
             query,
@@ -232,6 +218,20 @@ def _candidate_books(
                 break
             ordered.append(book)
             seen.add(book.id)
+
+    if len(ordered) < CANDIDATE_LIMIT and profiles is not None and provider is not None:
+        try:
+            vector = provider.embed([query]).vectors[0]
+            profile_ids = profiles.search(vector, limit=PROFILE_LIMIT)
+        except Exception:
+            profile_ids = []
+        for book_id in profile_ids:
+            book = by_id.get(book_id)
+            if book is not None and book.id not in seen:
+                ordered.append(book)
+                seen.add(book.id)
+            if len(ordered) >= CANDIDATE_LIMIT:
+                break
 
     if not ordered:
         ordered = books[:CANDIDATE_LIMIT]

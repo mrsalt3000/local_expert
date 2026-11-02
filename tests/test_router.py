@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Sequence
 
 from book_expert.agent.trace import TraceRecorder
@@ -269,7 +270,7 @@ def test_router_keeps_lexical_candidate_before_title_matches(tmp_path: Path) -> 
     assert "ML Deployment Handbook" in provider.messages[1].content
 
 
-def test_router_loads_profiles_only_for_cloud(tmp_path: Path) -> None:
+def test_router_loads_profiles_for_any_provider(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     settings.ensure_dirs()
     settings.book_profiles_path.write_text(
@@ -288,10 +289,62 @@ def test_router_loads_profiles_only_for_cloud(tmp_path: Path) -> None:
     provider = FakeProvider()
 
     provider.name = "ollama"
-    assert BookRouter(settings, provider, catalog).profiles is None
+    assert BookRouter(settings, provider, catalog).profiles is not None
 
     provider.name = "deepseek"
     assert BookRouter(settings, provider, catalog).profiles is not None
+
+
+class _CandidateCatalog:
+    def search_lexical(self, query: str, **kwargs: object) -> list[object]:
+        return [SimpleNamespace(book_id="book-lex")]
+
+
+class _FakeProfiles:
+    def search(self, vector: object, limit: int = 8) -> list[str]:
+        return ["book-prof"]
+
+
+class _EmbedProvider:
+    name = "ollama"
+    chat_model = "fake-chat"
+    embedding_model = "fake-embed"
+
+    def embed(self, texts: Sequence[str]) -> EmbeddingResult:
+        return EmbeddingResult(vectors=((1.0, 0.0),), model="fake-embed", dim=2)
+
+
+def test_candidate_order_is_lexical_first_and_provider_independent() -> None:
+    from book_expert.retrieval.router import _candidate_books
+
+    books = [
+        Book(
+            id="book-lex",
+            title="Zeta",
+            path=Path("/tmp/lex.pdf"),
+            content_hash="h1",
+            status=BookStatus.ready,
+        ),
+        Book(
+            id="book-prof",
+            title="Omega",
+            path=Path("/tmp/prof.pdf"),
+            content_hash="h2",
+            status=BookStatus.ready,
+        ),
+    ]
+    provider = _EmbedProvider()
+    catalog = _CandidateCatalog()
+
+    ordered = _candidate_books(
+        "zeta query",
+        books,
+        catalog,  # type: ignore[arg-type]
+        profiles=_FakeProfiles(),  # type: ignore[arg-type]
+        provider=provider,  # type: ignore[arg-type]
+    )
+
+    assert [book.id for book in ordered][:2] == ["book-lex", "book-prof"]
 
 
 def test_empty_library_skips_llm(tmp_path: Path) -> None:
