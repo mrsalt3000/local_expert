@@ -57,7 +57,7 @@
   .brand { font-weight: 650; letter-spacing: -0.01em; }
   .brand .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  select, textarea, button {
+  select, input, textarea, button {
     font: inherit;
     color: inherit;
     border-radius: 10px;
@@ -65,6 +65,31 @@
     background: var(--bg);
   }
   select { padding: 7px 10px; max-width: 320px; }
+  input[type="text"] { padding: 7px 10px; }
+  .book-picker { position: relative; }
+  .book-picker input { width: 260px; max-width: 320px; }
+  .book-options {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    max-width: 420px;
+    max-height: 300px;
+    overflow: auto;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+  .book-options li { padding: 7px 10px; border-radius: 7px; cursor: pointer; font-size: 14px; }
+  .book-options li[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+  .book-options li.active { background: var(--line); }
+  .book-options li .pages { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .book-options li.more { cursor: default; color: var(--muted); font-size: 12px; }
   .modes { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
   .modes button {
     border: 0;
@@ -284,9 +309,12 @@
     <button type="button" class="tab" data-tab="library" role="tab" aria-selected="false">Библиотека</button>
   </nav>
   <div class="controls" id="chat-controls">
-    <select id="book" aria-label="Книга">
-      <option value="">Все книги (авто-выбор)</option>
-    </select>
+    <div class="book-picker">
+      <input id="book" type="text" role="combobox" aria-expanded="false"
+             aria-controls="book-options" aria-autocomplete="list" aria-label="Книга"
+             placeholder="Все книги (авто-выбор)" autocomplete="off" spellcheck="false">
+      <ul id="book-options" class="book-options" role="listbox" aria-label="Книги" hidden></ul>
+    </div>
     <div class="modes" role="group" aria-label="Режим ответа">
       <button type="button" data-mode="rag" aria-pressed="false">RAG</button>
       <button type="button" data-mode="super" class="active" aria-pressed="true">Агент</button>
@@ -358,7 +386,8 @@
   const CHATS_KEY = "book-expert-chats-v1";
   const thread = document.getElementById("thread");
   const messagesPane = document.getElementById("messages");
-  const bookSelect = document.getElementById("book");
+  const bookInput = document.getElementById("book");
+  const bookOptions = document.getElementById("book-options");
   const modeButtons = Array.from(document.querySelectorAll(".modes button"));
   const form = document.getElementById("form");
   const input = document.getElementById("input");
@@ -572,7 +601,7 @@
     state.mode = chat.mode;
     state.bookId = chat.bookId;
     state.advancedProgress = null;
-    bookSelect.value = state.bookId;
+    syncBookInput();
     applyMode();
     saveState();
     render();
@@ -589,7 +618,7 @@
     state.mode = chat.mode;
     state.bookId = "";
     state.advancedProgress = null;
-    bookSelect.value = "";
+    syncBookInput();
     applyMode();
     saveState();
     render();
@@ -609,7 +638,7 @@
       state.messages = next.messages;
       state.mode = next.mode;
       state.bookId = next.bookId;
-      bookSelect.value = state.bookId;
+      syncBookInput();
       applyMode();
     }
     saveState();
@@ -1056,7 +1085,7 @@
     }
     if (state.pending) thread.append(pendingElement());
     sendButton.disabled = state.pending;
-    bookSelect.disabled = state.pending;
+    setBookDisabled(state.pending);
     for (const button of modeButtons) button.disabled = state.pending;
     renderChatList();
     messagesPane.scrollTop = messagesPane.scrollHeight;
@@ -1252,25 +1281,101 @@
     }
   }
 
+  let bookIndex = [];
+  let bookActiveIndex = -1;
+  const MAX_BOOK_OPTIONS = 50;
+
+  function bookLabel(book) {
+    return book.pages ? `${book.title} (${book.pages} стр.)` : book.title;
+  }
+
+  function currentBook() {
+    return bookIndex.find((book) => book.id === state.bookId) || null;
+  }
+
+  function syncBookInput() {
+    const book = currentBook();
+    bookInput.value = book ? bookLabel(book) : "";
+    bookInput.placeholder = "Все книги (авто-выбор)";
+  }
+
+  function setBookDisabled(disabled) {
+    bookInput.disabled = disabled;
+    if (disabled) closeBookOptions();
+  }
+
+  function matchBooks(query) {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return bookIndex;
+    return bookIndex.filter((book) =>
+      `${book.title} ${book.author}`.toLowerCase().includes(needle),
+    );
+  }
+
+  function renderBookOptions(query) {
+    const books = matchBooks(query);
+    const shown = books.slice(0, MAX_BOOK_OPTIONS);
+    const items = [];
+    const auto = document.createElement("li");
+    auto.role = "option";
+    auto.dataset.id = "";
+    auto.textContent = "Все книги (авто-выбор)";
+    auto.setAttribute("aria-selected", String(!state.bookId));
+    items.push(auto);
+    for (const book of shown) {
+      const item = document.createElement("li");
+      item.role = "option";
+      item.dataset.id = book.id;
+      item.setAttribute("aria-selected", String(book.id === state.bookId));
+      item.append(document.createTextNode(book.title));
+      if (book.pages) {
+        const pages = document.createElement("span");
+        pages.className = "pages";
+        pages.textContent = `${book.pages} стр.`;
+        item.append(pages);
+      }
+      items.push(item);
+    }
+    bookOptions.replaceChildren(...items);
+    if (books.length > shown.length) {
+      const more = document.createElement("li");
+      more.className = "more";
+      more.textContent = `… ещё ${books.length - shown.length} — уточните запрос`;
+      bookOptions.append(more);
+    }
+    bookActiveIndex = -1;
+    bookOptions.hidden = false;
+    bookInput.setAttribute("aria-expanded", "true");
+  }
+
+  function closeBookOptions() {
+    bookOptions.hidden = true;
+    bookInput.setAttribute("aria-expanded", "false");
+    bookActiveIndex = -1;
+  }
+
+  function chooseBook(id) {
+    state.bookId = id;
+    syncBookInput();
+    closeBookOptions();
+    saveState();
+  }
+
   async function refreshBooks() {
     try {
       const response = await fetch("/api/books");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const books = await response.json();
-      const known = new Set();
-      const auto = document.createElement("option");
-      auto.value = "";
-      auto.textContent = "Все книги (авто-выбор)";
-      bookSelect.replaceChildren(auto);
-      for (const book of books) {
-        known.add(book.id);
-        const option = document.createElement("option");
-        option.value = book.id;
-        option.textContent = `${book.title} (${book.pages} стр.)`;
-        bookSelect.append(option);
-      }
+      bookIndex = books.map((book) => ({
+        id: book.id,
+        title: book.title || "Без названия",
+        author: book.author || "",
+        pages: book.pages || 0,
+      }));
+      const known = new Set(bookIndex.map((book) => book.id));
       if (state.bookId && !known.has(state.bookId)) state.bookId = "";
-      bookSelect.value = state.bookId;
+      syncBookInput();
+      if (!bookOptions.hidden) renderBookOptions(bookInput.value);
     } catch (error) {
       showError(`Не удалось загрузить список книг: ${error.message || error}`);
     }
@@ -1735,9 +1840,54 @@
     });
   });
 
-  bookSelect.addEventListener("change", () => {
-    state.bookId = bookSelect.value;
-    saveState();
+  bookInput.addEventListener("focus", () => {
+    bookInput.select();
+    renderBookOptions("");
+  });
+  bookInput.addEventListener("input", () => {
+    renderBookOptions(bookInput.value);
+  });
+  bookInput.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      closeBookOptions();
+      syncBookInput();
+    }, 150);
+  });
+  bookInput.addEventListener("keydown", (event) => {
+    const items = Array.from(bookOptions.querySelectorAll('li[role="option"]'));
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (bookOptions.hidden) {
+        renderBookOptions(bookInput.value);
+        return;
+      }
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      bookActiveIndex =
+        (bookActiveIndex + step + items.length) % items.length;
+      items.forEach((item, index) =>
+        item.classList.toggle("active", index === bookActiveIndex),
+      );
+      items[bookActiveIndex].scrollIntoView({ block: "nearest" });
+    } else if (event.key === "Enter") {
+      if (!bookOptions.hidden && items.length) {
+        event.preventDefault();
+        const typed = bookInput.value.trim();
+        const fallback = typed ? Math.min(1, items.length - 1) : 0;
+        const index = bookActiveIndex >= 0 ? bookActiveIndex : fallback;
+        chooseBook(items[index].dataset.id || "");
+        input.focus();
+      }
+    } else if (event.key === "Escape") {
+      closeBookOptions();
+      syncBookInput();
+    }
+  });
+  bookOptions.addEventListener("mousedown", (event) => {
+    const item = event.target.closest('li[role="option"]');
+    if (!item) return;
+    event.preventDefault();
+    chooseBook(item.dataset.id || "");
+    input.focus();
   });
 
   clearButton.addEventListener("click", () => {
@@ -1770,7 +1920,7 @@
   loadState();
   applyMode();
   applyTab();
-  bookSelect.value = state.bookId;
+  syncBookInput();
   render();
   refreshBooks();
   updateImportControls();

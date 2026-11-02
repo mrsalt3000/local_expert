@@ -200,6 +200,16 @@ def test_index_serves_chat_page(client: TestClient) -> None:
     assert "Агент" in response.text
 
 
+def test_index_has_searchable_book_picker(client: TestClient) -> None:
+    html = client.get("/").text
+
+    assert 'role="combobox"' in html
+    assert 'aria-controls="book-options"' in html
+    assert 'id="book-options"' in html
+    assert 'role="listbox"' in html
+    assert '<select id="book"' not in html
+
+
 def test_books_endpoint_maps_fields(client: TestClient) -> None:
     response = client.get("/api/books")
     assert response.status_code == 200

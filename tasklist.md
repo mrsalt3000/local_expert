@@ -254,8 +254,9 @@
 | 2026-11-02 | T34 | review | negative: deepseek 45/100 при confidence 0.55, порог 0.5 даёт top1 .51, но scope_coverage .90→.82; 4B scope_coverage .44 при 0.6 и .92 при 0.9; retry откатан; в router_eval добавлен scope_coverage, заведена T35 |
 | 2026-11-02 | T35 | accepted | 5 книг/120 кейсов: candidates без LLM .5507/.775, отказов 16, маршрут 0.9 s против LLM .5158/.725, 19 отказов, 2.3 s; `BOOK_EXPERT_ROUTER_USE_LLM=false` по умолчанию; 385 tests |
 | 2026-11-02 | T31 | review | negative: L-6-v2 p50 1136 ms / page@5 .65, turbo-en 1549 ms / .70 против baseline .80 без rerank; default off сохранён |
-| 2026-11-02 | T37 | accepted | UI: только RAG и «Агент» (super), «Агент» по умолчанию; старые чаты нормализуются, API-режимы сохранены |
 | 2026-11-02 | T36 | accepted | relevance-фильтр в ask/ui: citation precision .5507→.5785, отказы 16→14, recall .775 без изменений; `BOOK_EXPERT_ANSWER_RELEVANCE_FILTER=true`; 386 tests |
+| 2026-11-02 | T37 | accepted | UI: только RAG и «Агент» (super), «Агент» по умолчанию; старые чаты нормализуются, API-режимы сохранены |
+| 2026-11-02 | T38 | accepted | поиск книги над чатом: combobox с фильтрацией по названию/автору, 50 опций, Enter/Esc; проверено в headless Chrome через CDP |
 
 ### T20 — Book-level routing index
 
@@ -508,3 +509,18 @@
 - Результат: `/` отдаёт `data-mode="rag"` и `data-mode="super"` (label «Агент»,
   active), `POST /api/chat` без `mode` вернул `mode: "super"` с цитатой;
   `validMode` сужен до rag/super, сохранённые чаты нормализуются при загрузке.
+
+### T38 — Поиск книги в поле над чатом
+
+- [x] Статус: `accepted` (2026-11-02; combobox с фильтрацией по названию/автору, до 50 опций, Enter/Esc)
+- Scope: `web/static/index.html`, `tests/test_web.py`, `README.md`.
+- Acceptance: над чатом поле ввода; при наборе список книг фильтруется;
+  выбор книги сохраняется в чате; «Все книги (авто-выбор)» остаётся первым
+  пунктом; клавиатура (стрелки, Enter, Esc) работает.
+- Verify: pytest, живой прогон в headless Chrome через CDP.
+- Результат: вместо `<select>` — combobox `#book` + `#book-options`
+  (`role=listbox`); фильтр по `title + author` без учёта регистра, показ
+  первых 50 совпадений и строка «… ещё N»; mousedown выбирает книгу,
+  `aria-expanded=false`, значение поля = «Название (N стр.)».
+  CDP-проверка на живой странице: «машин» → 2 книги, «крипт» → 2 книги,
+  выбор второй опции подставил название (63 символа).
