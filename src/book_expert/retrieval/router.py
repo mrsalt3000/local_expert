@@ -13,6 +13,7 @@ from book_expert.config import Settings
 from book_expert.models import Book, BookStatus
 from book_expert.providers import ChatMessage, Provider, ProviderError
 from book_expert.retrieval.book_profiles import PROFILE_LIMIT, BookProfileStore
+from book_expert.retrieval.rewrite import rewrite_query
 
 OUTLINE_LIMIT = 8
 CANDIDATE_LIMIT = 12
@@ -112,7 +113,7 @@ class BookRouter:
             )
 
         candidates = _candidate_books(
-            query,
+            rewrite_query(query) if self.settings.query_rewrite_enabled else query,
             candidates,
             self.catalog,
             profiles=self.profiles,

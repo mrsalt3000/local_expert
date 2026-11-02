@@ -10,6 +10,7 @@ from book_expert.config import Settings
 from book_expert.models import Answer, Citation, SearchHit
 from book_expert.providers import ChatMessage, Provider
 from book_expert.retrieval.hybrid import HybridSearcher
+from book_expert.retrieval.rewrite import rewrite_query
 from book_expert.retrieval.router import BookRouter
 
 INSUFFICIENT = "INSUFFICIENT_CONTEXT"
@@ -61,15 +62,18 @@ class GroundedAnswerer:
         if selected is None and auto_route and self.router is not None:
             route = self.router.route(query)
             selected = list(route.book_ids)
+        retrieval_query = (
+            rewrite_query(query) if self.settings.query_rewrite_enabled else query
+        )
 
         outcome = self.searcher.search(
-            query, book_ids=selected, limit=limit, dense=dense
+            retrieval_query, book_ids=selected, limit=limit, dense=dense
         )
         result_limit = self.settings.top_k if limit is None else limit
         hits: tuple[SearchHit, ...] = outcome.hits
         if relevance_filter:
             hits = filter_relevant_hits(
-                query,
+                retrieval_query,
                 hits,
                 min_ratio=self.settings.relevance_filter_min_ratio,
             )
@@ -84,7 +88,7 @@ class GroundedAnswerer:
                     ],
                 )
         hits = self._cover_selected_books(
-            query,
+            retrieval_query,
             hits,
             selected,
             result_limit,

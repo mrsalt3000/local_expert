@@ -243,6 +243,8 @@
 | 2026-11-01 | T24 | accepted | 100 reviewed на 3 книгах; page recall@5 0.910, citation precision 0.533/recall 0.643, 5 отказов |
 | 2026-11-01 | T22 | accepted | contextual embeddings (books_ctx): chunk recall@5 0.5865, page recall@10 0.9615; page-context default off; 361 tests |
 | 2026-11-01 | T23 | accepted | BAAI/bge-reranker-v2-m3-int8 не уложился в 10 мин на 52 кейсах; default off |
+| 2026-11-02 | T29 | in_progress | contextual reindex books_ctx_full: 1151 книга/548999 chunks, systemd job; eval после завершения |
+| 2026-11-02 | T25 | accepted | retrieval query rewrite; citation precision 0.5325→0.5457, recall 0.6433, 365 tests |
 
 ### T20 — Book-level routing index
 
@@ -293,7 +295,7 @@
 
 ### T25 — Query rewriting перед retrieval
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted` (2026-11-02; citation precision 0.5325→0.5457, recall без изменений)
 - Scope: `retrieval/rewrite.py`, optional LLM/heuristic rewrite of user query
   into retrieval query; config flag; apply to RAG/router; tests.
 - Acceptance: 100-case page/chunk recall@5 не падает, citation precision
@@ -330,7 +332,7 @@
 
 ### T29 — Полный contextual reindex production
 
-- [ ] Статус: `todo`
+- [ ] Статус: `in_progress` (2026-11-02; systemd job, 548999 chunks, ETA ~3.7 ч)
 - Scope: переиндексировать все 1150 книг с contextual embeddings в новую
   коллекцию, проверить размер/время, переключить `BOOK_EXPERT_QDRANT_COLLECTION`
   только после A/B, сохранить rollback.

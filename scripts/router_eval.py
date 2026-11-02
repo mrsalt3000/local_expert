@@ -12,6 +12,7 @@ from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.providers import get_provider
 from book_expert.retrieval.router import BookRouter, _candidate_books
+from book_expert.retrieval.rewrite import rewrite_query
 
 DEFAULT_OUTPUT = Path("data/artifacts/router-eval.local.json")
 
@@ -76,7 +77,9 @@ def evaluate(path: Path) -> dict[str, Any]:
             candidates = {
                 book.id
                 for book in _candidate_books(
-                    question,
+                    rewrite_query(question)
+                    if settings.query_rewrite_enabled
+                    else question,
                     books,
                     catalog,
                     profiles=router.profiles,

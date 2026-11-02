@@ -476,6 +476,16 @@ def test_sources_prompt_prefers_page_context() -> None:
     assert "chunk text" not in prompt
 
 
+def test_answer_uses_rewritten_retrieval_query(tmp_path: Path) -> None:
+    provider = FakeProvider("Answer [1].")
+    searcher = FakeSearcher(_hits())
+    answerer = _answerer(tmp_path, provider, searcher)
+
+    answerer.ask("Расскажи, как работает retrieval?", book_ids=["book-1"])
+
+    assert searcher.calls[0]["query"] == "как работает retrieval?"
+
+
 def test_answer_uses_context_and_citations(tmp_path: Path) -> None:
     provider = FakeProvider("Hybrid retrieval combines signals [1].")
     searcher = FakeSearcher(_hits())
