@@ -459,6 +459,20 @@ def test_answer_adds_missing_selected_book_to_context(tmp_path: Path) -> None:
     assert [citation.chunk_id for citation in answer.citations] == ["c4"]
 
 
+def test_coverage_filling_skipped_for_wide_scope(tmp_path: Path) -> None:
+    searcher = FakeSearcher(_hits())
+    answerer = _answerer(tmp_path, FakeProvider("Answer [1]."), searcher)
+
+    answer = answerer.ask(
+        "question",
+        book_ids=["book-1", "book-2", "book-3", "book-4"],
+        limit=3,
+    )
+
+    assert len(searcher.calls) == 1
+    assert [citation.chunk_id for citation in answer.citations] == ["c1"]
+
+
 def test_sources_prompt_prefers_page_context() -> None:
     hit = SearchHit(
         chunk_id="c1",
@@ -527,13 +541,27 @@ def test_missing_markers_fall_back_to_all_hits(tmp_path: Path) -> None:
     assert [citation.chunk_id for citation in answer.citations] == ["c1", "c2"]
 
 
-def test_out_of_range_markers_produce_no_citations(tmp_path: Path) -> None:
-    provider = FakeProvider("Only [99] is invalid.")
+def test_out_of_range_markers_retry_with_strict_prompt(tmp_path: Path) -> None:
+    provider = SequenceProvider(["Only [99] is invalid.", "Fixed [2]."])
     answerer = _answerer(tmp_path, provider, FakeSearcher(_hits()))
 
     answer = answerer.ask("question", book_ids=["book-1"])
 
+    assert [citation.chunk_id for citation in answer.citations] == ["c2"]
+    assert provider.calls == 2
+    assert "1..2" in provider.messages[0].content
+
+
+def test_out_of_range_markers_refuse_after_failed_retry(tmp_path: Path) -> None:
+    provider = SequenceProvider(["Only [99] is invalid.", "Still [77]."])
+    answerer = _answerer(tmp_path, provider, FakeSearcher(_hits()))
+
+    answer = answerer.ask("question", book_ids=["book-1"])
+
+    assert answer.refused is True
+    assert answer.text == REFUSAL
     assert answer.citations == ()
+    assert provider.calls == 2
 
 
 def test_insufficient_context_refuses(tmp_path: Path) -> None:

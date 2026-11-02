@@ -250,6 +250,9 @@
 | 2026-11-02 | T27 | accepted | metadata prefilter year/format/author/language; routing top1 0.533, candidate 0.733 |
 | 2026-11-02 | T30 | accepted | parser quality gate: coverage/reject/warn, parser-audit + ingest --quality-gate; 372 tests |
 | 2026-11-02 | T28 | review | 100 кейсов: retrieval page@5 .91/MRR .786/chunk .69 у обоих провайдеров; deepseek citation .604/.88, refusals 5, empty 7; ollama .576/.86, refusals 1, empty 13; oracle-gate 9 без false refusals, signal-gate 0; routing non-fallback top1 .606 vs .309 |
+| 2026-11-02 | T33 | review | citation gate на несопоставленные `[n]`: retry → refusal, метрики stage-eval разделены на no_citations/zero_precision; 100 кейсов — 0 срабатываний, refusals 5→5, precision .6042/recall .88 без изменений; 380 tests |
+| 2026-11-02 | T34 | review | negative: deepseek 45/100 при confidence 0.55, порог 0.5 даёт top1 .51, но scope_coverage .90→.82; 4B scope_coverage .44 при 0.6 и .92 при 0.9; retry откатан; в router_eval добавлен scope_coverage, заведена T35 |
+| 2026-11-02 | T35 | accepted | 5 книг/120 кейсов: candidates без LLM .5507/.775, отказов 16, маршрут 0.9 s против LLM .5158/.725, 19 отказов, 2.3 s; `BOOK_EXPERT_ROUTER_USE_LLM=false` по умолчанию; 385 tests |
 
 ### T20 — Book-level routing index
 
@@ -370,24 +373,28 @@
 - Acceptance: chunk recall@5 и citation precision растут или не падают; доля chunks <100 резко снижена; секции >4000 не превращаются в один chunk; citations проверяемы.
 - Verify: section-size report, A/B 120 cases, targeted tests, full checks.
 
-### T33 — Citation gate: ответ без цитат не отдаётся как валидный
+### T33 — Citation gate: ответ без сопоставленных цитат не отдаётся как валидный
 
-- [ ] Статус: `todo`
-- Scope: `retrieval/answer.py`, `eval/stage_eval.py`; если модель вернула
-  текст без маркеров `[n]` и `refused=false`, повторять запрос с явным
-  требованием цитат, а при повторе — отдавать `INSUFFICIENT_CONTEXT`;
-  в отчёте stage-eval разделять «нет цитат при промахе retrieval» и «нет
-  цитат при верной странице в top-5».
-- Acceptance: `empty_citations` в stage-eval падает без роста refusals на
-  кейсах, где retrieval нашёл ожидаемую страницу; ответ без citations больше
-  не считается успешным; targeted tests.
+- [ ] Статус: `review` (2026-11-02; gate добавлен, на 100 кейсах не сработал ни разу: refusals 5→5, precision .6042/recall .88 без изменений; путь retry→refusal покрыт тестами)
+- Scope: `retrieval/answer.py`, `eval/stage_eval.py`; если маркеры `[n]`
+  не сопоставились ни с одним фрагментом (все вне диапазона), повторить
+  запрос с явным требованием цитат, при повторе — `INSUFFICIENT_CONTEXT`.
+  Fallback «нет маркеров → все хиты» сохранён: на 40 кейсах он не
+  срабатывал ни разу, но остаётся страховкой для моделей без `[n]`.
+  В stage-eval разделить `no_citations` (len == 0) и `zero_precision`
+  (цитаты есть, но страницы не совпали с ожидаемыми).
+- Acceptance: ответ без сопоставленных citations не отдаётся как валидный;
+  `no_citations` = 0 при непустых хитах; refusals растут только на кейсах
+  с несопоставленными маркерами; targeted tests.
 - Verify: 100-case stage-eval до/после, targeted tests, full checks.
-- Основание: T28 — ollama 13/100 ответов без citations, из них 5 при
-  page recall@5 = 1.0; deepseek 7, из них 1 при верной странице.
+- Основание: T28 — 13/100 (ollama) и 7/100 (deepseek) «пустых» citations
+  оказались нулевой точностью, а не отсутствием цитат; проб на 40 кейсах:
+  0 ответов без `[n]`, 1 ответ с маркером вне диапазона (`[3]` при одном
+  фрагменте) и нулём цитат.
 
 ### T34 — Калибровка routing fallback для deepseek
 
-- [ ] Статус: `todo`
+- [ ] Статус: `review` (2026-11-02; negative: порог и retry — не рычаг, fallback на 12 кандидатов покрывает книгу лучше уверенного одиночного выбора; в router_eval добавлен `scope_coverage`)
 - Scope: `retrieval/router.py`; deepseek уходит в fallback на 67/100 кейсов
   против 19/100 у локальной 4B, из-за чего общий top-1 падает до 0.20, хотя
   на не-fallback кейсах top-1 0.606 против 0.309. Проверить шкалу
@@ -399,3 +406,54 @@
   общий top-1/recall@3 растут; поведение одинаково предсказуемо у обоих
   провайдеров; targeted tests.
 - Verify: router_eval на combined-100 для deepseek и ollama, full checks.
+- Результат: у deepseek 45/100 ответов идут с `confidence = 0.55` (порог 0.6),
+  поэтому снижение порога до 0.5 поднимает top-1 .21→.51, но **снижает**
+  `scope_coverage` .90→.82: fallback на 12 кандидатов покрывает нужную книгу
+  чаще, чем принятый одиночный выбор. У 4B обратная картина: неверные
+  выборы идут с 0.6–0.8, `scope_coverage` .44 при пороге 0.6 и .92 при 0.9 —
+  то есть «уверенность» 4B антикоррелирует с правильностью. Retry на пустой
+  выбор конвертирует ~2 кейса из 18 и добавляет LLM-вызов — откатан.
+  Метрика top-1 вводит в заблуждение; добавлен `scope_coverage`
+  (ожидаемая книга внутри выбранного scope, с учётом fallback).
+- Вывод: политику выбора книг менять только по e2e-метрикам (T35).
+
+### T35 — Candidate-only retrieval против LLM-выбора книги
+
+- [x] Статус: `accepted` (2026-11-02; 5 книг/120 кейсов подтвердили: candidates без LLM дают citation .5507/.775 против .5158/.725, отказов 16 против 19, маршрут 0.9 s против 2.3 s; default переключён на `BOOK_EXPERT_ROUTER_USE_LLM=false`)
+- Scope: `retrieval/router.py`, `retrieval/answer.py`; сравнить три политики
+  scope на 100 кейсах: (a) текущая (LLM-выбор + fallback на 12 кандидатов),
+  (b) всегда 12 кандидатов без LLM-вызова, (c) oracle по ожидаемой книге.
+  Мерить e2e: citation precision/recall, refusals, answer latency.
+- Acceptance: политика (b) не хуже (a) по citation precision и refusals,
+  при этом убирает LLM-вызов (~2.3 s) из маршрута; иначе оставить (a) и
+  закрыть задачу отрицательным результатом.
+- Verify: 100-case stage-eval в трёх конфигурациях, targeted tests, full checks.
+- Основание: `scope_coverage` — deepseek .84 при LLM-выборе против .91 у
+  одних кандидатов; 4B .44 против .94. При этом retrieval внутри 12 книг
+  даёт page@5 .79 против .91 внутри ожидаемой книги.
+- Результат (deepseek, 100 кейсов, `stage-eval --scope`):
+
+  | scope | page@5 | MRR | citation prec/rec | refusals |
+  | --- | --- | --- | --- | --- |
+  | expected (oracle) | .91 | .786 | .604 / .88 | 5 |
+  | router (после фикса coverage) | .77 | .661 | .497 / .73 | 15 |
+  | candidates (без LLM) | .82 | .706 | .533 / .80 | 10 |
+
+  Кандидаты лучше router-scope по всем e2e-метрикам и убирают ~2.2 s
+  маршрутного вызова. Флаг `BOOK_EXPERT_ROUTER_USE_LLM` добавлен, после
+  проверки на 5 книгах default переключён на `false`.
+- Побочный фикс: `_cover_selected_books` больше не добирает по хиту из каждой
+  книги при скоупе >3 книг — именно этот добор давал 73 отказа из 100 при
+  router-scope (стало 15).
+- Подтверждение на 5 книгах / 120 кейсах (`stage-eval --scope router`,
+  `data/artifacts/stage-eval-120-router-{llm,candidates}.local.json`):
+
+  | политика | page@5 | MRR | chunk@5 | citation prec/rec | refusals | route p50 |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | LLM-роутер | .7583 | .6479 | .5896 | .5158 / .725 | 19 | 2257 ms |
+  | кандидаты (без LLM) | **.8083** | **.6944** | **.6201** | **.5507 / .775** | **16** | **901 ms** |
+
+  Книга «Hands-On RAG for Production» (стр. 54, 99) трактует metadata
+  filtering как операцию БД, а не semantic search, и описывает двухстадийный
+  retrieval как candidate generation + reranking — LLM-пикер документа в этом
+  описании не нужен. Default переключён, флаг оставлен для возврата.

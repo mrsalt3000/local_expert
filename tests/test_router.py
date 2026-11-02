@@ -87,7 +87,12 @@ def _settings(tmp_path: Path, *, threshold: float = 0.6) -> Settings:
         workspace=tmp_path,
         data_dir=tmp_path / "data",
         router_confidence_threshold=threshold,
+        router_use_llm=True,
     )
+
+
+def test_router_use_llm_defaults_to_off() -> None:
+    assert Settings(_env_file=None).router_use_llm is False
 
 
 def test_selects_book_above_threshold(tmp_path: Path) -> None:
@@ -107,6 +112,21 @@ def test_selects_book_above_threshold(tmp_path: Path) -> None:
     assert "Chapter 1" in prompt
     assert "How does hybrid retrieval work?" in prompt
     assert "Dense and sparse retrieval." in prompt
+
+
+def test_router_use_llm_disabled_returns_candidates(tmp_path: Path) -> None:
+    catalog = _catalog(tmp_path)
+    provider = FakeProvider('{"book_ids": ["book-1"], "confidence": 0.9}')
+    settings = _settings(tmp_path)
+    settings.router_use_llm = False
+    router = BookRouter(settings, provider, catalog)
+
+    route = router.route("How does hybrid retrieval work?")
+
+    assert provider.calls == 0
+    assert set(route.book_ids) == {"book-1"}
+    assert route.fallback is False
+    assert "router_use_llm=false" in route.reason
 
 
 def test_low_confidence_falls_back_to_library(tmp_path: Path) -> None:

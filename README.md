@@ -170,6 +170,15 @@ BOOK_EXPERT_SUPER_MAX_ROUNDS=5
 
 Флаги `--json` дают машинный вывод; `--book <id>` ограничивает поиск книгой.
 
+## Выбор книг
+
+По умолчанию книги для поиска не выбирает LLM: берутся кандидаты префильтра
+(профили, лексика, метаданные) — до 12 книг. На 120 кейсах по 5 книгам это
+точнее и быстрее LLM-роутера: citation precision 0.5507 против 0.5158,
+recall 0.775 против 0.725, отказов 16 против 19, маршрут 0.9 s против 2.3 s.
+Вернуть прежнее поведение — `BOOK_EXPERT_ROUTER_USE_LLM=true`; порог
+`BOOK_EXPERT_ROUTER_CONFIDENCE_THRESHOLD` действует только в этом режиме.
+
 ## Данные и приватность
 
 Реальный PDF, extracted text, эмбеддинги, индексы, трейсы и audit нельзя
@@ -242,8 +251,10 @@ uv run book-expert stage-eval data/eval/combined-100.local.json
 uv run python scripts/router_eval.py data/eval/router-eval.local.json
 ```
 
-`router_eval` проверяет выбор книги без явного `book_ids`: top-1, recall@3 и
-попадание target в prefilter-кандидаты. Датасет — local-only `*.local.json`.
+`router_eval` проверяет выбор книги без явного `book_ids`: top-1, recall@3,
+`scope_coverage` (ожидаемая книга внутри выбранного scope — с учётом fallback
+на кандидатов) и попадание target в prefilter-кандидаты. Датасет — local-only
+`*.local.json`.
 
 `stage-eval` считает стадии отдельно (routing, retrieval, citations, latency) и
 симулирует retrieval gate. Ответ генерируется всегда, иначе не измерить

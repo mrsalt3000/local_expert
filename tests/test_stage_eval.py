@@ -27,6 +27,9 @@ class FakeCatalog:
     def iter_chunks(self, book_id: str | None = None) -> list[Any]:
         return self.chunks
 
+    def list_books(self) -> list[Any]:
+        return [SimpleNamespace(id="book-1", status=SimpleNamespace(value="ready"))]
+
 
 class FakeProvider:
     def close(self) -> None:
@@ -37,6 +40,7 @@ class FakeSearcher:
     def __init__(self, mapping: dict[str, list[SearchHit]]) -> None:
         self.mapping = mapping
         self.queries: list[str] = []
+        self.book_scopes: list[list[str] | None] = []
         self.closed = False
 
     def search(
@@ -47,6 +51,7 @@ class FakeSearcher:
         limit: int = 5,
     ) -> SearchOutcome:
         self.queries.append(query)
+        self.book_scopes.append(book_ids)
         return SearchOutcome(hits=tuple(self.mapping.get(query, [])))
 
     def close(self) -> None:
@@ -57,6 +62,7 @@ class FakeRouter:
     def __init__(self, mapping: dict[str, list[str]], fallback: bool = False) -> None:
         self.mapping = mapping
         self.fallback = fallback
+        self.profiles = None
 
     def route(self, query: str) -> SimpleNamespace:
         return SimpleNamespace(
@@ -115,6 +121,12 @@ def _install(
     monkeypatch.setattr(stage_eval, "get_provider", lambda settings: FakeProvider())
     monkeypatch.setattr(stage_eval, "HybridSearcher", lambda *args, **kwargs: searcher)
     monkeypatch.setattr(stage_eval, "BookRouter", lambda *args, **kwargs: router)
+    monkeypatch.setattr(stage_eval, "apply_metadata_filter", lambda books, q: books)
+    monkeypatch.setattr(
+        stage_eval,
+        "_candidate_books",
+        lambda query, books, catalog, **kwargs: books,
+    )
     monkeypatch.setattr(
         stage_eval, "GroundedAnswerer", lambda *args, **kwargs: answerer
     )
@@ -216,6 +228,47 @@ def test_stage_eval_reports_false_refusal(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert report["gate"]["signal"]["fired"] == 2
     assert report["gate"]["signal"]["false_refusals"] == 1
+
+
+def test_stage_eval_router_scope_uses_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    searcher = FakeSearcher({"q1": [_hit("c1", 10)], "q2": [_hit("c4", 40)]})
+    _install(
+        monkeypatch,
+        searcher=searcher,
+        router=FakeRouter({"q1": ["book-2", "book-3"], "q2": ["book-1"]}),
+        answerer=FakeAnswerer({"q1": ([], True), "q2": ([], True)}),
+        chunk_pages={"c1": 10, "c4": 40},
+    )
+
+    report = stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False),
+        Path("cases.json"),
+        scope="router",
+    )
+
+    assert report["scope"] == "router"
+    assert searcher.book_scopes == [["book-2", "book-3"], ["book-1"]]
+
+
+def test_stage_eval_candidates_scope_uses_prefilter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    searcher = FakeSearcher({"q1": [], "q2": []})
+    _install(
+        monkeypatch,
+        searcher=searcher,
+        router=FakeRouter({}),
+        answerer=FakeAnswerer({}),
+        chunk_pages={"c1": 10, "c4": 40},
+    )
+
+    stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False),
+        Path("cases.json"),
+        scope="candidates",
+    )
+
+    assert searcher.book_scopes == [["book-1"], ["book-1"]]
 
 
 def test_write_report(tmp_path: Path) -> None:

@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
@@ -28,8 +28,11 @@ from book_expert.eval.metrics import load_cases
 from book_expert.providers import get_provider
 from book_expert.retrieval.answer import GroundedAnswerer
 from book_expert.retrieval.hybrid import HybridSearcher
+from book_expert.retrieval.metadata import apply_metadata_filter
 from book_expert.retrieval.rewrite import rewrite_query
-from book_expert.retrieval.router import BookRouter
+from book_expert.retrieval.router import BookRouter, _candidate_books
+
+ScopeMode = Literal["expected", "router", "candidates"]
 
 
 def run_stage_eval(
@@ -37,6 +40,7 @@ def run_stage_eval(
     cases_path: str | Path,
     *,
     limit: int | None = None,
+    scope: ScopeMode = "expected",
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     if limit:
@@ -49,6 +53,9 @@ def run_stage_eval(
     router = BookRouter(settings, provider, catalog)
     answerer = GroundedAnswerer(settings, provider, searcher, router)
     pages = {chunk.id: chunk.pdf_page_index for chunk in catalog.iter_chunks()}
+    ready_books = [
+        book for book in catalog.list_books() if book.status.value == "ready"
+    ]
     rows: list[dict[str, Any]] = []
     try:
         for index, case in enumerate(cases, start=1):
@@ -64,11 +71,22 @@ def run_stage_eval(
             route_start = time.perf_counter()
             route = router.route(case.question)
             route_ms = (time.perf_counter() - route_start) * 1000
+            search_books = _scope_book_ids(
+                scope,
+                case.expected_book_ids,
+                route.book_ids,
+                query,
+                ready_books,
+                catalog,
+                router,
+                provider,
+                settings,
+            )
 
             retrieval_start = time.perf_counter()
             outcome = searcher.search(
                 query,
-                book_ids=list(case.expected_book_ids) or None,
+                book_ids=search_books,
                 limit=5,
             )
             retrieval_ms = (time.perf_counter() - retrieval_start) * 1000
@@ -79,47 +97,72 @@ def run_stage_eval(
             answer_start = time.perf_counter()
             answer = answerer.ask(
                 case.question,
-                book_ids=list(case.expected_book_ids) or None,
+                book_ids=search_books,
                 limit=5,
             )
             answer_ms = (time.perf_counter() - answer_start) * 1000
             cited_pages = {citation.pdf_page_index for citation in answer.citations}
             citation_hits = len(cited_pages & expected_pages)
-
-            rows.append(
-                {
-                    "index": index,
-                    "route_top1": bool(route.book_ids)
-                    and route.book_ids[0] in expected_books,
-                    "route_recall3": bool(expected_books & set(route.book_ids[:3])),
-                    "route_fallback": route.fallback,
-                    "route_ms": round(route_ms, 1),
-                    "page_recall@5": page_hits / len(expected_pages)
-                    if expected_pages
-                    else 0.0,
-                    "chunk_recall@5": chunk_hits / len(expected_chunks)
-                    if expected_chunks
-                    else 0.0,
-                    "page_mrr@5": _page_mrr(retrieved_pages, expected_pages, 5),
-                    "retrieval_ms": round(retrieval_ms, 1),
-                    "answer_ms": round(answer_ms, 1),
-                    "answer_refused": answer.refused,
-                    "citation_precision": citation_hits / len(cited_pages)
-                    if cited_pages
-                    else 0.0,
-                    "citation_recall": citation_hits / len(expected_pages)
-                    if expected_pages
-                    else 0.0,
-                    "gate_signal": not outcome.hits,
-                    "gate_oracle": bool(expected_pages) and page_hits == 0,
-                }
-            )
+            row = {
+                "index": index,
+                "route_top1": bool(route.book_ids)
+                and route.book_ids[0] in expected_books,
+                "route_recall3": bool(expected_books & set(route.book_ids[:3])),
+                "route_fallback": route.fallback,
+                "route_ms": round(route_ms, 1),
+                "page_recall@5": page_hits / len(expected_pages)
+                if expected_pages
+                else 0.0,
+                "chunk_recall@5": chunk_hits / len(expected_chunks)
+                if expected_chunks
+                else 0.0,
+                "page_mrr@5": _page_mrr(retrieved_pages, expected_pages, 5),
+                "retrieval_ms": round(retrieval_ms, 1),
+                "answer_ms": round(answer_ms, 1),
+                "answer_refused": answer.refused,
+                "citations": len(answer.citations),
+                "citation_precision": citation_hits / len(cited_pages)
+                if cited_pages
+                else 0.0,
+                "citation_recall": citation_hits / len(expected_pages)
+                if expected_pages
+                else 0.0,
+                "gate_signal": not outcome.hits,
+                "gate_oracle": bool(expected_pages) and page_hits == 0,
+            }
+            rows.append(row)
             if index % 10 == 0:
                 print(f"{index}/{len(cases)}", flush=True)
     finally:
         searcher.close()
         provider.close()
-    return _aggregate(rows)
+    return _aggregate(rows, scope=scope)
+
+
+def _scope_book_ids(
+    scope: ScopeMode,
+    expected_books: tuple[str, ...],
+    routed_books: tuple[str, ...],
+    query: str,
+    ready_books: list[Any],
+    catalog: Catalog,
+    router: BookRouter,
+    provider: Any,
+    settings: Settings,
+) -> list[str] | None:
+    if scope == "router":
+        return list(routed_books) or None
+    if scope == "candidates":
+        candidates = _candidate_books(
+            query,
+            apply_metadata_filter(ready_books, query),
+            catalog,
+            profiles=router.profiles,
+            provider=provider,
+            use_lemmas=settings.lexical_use_lemmas,
+        )
+        return [book.id for book in candidates] or None
+    return list(expected_books) or None
 
 
 def _page_mrr(
@@ -135,10 +178,11 @@ def _page_mrr(
     return 0.0
 
 
-def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _aggregate(rows: list[dict[str, Any]], *, scope: ScopeMode) -> dict[str, Any]:
     routed = [row for row in rows if not row["route_fallback"]]
     return {
         "cases": len(rows),
+        "scope": scope,
         "gate": {
             "signal": _gate_summary(rows, "gate_signal"),
             "oracle": _gate_summary(rows, "gate_oracle"),
@@ -162,7 +206,10 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "refused": sum(bool(row["answer_refused"]) for row in rows),
             "citation_precision": _mean(rows, "citation_precision"),
             "citation_recall": _mean(rows, "citation_recall"),
-            "empty_citations": sum(
+            "no_citations": sum(
+                row["citations"] == 0 and not row["answer_refused"] for row in rows
+            ),
+            "zero_precision": sum(
                 row["citation_precision"] == 0.0 and not row["answer_refused"]
                 for row in rows
             ),
@@ -217,4 +264,4 @@ def write_report(report: dict[str, Any], path: Path) -> None:
     )
 
 
-__all__ = ["run_stage_eval", "write_report"]
+__all__ = ["ScopeMode", "run_stage_eval", "write_report"]

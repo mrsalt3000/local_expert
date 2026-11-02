@@ -120,6 +120,12 @@ class BookRouter:
             provider=self.provider,
             use_lemmas=self.settings.lexical_use_lemmas,
         )
+        if not self.settings.router_use_llm:
+            return BookRoute(
+                book_ids=tuple(book.id for book in candidates),
+                confidence=0.0,
+                reason="candidate prefilter (router_use_llm=false)",
+            )
         messages = [
             ChatMessage(role="system", content=SYSTEM_PROMPT),
             ChatMessage(

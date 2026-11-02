@@ -43,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"cases={report['cases']} top1={report['top1']} "
             f"recall@3={report['recall_at_3']} "
+            f"scope_coverage={report['scope_coverage']} "
             f"candidate_recall={report['candidate_recall']} "
             f"fallback={report['fallback']}"
         )
@@ -101,6 +102,7 @@ def evaluate(path: Path) -> dict[str, Any]:
                     "fallback": route.fallback,
                     "top1": bool(ids) and ids[0] == expected[0],
                     "recall_at_3": bool(set(expected) & set(ids[:3])),
+                    "scope_hit": bool(set(expected) & set(ids)),
                     "candidate_hit": expected[0] in candidates,
                 }
             )
@@ -117,6 +119,7 @@ def evaluate(path: Path) -> dict[str, Any]:
             sum(row["recall_at_3"] for row in rows) / n,
             4,
         ),
+        "scope_coverage": round(sum(row["scope_hit"] for row in rows) / n, 4),
         "candidate_recall": round(
             sum(row["candidate_hit"] for row in rows) / n,
             4,
