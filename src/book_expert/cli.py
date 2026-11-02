@@ -512,6 +512,7 @@ def ask(
             book_ids=book or None,
             auto_route=not no_route,
             dense=not lexical_only,
+            relevance_filter=settings.answer_relevance_filter,
         )
     except (ProviderError, ValueError, OSError) as exc:
         _fail(str(exc), json_output)
@@ -645,6 +646,11 @@ def stage_eval(
         "--scope",
         help="expected — по разметке, router — выбор роутера, candidates — без LLM.",
     ),
+    relevance_filter: bool = typer.Option(
+        False,
+        "--relevance-filter",
+        help="Отбрасывать хиты, слабо покрывающие редкие термины вопроса.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/stage-eval.local.json"),
         "--output",
@@ -652,13 +658,20 @@ def stage_eval(
 ) -> None:
     """Per-stage eval: routing, retrieval, citations, latency, gate."""
     settings = Settings()
-    report = run_stage_eval(settings, cases, limit=limit, scope=scope)
+    report = run_stage_eval(
+        settings,
+        cases,
+        limit=limit,
+        scope=scope,
+        relevance_filter=relevance_filter,
+    )
     write_report(report, output)
     typer.echo(
         json.dumps(
             {
                 "cases": report["cases"],
                 "scope": report["scope"],
+                "relevance_filter": report["relevance_filter"],
                 "gate": report["gate"],
                 "routing": report["routing"],
                 "retrieval": report["retrieval"],

@@ -253,6 +253,8 @@
 | 2026-11-02 | T33 | review | citation gate на несопоставленные `[n]`: retry → refusal, метрики stage-eval разделены на no_citations/zero_precision; 100 кейсов — 0 срабатываний, refusals 5→5, precision .6042/recall .88 без изменений; 380 tests |
 | 2026-11-02 | T34 | review | negative: deepseek 45/100 при confidence 0.55, порог 0.5 даёт top1 .51, но scope_coverage .90→.82; 4B scope_coverage .44 при 0.6 и .92 при 0.9; retry откатан; в router_eval добавлен scope_coverage, заведена T35 |
 | 2026-11-02 | T35 | accepted | 5 книг/120 кейсов: candidates без LLM .5507/.775, отказов 16, маршрут 0.9 s против LLM .5158/.725, 19 отказов, 2.3 s; `BOOK_EXPERT_ROUTER_USE_LLM=false` по умолчанию; 385 tests |
+| 2026-11-02 | T31 | review | negative: L-6-v2 p50 1136 ms / page@5 .65, turbo-en 1549 ms / .70 против baseline .80 без rerank; default off сохранён |
+| 2026-11-02 | T36 | accepted | relevance-фильтр в ask/ui: citation precision .5507→.5785, отказы 16→14, recall .775 без изменений; `BOOK_EXPERT_ANSWER_RELEVANCE_FILTER=true`; 386 tests |
 
 ### T20 — Book-level routing index
 
@@ -359,12 +361,25 @@
 
 ### T31 — Reranker только при доказанном latency-бюджете
 
-- [ ] Статус: `todo`
+- [ ] Статус: `review` (2026-11-02; negative: малые cross-encoder'ы дают p50 1.1–1.5 s и снижают page@5 с .80 до .65–.70; default остаётся off)
 - Scope: вернуться к T23 только с smaller model/offline batch; замерить
   top-20 rerank latency на 100 кейсах; default off без выигрыша.
 - Acceptance: page recall@5/citation precision растут, p95 latency в бюджете;
   иначе задача закрывается отрицательным результатом.
 - Verify: latency benchmark, 100-case eval, full checks.
+- Результат (20 кейсов, top-20, CPU, `scripts/rerank_probe.py`):
+
+  | модель | page@5 | page MRR@5 | rerank p50 | p95 |
+  | --- | --- | --- | --- | --- |
+  | без rerank | **.80** | **.548** | — | — |
+  | `Xenova/ms-marco-MiniLM-L-6-v2` (80 MB) | .65 | .496 | 1136 ms | 1176 ms |
+  | `jinaai/jina-reranker-v1-turbo-en` (150 MB) | .70 | .429 | 1549 ms | 1592 ms |
+
+  Оба варианта — англоязычные MS MARCO модели, на русских книгах теряют
+  page@5 и не укладываются в бюджет (retrieval p95 162 ms). Мультиязычные
+  варианты (1–2.3 ГБ) уже отклонены в T23 по времени. Rerank остаётся
+  выключенным (`BOOK_EXPERT_RERANK_ENABLED=false`), повторять только с GPU
+  ONNX или мультиязычной моделью <200 МБ.
 
 ### T32 — Structure-aware chunking по разделам
 
@@ -457,3 +472,26 @@
   filtering как операцию БД, а не semantic search, и описывает двухстадийный
   retrieval как candidate generation + reranking — LLM-пикер документа в этом
   описании не нужен. Default переключён, флаг оставлен для возврата.
+
+### T36 — Relevance-фильтр в answer: e2e A/B на 120 кейсах
+
+- [x] Статус: `accepted` (2026-11-02; citation precision .5507→.5785, отказы 16→14, recall без изменений; default включён)
+- Scope: `retrieval/answer.py`, `eval/stage_eval.py` (`--relevance-filter`);
+  сравнить ответы с IDF-фильтром редких терминов и без него при одинаковом
+  retrieval (scope router/candidates), 5 книг / 120 кейсов.
+- Acceptance: citation precision растёт, отказы не растут больше чем на
+  2 п.п.; иначе default остаётся off (как сейчас).
+- Verify: 120-case stage-eval в двух конфигурациях, targeted tests, full checks.
+- Основание: фильтр давно включён в MCP `ask_books`, но его влияние на
+  page-level citation precision в e2e ни разу не измерялось.
+- Результат (5 книг / 120 кейсов, deepseek, `--scope router`):
+
+  | конфигурация | page@5 | citation prec/rec | refusals | zero_precision |
+  | --- | --- | --- | --- | --- |
+  | без фильтра | .8083 | .5507 / .775 | 16 | 11 |
+  | с фильтром | .8083 | **.5785 / .775** | **14** | 13 |
+
+  Retrieval не меняется (фильтр работает после поиска), latency ответа та же
+  (p50 1.56 s). Фильтр включён для `ask`, веб-чата и MCP
+  (`BOOK_EXPERT_ANSWER_RELEVANCE_FILTER=true`), stage-eval по умолчанию
+  считает без него, чтобы baseline оставался сравнимым.

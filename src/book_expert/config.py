@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     router_confidence_threshold: float = 0.6
     router_use_llm: bool = False
     relevance_filter_min_ratio: float = 0.5
+    answer_relevance_filter: bool = True
     advanced_query_limit: int = 4
     super_max_rounds: int = 5
     rrf_dense_weight: float = 1.0

@@ -179,6 +179,10 @@ recall 0.775 против 0.725, отказов 16 против 19, маршру
 Вернуть прежнее поведение — `BOOK_EXPERT_ROUTER_USE_LLM=true`; порог
 `BOOK_EXPERT_ROUTER_CONFIDENCE_THRESHOLD` действует только в этом режиме.
 
+Ответы `ask` и веб-чата по умолчанию проходят relevance-фильтр (IDF редких
+терминов): на 120 кейсах он поднял citation precision с 0.5507 до 0.5785 и
+сократил отказы с 16 до 14. Отключить — `BOOK_EXPERT_ANSWER_RELEVANCE_FILTER=false`.
+
 ## Данные и приватность
 
 Реальный PDF, extracted text, эмбеддинги, индексы, трейсы и audit нельзя

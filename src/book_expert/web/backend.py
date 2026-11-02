@@ -74,6 +74,7 @@ class BookChatBackend:
             book_ids=list(book_ids) if book_ids else None,
             auto_route=True,
             history=history,
+            relevance_filter=self.settings.answer_relevance_filter,
         )
 
     def ask_advanced(

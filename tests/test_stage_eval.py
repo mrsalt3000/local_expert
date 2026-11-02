@@ -74,6 +74,7 @@ class FakeRouter:
 class FakeAnswerer:
     def __init__(self, mapping: dict[str, tuple[list[Citation], bool]]) -> None:
         self.mapping = mapping
+        self.filters: list[bool] = []
 
     def ask(
         self,
@@ -81,7 +82,9 @@ class FakeAnswerer:
         *,
         book_ids: list[str] | None = None,
         limit: int = 5,
+        relevance_filter: bool = False,
     ) -> Answer:
+        self.filters.append(relevance_filter)
         citations, refused = self.mapping.get(question, ([], True))
         return Answer(text="answer", citations=tuple(citations), refused=refused)
 
@@ -269,6 +272,26 @@ def test_stage_eval_candidates_scope_uses_prefilter(
     )
 
     assert searcher.book_scopes == [["book-1"], ["book-1"]]
+
+
+def test_stage_eval_passes_relevance_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    answerer = FakeAnswerer({"q1": ([], True), "q2": ([], True)})
+    _install(
+        monkeypatch,
+        searcher=FakeSearcher({}),
+        router=FakeRouter({}),
+        answerer=answerer,
+        chunk_pages={"c1": 10, "c4": 40},
+    )
+
+    report = stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False),
+        Path("cases.json"),
+        relevance_filter=True,
+    )
+
+    assert report["relevance_filter"] is True
+    assert answerer.filters == [True, True]
 
 
 def test_write_report(tmp_path: Path) -> None:

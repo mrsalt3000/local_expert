@@ -41,6 +41,7 @@ def run_stage_eval(
     *,
     limit: int | None = None,
     scope: ScopeMode = "expected",
+    relevance_filter: bool = False,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     if limit:
@@ -99,6 +100,7 @@ def run_stage_eval(
                 case.question,
                 book_ids=search_books,
                 limit=5,
+                relevance_filter=relevance_filter,
             )
             answer_ms = (time.perf_counter() - answer_start) * 1000
             cited_pages = {citation.pdf_page_index for citation in answer.citations}
@@ -136,7 +138,7 @@ def run_stage_eval(
     finally:
         searcher.close()
         provider.close()
-    return _aggregate(rows, scope=scope)
+    return _aggregate(rows, scope=scope, relevance_filter=relevance_filter)
 
 
 def _scope_book_ids(
@@ -178,11 +180,17 @@ def _page_mrr(
     return 0.0
 
 
-def _aggregate(rows: list[dict[str, Any]], *, scope: ScopeMode) -> dict[str, Any]:
+def _aggregate(
+    rows: list[dict[str, Any]],
+    *,
+    scope: ScopeMode,
+    relevance_filter: bool,
+) -> dict[str, Any]:
     routed = [row for row in rows if not row["route_fallback"]]
     return {
         "cases": len(rows),
         "scope": scope,
+        "relevance_filter": relevance_filter,
         "gate": {
             "signal": _gate_summary(rows, "gate_signal"),
             "oracle": _gate_summary(rows, "gate_oracle"),

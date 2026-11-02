@@ -185,9 +185,15 @@ class FakeAnswerer:
         auto_route: bool = True,
         limit: int | None = None,
         dense: bool = True,
+        relevance_filter: bool = False,
     ) -> Answer:
         self.calls.append(
-            {"question": question, "book_ids": book_ids, "auto_route": auto_route}
+            {
+                "question": question,
+                "book_ids": book_ids,
+                "auto_route": auto_route,
+                "relevance_filter": relevance_filter,
+            }
         )
         return Answer(
             text="Grounded answer [1].",
@@ -256,7 +262,12 @@ def test_ask_json_no_route(monkeypatch: Any) -> None:
     assert payload["answer"] == "Grounded answer [1]."
     assert payload["citations"][0]["chunk_id"] == "c1"
     assert services.answerer.calls == [
-        {"question": "What?", "book_ids": ["book-1"], "auto_route": False}
+        {
+            "question": "What?",
+            "book_ids": ["book-1"],
+            "auto_route": False,
+            "relevance_filter": True,
+        }
     ]
     assert services.closed is True
 
