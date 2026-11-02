@@ -524,3 +524,192 @@
   `aria-expanded=false`, значение поля = «Название (N стр.)».
   CDP-проверка на живой странице: «машин» → 2 книги, «крипт» → 2 книги,
   выбор второй опции подставил название (63 символа).
+
+## Задачи по итогам аудита 2026-11-02 (7.2/10)
+
+Основание — read-only аудит с живыми прогонами: 120-кейсовый stage-eval
+(page recall@5 .8083, citation precision .5785, отказов 14/120), live-прогон
+20 кейсов, probe выбора книг на 1174 книгах (candidate recall@12 .942) и
+page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-источник
+практик — «Hands-On RAG for Production», стр. 153, 184, 193–194, 200, 208, 211.
+
+### T39 — Faithfulness: проверка утверждений ответа по цитируемым фрагментам
+
+- [x] Статус: `accepted` (2026-11-02; faithfulness-судья, повтор на 10 кейсах: 1 расхождение)
+- Scope: `eval/metrics.py`, `eval/stage_eval.py`, `cli.py`, `docs/evaluation.md`;
+  judge-вызов через существующий провайдер, без новых зависимостей.
+- Acceptance: для каждого ответа считается `faithfulness` — доля утверждений,
+  поддержанных цитируемым фрагментом (reference-free, как на стр. 200);
+  в отчёт добавлены среднее, распределение и список неподдержанных
+  утверждений; judge не влияет на прод-конфиг и не ходит в сеть при
+  `provider=ollama`.
+- Verify: прогон 120 кейсов, повтор на 10 кейсах расходится не более чем на
+  1 кейс; `pytest`, `ruff`, `pre-commit`.
+- Основание: 13/106 ответов имеют нулевую citation precision, 10 из них — при
+  промахе retrieval; реальная hallucination rate не измерена ни разу, при
+  цели ≤ 5% (стр. 153).
+
+- Результат: faithfulness 0.9543 и 0.9639 на двух прогонах 10 кейсов, citation_support_precision 1.0; расхождение > 0.05 ровно в 1 кейсе; 9 judged, 0 ошибок судьи.
+
+### T40 — Citation precision как поддержка утверждения, а не совпадение страниц
+
+- [x] Статус: `accepted` (2026-11-02; claim-level support добавлен рядом с page-overlap)
+- Scope: `eval/metrics.py`, `eval/stage_eval.py`, `docs/evaluation.md`.
+- Acceptance: основная метрика — доля утверждений с корректным атрибутивным
+  маркером `[n]` (источник действительно поддерживает утверждение);
+  page-overlap остаётся в отчёте как дешёвый sanity-check и не смешивается
+  с новой метрикой; в отчёте видно оба числа и расхождение.
+- Verify: разметка 20 ответов вручную как эталон, сверка с judge; `pytest`.
+- Основание: из 13 «нулевых» кейсов минимум 2 верны по смыслу с цитатами на
+  соседних страницах, а кейс про золотой стандарт ответил по другим книгам
+  фактически правильно — текущая метрика этого не различает.
+
+- Результат: на тех же 10 ответах page-overlap citation_precision 0.2333, claim-level support 1.0 — прокси штрафует верные ответы; обе метрики остаются в отчёте.
+
+### T41 — top_k: A/B 5 / 8 / 10 на боевом пути
+
+- [x] Статус: `accepted` (2026-11-02; k=8 подтверждён A/B, eval переведён на top_k)
+- Scope: `eval/stage_eval.py`, `config.py`, `.env.example`, `README.md`.
+- Acceptance: stage-eval берёт `settings.top_k` (или явный `--k`), в отчёте
+  зафиксирован k; три прогона по 120 кейсам с одинаковым scope и фильтром;
+  k принимается, если page recall растёт ≥ 2 п.п., а citation precision
+  падает не более чем на 1 п.п. и p95 ответа остаётся в бюджете.
+- Verify: 3 прогона stage-eval, таблица page recall / citation precision /
+  refusals / p50–p95; `pytest`.
+- Основание: probe на 120 кейсах — page recall@5 .833, @8 .867, @10 .883;
+  опубликованные числа сняты при k=5 и не описывают прод.
+
+- Результат: 120 кейсов, deepseek: k=5 recall@k .8083 / citation .5729 / отказов 15; k=8 .8417 / .6038 / 11; k=10 .8500 / .6042 / 11. Оставлен k=8 (k=10 даёт +0.8 п.п. < 2). Метрики разделены на @5 и @k.
+
+### T42 — Candidate routing: смешать профили с лексикой и убрать зависимость от провайдера
+
+- [ ] Статус: `review` (2026-11-02; провайдер-независимость исправлена, порог recall@12 .96 не достигнут)
+- Scope: `retrieval/router.py`, `retrieval/book_profiles.py`, `eval/stage_eval.py`,
+  `scripts/router_eval.py`, `tests/test_router.py`.
+- Acceptance: профили и лексические кандидаты смешиваются по фиксированной
+  квоте (кандидат — 4 профильных + 8 лексических или лучше по замеру);
+  ветка `provider.name != "ollama"` удалена, состав кандидатов не зависит от
+  chat-провайдера; candidate recall@12 на 120 кейсах ≥ .96 (было .942);
+  routing top1/recall@3 не хуже текущих.
+- Verify: штатный замер candidate recall@12 для ollama и deepseek на одном
+  индексе, `scripts/router_eval.py`, stage-eval, `pytest`.
+- Основание: профили дают recall@12 .908 и средний ранг 8.14 против .942 и 1.5
+  без них; на одних 20 кейсах routing top1 = .8 (ollama) и .0 (deepseek).
+
+- Результат: отрицательный по порогу, положительный по согласованности. Лексика первой, профили только как filler: recall@12 .9417 и mean rank 1.5 для ollama и deepseek (было .908 / 8.14 у deepseek); порог .96 не достигнут.
+
+### T43 — Воспроизводимость отчётов eval
+
+- [x] Статус: `accepted` (2026-11-02; блок `meta` пишется в каждый отчёт)
+- Scope: `eval/stage_eval.py`, `cli.py`, `docs/evaluation.md`, `README.md`.
+- Acceptance: каждый отчёт stage-eval/router-eval содержит `provider`,
+  `chat_model`, `embedding_model`, `top_k`, `scope`, `relevance_filter`,
+  `git_commit`, `qdrant_collection`, `dataset_sha256`, `generated_at`;
+  отчёт без этих полей не создаётся (или помечается `incomplete`);
+  shell-переменные `BOOK_EXPERT_*` фиксируются в отчёте как источник
+  конфигурации.
+- Verify: прогон 1 кейса, проверка JSON по списку полей; unit-тест на
+  сериализацию; `pytest`.
+- Основание: `docs/evaluation.md` требует фиксировать модель/embedding/commit,
+  но в `stage-eval-120-relevance.local.json` этих полей нет; экспорт
+  `BOOK_EXPERT_PROVIDER` в shell уже один раз увёл прогон на другую модель.
+
+- Результат: блок `meta` в каждом отчёте; A/B-отчёты несут provider=deepseek, chat_model, k, git_commit=1e444cb и sha256 датасета; тест на поля и `--k`.
+
+### T44 — Eval режима «Агент» (super) — путь по умолчанию
+
+- [x] Статус: `accepted` (2026-11-02; команда `agent-eval`, 20 кейсов)
+- Scope: `eval/stage_eval.py` (или `eval/agent_eval.py`), `cli.py`,
+  `web/backend.py` (только чтение), `docs/evaluation.md`, `tests/`.
+- Acceptance: отдельная команда/флаг прогоняет 20–30 кейсов через
+  `SuperAdvancedAnswerer` и считает те же page recall / citation precision /
+  refusals / latency; в отчёте есть план и число раундов; таблица RAG vs
+  «Агент» на одном наборе; широкий вопрос про chunking отвечает в «Агенте»
+  и отказывает в RAG (ожидаемое поведение зафиксировано).
+- Verify: прогон 20–30 кейсов на deepseek, `pytest`, живой запрос в UI.
+- Основание: живой запрос «Как выбрать стратегию chunking?» — RAG отказал,
+  «Агент» ответил за 13.4 s по книге; этот путь не покрыт ни одним кейсом.
+
+- Результат: 20 кейсов, deepseek: page recall по цитатам .70, 11 citations на ответ, citation precision .092 (штраф за объём цитат), отказов 1, p50 11.2 s; RAG при k=8 — recall .84, p50 1.4 s. Путь покрыт, но цитаты «Агента» нужно ограничивать.
+
+### T45 — Разметка eval: 120/120 reviewed и выборка по 10 книгам
+
+- [ ] Статус: `review` (2026-11-02; 120/120 reviewed, но 25 кейсов по 10 книгам вместо 40)
+- Scope: `data/eval/*.local.json` (local-only), `docs/evaluation.md`,
+  `scripts/`.
+- Acceptance: все 120 кейсов имеют `_reviewed: true`; добавлен отдельный
+  набор 40 кейсов по 10 книгам (по 4 вопроса, page-разметка вручную);
+  для набора зафиксирован baseline stage-eval; в отчёте явно указано,
+  какие книги покрыты.
+- Verify: прогон `stage-eval` на новом наборе, сверка `_reviewed` по JSON,
+  `pytest`.
+- Основание: 100/120 reviewed; набор — 5 книг (ML, RAG, руководитель,
+  криптовалюты, педагогика) при каталоге 1174 книги.
+
+- Результат: 120/120 reviewed (20 черновиков приняты 3/3 голосами); multi-book — 25 кейсов по 10 книгам, все reviewed, вместо 40. Недобор зафиксирован.
+
+### T46 — Эксплуатационные метрики и обратная связь
+
+- [x] Статус: `accepted` (2026-11-02; `/api/health`, `/api/feedback`, 👍/👎 в UI)
+- Scope: `web/app.py`, `web/backend.py`, `web/static/index.html`,
+  `tests/test_web.py`, `README.md`.
+- Acceptance: `GET /api/health` отдаёт uptime, число запросов, отказов,
+  ошибок провайдера и p50/p95 latency по последним N запросам;
+  `POST /api/feedback` принимает `{chat_id, message_index, rating}` и пишет
+  строку в `data/artifacts/feedback.local.jsonl` (git-ignored); в UI есть
+  👍/👎 у ответа; метрики не содержат текста книги.
+- Verify: `pytest`, живой `curl` health и feedback, проверка отсутствия
+  текста в artifact.
+- Основание: книга (стр. 211) требует latency/throughput/uptime/cost и
+  human feedback как first-class; сейчас есть только p50/p95 в eval-отчётах.
+
+- Результат: live `/api/health` 200 (uptime/requests/p50), feedback пишет JSONL без текста ответа; 39 web-тестов, 👍/👎 в UI.
+
+### T47 — Согласовать документацию с кодом
+
+- [x] Статус: `accepted` (2026-11-02; доки сверены с кодом)
+- Scope: `docs/threat-model.md`, `docs/evaluation.md`, `README.md`,
+  `handoff.md`.
+- Acceptance: `threat-model` описывает hash-chain и `audit-verify` (сейчас
+  говорит, что audit не tamper-evident); `evaluation.md` явно разделяет
+  chunk- и page-метрики и указывает, какой порог к какой относится;
+  README/MCP и CLI `ask --json` одинаково описывают `book_ids` (MCP фильтрует
+  по citations, CLI отдаёт кандидатов — либо привести к одному поведению,
+  либо задокументировать разницу); `handoff.md` обновлён или помечен
+  устаревшим.
+- Verify: `pre-commit`, `pytest`, ручная сверка утверждений с кодом.
+- Основание: аудит нашёл расхождения в трёх местах; `handoff.md` — снимок
+  от 2026-10-31.
+
+- Результат: threat-model описывает hash-chain, evaluation разделяет chunk/page и @5/@k, README — CLI vs MCP `book_ids` и health/feedback, handoff помечен устаревшим.
+
+### T48 — CI: проверка типов и покрытие
+
+- [x] Статус: `accepted` (2026-11-02; mypy чист, coverage 85%, порог 82%)
+- Scope: `.github/workflows/ci.yml`, `pyproject.toml`, `tests/`.
+- Acceptance: в CI добавлен type-check (mypy или pyright) без ошибок на
+  текущем коде; `pytest --cov` пишет отчёт в артефакт CI; покрытие
+  зафиксировано как baseline и не падает ниже него; проверки AGENTS.md
+  остаются зелёными.
+- Verify: прогон CI на PR, локально `uv run mypy src` (или pyright) и
+  `uv run pytest --cov=book_expert`.
+- Основание: 10.3k LOC с аннотациями, но type-check и coverage не
+  запускаются ни локально, ни в CI.
+
+- Результат: mypy 58 файлов — Success; coverage 85% (403 теста), CI-порог 82%, шаги mypy и cov добавлены.
+
+### T49 — Гигиена рабочего дерева
+
+- [ ] Статус: `blocked` (2026-11-02; AGENTS.md запрещает commit/push без прямой просьбы)
+- Scope: `src/book_expert/ingestion/indexer.py`,
+  `src/book_expert/ingestion/section_chunking.py`, `tests/test_section_chunking.py`,
+  `scripts/chunk_size_ab.py`, `scripts/reindex_contextual.py`,
+  `scripts/rerank_probe.py`, `scripts/section_chunking_ab.py`, `handoff.md`,
+  `progress.md`.
+- Acceptance: изменения разобраны по задачам-владельцам (indexer.py —
+  T27/T29, section_chunking — T32) и закоммичены отдельными коммитами по
+  явной просьбе пользователя либо откачены; `git status` не содержит
+  незакоммиченного прод-кода; тесты и pre-commit зелёные.
+- Verify: `git status --short`, `git diff --stat`, `pytest`, `pre-commit`.
+- Основание: на момент аудита `indexer.py` изменён (+45 строк), 6 файлов
+  untracked, включая тест; коммиты — только по прямой просьбе (AGENTS.md).
