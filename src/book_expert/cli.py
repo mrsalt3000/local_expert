@@ -701,6 +701,37 @@ def stage_eval(
     console.print(f"отчёт: {output}")
 
 
+@app.command("agent-eval")
+def agent_evaluate(
+    cases: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    output: Path = typer.Option(
+        Path("data/artifacts/agent-eval.local.json"),
+        "--output",
+    ),
+) -> None:
+    """Eval режима «Агент»: тот же набор, но ответ строит super-answerer."""
+    from book_expert.eval.agent_eval import run_agent_eval
+
+    report = run_agent_eval(Settings(), cases, limit=limit)
+    write_report(report, output)
+    typer.echo(
+        json.dumps(
+            {
+                "cases": report["cases"],
+                "mode": report["mode"],
+                "meta": report["meta"],
+                "retrieval": report["retrieval"],
+                "answers": report["answers"],
+                "plan": report["plan"],
+                "latency_ms": report["latency_ms"],
+            },
+            ensure_ascii=False,
+        )
+    )
+    console.print(f"отчёт: {output}")
+
+
 @app.command("eval")
 def evaluate(
     cases: Path | None = typer.Argument(

@@ -1,0 +1,112 @@
+"""Тесты eval режима «Агент»."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from book_expert.config import Settings
+from book_expert.eval import agent_eval
+from book_expert.eval.metrics import EvalCase
+from book_expert.models import Answer, Citation
+
+
+class FakeCatalog:
+    def __init__(self, chunks: list[object]) -> None:
+        self.chunks = chunks
+
+    def initialize(self) -> None:
+        pass
+
+    def iter_chunks(self) -> list[object]:
+        return self.chunks
+
+
+class FakeProvider:
+    name = "fake"
+    chat_model = "fake-chat"
+    embedding_model = "fake-embed"
+
+    def close(self) -> None:
+        pass
+
+
+class FakeSearcher:
+    def close(self) -> None:
+        pass
+
+
+class FakeRouter:
+    profiles = None
+
+    def route(self, query: str) -> None:
+        return None
+
+
+class FakeAgentAnswerer:
+    def __init__(self, mapping: dict[str, Answer]) -> None:
+        self.mapping = mapping
+        self.questions: list[str] = []
+
+    def ask(self, question: str, **kwargs: object) -> Answer:
+        self.questions.append(question)
+        return self.mapping[question]
+
+
+def _citation(page: int) -> Citation:
+    return Citation(
+        book_id="book-1",
+        book_title="Book One",
+        pdf_page_index=page,
+        chunk_id=f"c{page}",
+        number=1,
+    )
+
+
+def test_agent_eval_aggregates_citations_and_plan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    chunks = [
+        SimpleNamespace(id="c1", pdf_page_index=10),
+        SimpleNamespace(id="c2", pdf_page_index=20),
+    ]
+    answerer = FakeAgentAnswerer(
+        {
+            "q1": Answer(
+                text="Ответ [1].",
+                citations=(_citation(10),),
+                plan=("q1", "q1 details"),
+                rounds=1,
+                max_rounds=5,
+            ),
+            "q2": Answer(text="мало", refused=True),
+        }
+    )
+    monkeypatch.setattr(agent_eval, "Catalog", lambda path: FakeCatalog(chunks))
+    monkeypatch.setattr(agent_eval, "get_provider", lambda settings: FakeProvider())
+    monkeypatch.setattr(agent_eval, "HybridSearcher", lambda *a, **k: FakeSearcher())
+    monkeypatch.setattr(agent_eval, "BookRouter", lambda *a, **k: FakeRouter())
+    monkeypatch.setattr(agent_eval, "SuperAdvancedAnswerer", lambda *a, **k: answerer)
+    monkeypatch.setattr(
+        agent_eval,
+        "load_cases",
+        lambda path: (
+            EvalCase("q1", ("c1",), ("book-1",)),
+            EvalCase("q2", ("c2",), ("book-1",)),
+        ),
+    )
+
+    report = agent_eval.run_agent_eval(Settings(), tmp_path / "cases.json")
+
+    assert report["cases"] == 2
+    assert report["mode"] == "super"
+    assert report["retrieval"]["page_recall"] == 0.5
+    assert report["answers"]["refused"] == 1
+    assert report["answers"]["no_citations"] == 0
+    assert report["plan"]["avg_queries"] == 1.0
+    assert report["plan"]["avg_rounds"] == 0.5
+    assert report["meta"]["provider"] == "fake"
+    assert report["details"][0]["citation_precision"] == 1.0
+    assert answerer.questions == ["q1", "q2"]
