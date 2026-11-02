@@ -76,6 +76,14 @@ uv run book-expert stage-eval path/to/cases.json --scope candidates --k 10 --fai
 Пороги пересматриваются после первого прогона на реальной библиотеке; реальные
 значения остаются локальными.
 
+**Chunk- и page-шкалы.** Порог `recall@5 >= 0.8` относится к страничным
+метрикам (`page_recall@5`), потому что chunk id привязан к конкретной сборке
+индекса и расходится после переиндексации. Chunk-метрики остаются в отчёте
+справочно: на 120 кейсах chunk recall@5 ≈ 0.62 при page recall@5 ≈ 0.81–0.83,
+и низкий chunk recall сам по себе не означает провал retrieval. Для citation
+качества основной считается `citation_support_precision` (поддержка
+утверждения), page-overlap — sanity-check.
+
 ## Parser assessment
 
 Отдельный контракт и rubric — [docs/parsing-assessment.md](parsing-assessment.md).
