@@ -656,6 +656,13 @@ def stage_eval(
         "--faithfulness",
         help="LLM-судья: поддержка утверждений ответа цитируемыми фрагментами.",
     ),
+    k: int | None = typer.Option(
+        None,
+        "--k",
+        min=1,
+        max=20,
+        help="Сколько хитов брать в ответ; по умолчанию BOOK_EXPERT_TOP_K.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/stage-eval.local.json"),
         "--output",
@@ -670,12 +677,14 @@ def stage_eval(
         scope=scope,
         relevance_filter=relevance_filter,
         faithfulness=faithfulness,
+        k=k,
     )
     write_report(report, output)
     typer.echo(
         json.dumps(
             {
                 "cases": report["cases"],
+                "k": report["k"],
                 "scope": report["scope"],
                 "relevance_filter": report["relevance_filter"],
                 "faithfulness_enabled": report["faithfulness_enabled"],

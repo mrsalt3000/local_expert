@@ -269,7 +269,7 @@ uv run python scripts/router_eval.py data/eval/router-eval.local.json
 `stage-eval` считает стадии отдельно (routing, retrieval, citations, latency) и
 симулирует retrieval gate. Ответ генерируется всегда, иначе не измерить
 false refusals: gate `signal` — наблюдаемый сигнал «поиск не вернул хитов»,
-gate `oracle` — в top-5 нет ожидаемой страницы (верхняя граница экономии,
+gate `oracle` — в top-k нет ожидаемой страницы (верхняя граница экономии,
 требует разметки). Метрики цитат считаются по страницам, потому что chunk id
 размеченного набора привязан к конкретной сборке индекса и расходится после
 переиндексации.

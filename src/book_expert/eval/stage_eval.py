@@ -44,10 +44,14 @@ def run_stage_eval(
     scope: ScopeMode = "expected",
     relevance_filter: bool = False,
     faithfulness: bool = False,
+    k: int | None = None,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     if limit:
         cases = cases[:limit]
+    result_k = settings.top_k if k is None else k
+    if result_k <= 0:
+        raise ValueError("k must be positive")
     settings.ensure_dirs()
     catalog = Catalog(settings.catalog_path)
     catalog.initialize()
@@ -91,18 +95,23 @@ def run_stage_eval(
             outcome = searcher.search(
                 query,
                 book_ids=search_books,
-                limit=5,
+                limit=result_k,
             )
             retrieval_ms = (time.perf_counter() - retrieval_start) * 1000
             retrieved_pages = [hit.pdf_page_index for hit in outcome.hits]
-            page_hits = len(expected_pages & set(retrieved_pages))
-            chunk_hits = len(expected_chunks & {hit.chunk_id for hit in outcome.hits})
+            top5_pages = retrieved_pages[:5]
+            page_hits = len(expected_pages & set(top5_pages))
+            page_hits_k = len(expected_pages & set(retrieved_pages))
+            chunk_hits = len(
+                expected_chunks & {hit.chunk_id for hit in outcome.hits[:5]}
+            )
+            chunk_hits_k = len(expected_chunks & {hit.chunk_id for hit in outcome.hits})
 
             answer_start = time.perf_counter()
             answer = answerer.ask(
                 case.question,
                 book_ids=search_books,
-                limit=5,
+                limit=result_k,
                 relevance_filter=relevance_filter,
             )
             answer_ms = (time.perf_counter() - answer_start) * 1000
@@ -125,10 +134,17 @@ def run_stage_eval(
                 "page_recall@5": page_hits / len(expected_pages)
                 if expected_pages
                 else 0.0,
+                "page_recall@k": page_hits_k / len(expected_pages)
+                if expected_pages
+                else 0.0,
                 "chunk_recall@5": chunk_hits / len(expected_chunks)
                 if expected_chunks
                 else 0.0,
-                "page_mrr@5": _page_mrr(retrieved_pages, expected_pages, 5),
+                "chunk_recall@k": chunk_hits_k / len(expected_chunks)
+                if expected_chunks
+                else 0.0,
+                "page_mrr@5": _page_mrr(top5_pages, expected_pages, 5),
+                "page_mrr@k": _page_mrr(retrieved_pages, expected_pages, result_k),
                 "retrieval_ms": round(retrieval_ms, 1),
                 "answer_ms": round(answer_ms, 1),
                 "answer_refused": answer.refused,
@@ -159,12 +175,14 @@ def run_stage_eval(
     finally:
         searcher.close()
         provider.close()
-    return _aggregate(
+    report = _aggregate(
         rows,
         scope=scope,
         relevance_filter=relevance_filter,
         faithfulness=faithfulness,
     )
+    report["k"] = result_k
+    return report
 
 
 def _scope_book_ids(
@@ -235,8 +253,11 @@ def _aggregate(
         },
         "retrieval": {
             "page_recall_at_5": _mean(rows, "page_recall@5"),
+            "page_recall_at_k": _mean(rows, "page_recall@k"),
             "page_mrr_at_5": _mean(rows, "page_mrr@5"),
+            "page_mrr_at_k": _mean(rows, "page_mrr@k"),
             "chunk_recall_at_5": _mean(rows, "chunk_recall@5"),
+            "chunk_recall_at_k": _mean(rows, "chunk_recall@k"),
         },
         "answers": {
             "refused": sum(bool(row["answer_refused"]) for row in rows),

@@ -348,3 +348,54 @@ def test_stage_eval_judges_faithfulness(monkeypatch: pytest.MonkeyPatch) -> None
     assert len(judge.calls) == 1
     assert report["details"][0]["judged_claims"] == 1
     assert report["details"][1]["faithfulness"] is None
+
+
+def test_stage_eval_uses_top_k(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text("[]", encoding="utf-8")
+    _install(
+        monkeypatch,
+        searcher=FakeSearcher({"q1": [_hit("c1", 10)], "q2": []}),
+        router=FakeRouter({}),
+        answerer=FakeAnswerer({"q1": ([], True), "q2": ([], True)}),
+        chunk_pages={"c1": 10, "c4": 40},
+    )
+
+    report = stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False, top_k=11),
+        cases_path,
+    )
+
+    assert report["k"] == 11
+    overridden = stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False, top_k=11),
+        cases_path,
+        k=3,
+    )
+    assert overridden["k"] == 3
+
+
+def test_stage_eval_separates_recall_at_5_and_at_k(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text("[]", encoding="utf-8")
+    hits = [_hit(f"x{index}", 90 + index) for index in range(5)] + [_hit("c1", 10)]
+    _install(
+        monkeypatch,
+        searcher=FakeSearcher({"q1": hits, "q2": []}),
+        router=FakeRouter({}),
+        answerer=FakeAnswerer({"q1": ([], True), "q2": ([], True)}),
+        chunk_pages={"c1": 10, "c4": 40},
+    )
+
+    report = stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False),
+        cases_path,
+        k=8,
+    )
+
+    assert report["retrieval"]["page_recall_at_5"] == 0.0
+    assert report["retrieval"]["page_recall_at_k"] == 0.5
+    assert report["retrieval"]["chunk_recall_at_5"] == 0.0
+    assert report["retrieval"]["chunk_recall_at_k"] == 0.5
