@@ -163,6 +163,7 @@ BOOK_EXPERT_SUPER_MAX_ROUNDS=5
 | `ui` | Веб-чат в браузере: RAG-ответы с цитатами или агент |
 | `mcp` | MCP stdio server (`search_books`, `ask_books`, `list_books`, `get_outline`) |
 | `eval` | `--synthetic` или `<cases.json>`: recall@k, MRR, citations |
+| `stage-eval` | Per-stage routing/retrieval/citations/latency + gate-симуляция |
 
 `reindex-lemmas` — maintenance-команда: она перестраивает FTS и блокирует
 параллельную запись в каталог; запускайте её при остановленном ingest.
@@ -237,11 +238,20 @@ BOOK_EXPERT_RERANK_TOP_N=20
 uv run pytest
 uv run book-expert eval --synthetic
 uv run book-expert eval path/to/cases.json --k 5
+uv run book-expert stage-eval data/eval/combined-100.local.json
 uv run python scripts/router_eval.py data/eval/router-eval.local.json
 ```
 
 `router_eval` проверяет выбор книги без явного `book_ids`: top-1, recall@3 и
 попадание target в prefilter-кандидаты. Датасет — local-only `*.local.json`.
+
+`stage-eval` считает стадии отдельно (routing, retrieval, citations, latency) и
+симулирует retrieval gate. Ответ генерируется всегда, иначе не измерить
+false refusals: gate `signal` — наблюдаемый сигнал «поиск не вернул хитов»,
+gate `oracle` — в top-5 нет ожидаемой страницы (верхняя граница экономии,
+требует разметки). Метрики цитат считаются по страницам, потому что chunk id
+размеченного набора привязан к конкретной сборке индекса и расходится после
+переиндексации.
 
 Parser assessment (Docling/PyMuPDF) описан в
 [docs/parsing-assessment.md](docs/parsing-assessment.md). Для локального

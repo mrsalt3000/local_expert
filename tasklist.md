@@ -243,10 +243,13 @@
 | 2026-11-01 | T24 | accepted | 100 reviewed на 3 книгах; page recall@5 0.910, citation precision 0.533/recall 0.643, 5 отказов |
 | 2026-11-01 | T22 | accepted | contextual embeddings (books_ctx): chunk recall@5 0.5865, page recall@10 0.9615; page-context default off; 361 tests |
 | 2026-11-01 | T23 | accepted | BAAI/bge-reranker-v2-m3-int8 не уложился в 10 мин на 52 кейсах; default off |
-| 2026-11-02 | T29 | in_progress | contextual reindex books_ctx_full: 1151 книга/548999 chunks, systemd job; eval после завершения |
+| 2026-11-02 | T26 | review | 5 книг/120 кейсов: 500 page@10 .9667, citation .6389/.8583, refusals 13; 1000 baseline page@5 .925, refusals 7; default 1000 сохранён |
+| 2026-11-02 | T32 | review | 5 книг/120 кейсов: section-aware page@5 .9083 vs .925, @10 .9333 vs .95, MRR .7538 vs .781; negative, production 1000/150 |
+| 2026-11-02 | T29 | review | 1151/548999 reindex ok; contextual: chunk .7092, page .900, citation .5367/.6483, empty 9; production books оставлен |
 | 2026-11-02 | T25 | accepted | retrieval query rewrite; citation precision 0.5325→0.5457, recall 0.6433, 365 tests |
 | 2026-11-02 | T27 | accepted | metadata prefilter year/format/author/language; routing top1 0.533, candidate 0.733 |
 | 2026-11-02 | T30 | accepted | parser quality gate: coverage/reject/warn, parser-audit + ingest --quality-gate; 372 tests |
+| 2026-11-02 | T28 | review | 100 кейсов: retrieval page@5 .91/MRR .786/chunk .69 у обоих провайдеров; deepseek citation .604/.88, refusals 5, empty 7; ollama .576/.86, refusals 1, empty 13; oracle-gate 9 без false refusals, signal-gate 0; routing non-fallback top1 .606 vs .309 |
 
 ### T20 — Book-level routing index
 
@@ -307,7 +310,7 @@
 
 ### T26 — Chunk-size A/B 500 / 1000 / 1500
 
-- [ ] Статус: `todo`
+- [ ] Статус: `review` (2026-11-02; 500: page@10 +1.7pp, но refusals 13 vs 7, citation recall −1.7pp; default 1000 оставлен)
 - Scope: reindex одной книги в отдельные коллекции с chunk_size/overlap
   вариантами; 100-case eval; не менять default без выигрыша.
 - Acceptance: выбран лучший вариант по chunk/page recall@5 и citation
@@ -325,7 +328,7 @@
 
 ### T28 — Per-stage eval и retrieval gate
 
-- [ ] Статус: `todo`
+- [ ] Статус: `review` (2026-11-02; 100 кейсов × 2 провайдера: retrieval page@5 .91, page MRR@5 .786, chunk@5 .69; deepseek citation .604/.88, refusals 5, empty 7; ollama .576/.86, refusals 1, empty 13; oracle-gate 9/100, 0 false refusals; signal-gate 0. Routing: non-fallback top1 .606 deepseek / .309 ollama, fallback 67 / 19)
 - Scope: отдельные отчёты routing / retrieval / citation / latency; gate:
   не генерировать ответ при низком retrieval recall; CLI/JSON.
 - Acceptance: 100-case отчёт с per-stage метриками; gate не увеличивает
@@ -334,7 +337,7 @@
 
 ### T29 — Полный contextual reindex production
 
-- [ ] Статус: `in_progress` (2026-11-02; systemd job, 548999 chunks, ETA ~3.7 ч)
+- [ ] Статус: `review` (2026-11-02; reindex 1151/548999 ok; eval: chunk +1.9pp, page −1.0pp, empty citations 9; production switch не одобрен)
 - Scope: переиндексировать все 1150 книг с contextual embeddings в новую
   коллекцию, проверить размер/время, переключить `BOOK_EXPERT_QDRANT_COLLECTION`
   только после A/B, сохранить rollback.
@@ -359,3 +362,40 @@
 - Acceptance: page recall@5/citation precision растут, p95 latency в бюджете;
   иначе задача закрывается отрицательным результатом.
 - Verify: latency benchmark, 100-case eval, full checks.
+
+### T32 — Structure-aware chunking по разделам
+
+- [ ] Статус: `review` (2026-11-02; 5 книг/120 кейсов: page@5 .9083 vs .925, @10 .9333 vs .95, MRR .7538 vs .781; negative)
+- Scope: 5 книг (ML Systems, Effective Leader, Emotional Intelligence, JavaScript, Crypto); section boundaries + merge мелких до 300–500 и split крупных >1200–1500; A/B current fixed vs pure section vs hybrid on 100 existing + 20 новых вопросов для двух книг; store section_path/page range.
+- Acceptance: chunk recall@5 и citation precision растут или не падают; доля chunks <100 резко снижена; секции >4000 не превращаются в один chunk; citations проверяемы.
+- Verify: section-size report, A/B 120 cases, targeted tests, full checks.
+
+### T33 — Citation gate: ответ без цитат не отдаётся как валидный
+
+- [ ] Статус: `todo`
+- Scope: `retrieval/answer.py`, `eval/stage_eval.py`; если модель вернула
+  текст без маркеров `[n]` и `refused=false`, повторять запрос с явным
+  требованием цитат, а при повторе — отдавать `INSUFFICIENT_CONTEXT`;
+  в отчёте stage-eval разделять «нет цитат при промахе retrieval» и «нет
+  цитат при верной странице в top-5».
+- Acceptance: `empty_citations` в stage-eval падает без роста refusals на
+  кейсах, где retrieval нашёл ожидаемую страницу; ответ без citations больше
+  не считается успешным; targeted tests.
+- Verify: 100-case stage-eval до/после, targeted tests, full checks.
+- Основание: T28 — ollama 13/100 ответов без citations, из них 5 при
+  page recall@5 = 1.0; deepseek 7, из них 1 при верной странице.
+
+### T34 — Калибровка routing fallback для deepseek
+
+- [ ] Статус: `todo`
+- Scope: `retrieval/router.py`; deepseek уходит в fallback на 67/100 кейсов
+  против 19/100 у локальной 4B, из-за чего общий top-1 падает до 0.20, хотя
+  на не-fallback кейсах top-1 0.606 против 0.309. Проверить шкалу
+  `confidence` в ответе deepseek и порог `router_confidence_threshold`;
+  сравнить fallback-политику (один кандидат vs top-3) на том же датасете.
+  Confidence плохо калиброван у обоих: в router_eval у 4B неверные
+  одиночные выборы идут с 0.6–0.8, а верные — в fallback-списке с 0.0–0.4.
+- Acceptance: fallback-доля снижается без падения non-fallback top-1;
+  общий top-1/recall@3 растут; поведение одинаково предсказуемо у обоих
+  провайдеров; targeted tests.
+- Verify: router_eval на combined-100 для deepseek и ollama, full checks.

@@ -51,7 +51,7 @@
 | Providers | `providers/` | Ollama и OpenAI-compatible chat/embeddings |
 | Retrieval | `retrieval/hybrid.py`, `router.py`, `answer.py` | dense + lexical + RRF, router, grounded answer |
 | Agent | `agent/graph.py`, `agent/tools/`, `agent/policy.py` | LangGraph react-цикл, RAG/shell/fs/git, audit |
-| Eval | `eval/metrics.py`, `eval/parser_assessment.py` | recall/MRR/citations, parser assessment |
+| Eval | `eval/metrics.py`, `eval/stage_eval.py`, `eval/parser_assessment.py` | recall/MRR/citations, per-stage eval + gate, parser assessment |
 | Ops | `doctor.py`, `docker-compose.yml`, `scripts/` | проверки окружения, Qdrant, оценка |
 | Interfaces | `cli.py`, `mcp_server.py` | CLI и MCP stdio |
 | Web | `web/app.py`, `web/backend.py`, `web/static/` | локальный веб-чат: FastAPI, RAG и агент |

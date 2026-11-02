@@ -22,6 +22,7 @@ from book_expert.catalog_audit import audit_catalog
 from book_expert.catalog_dedupe import build_dedupe_plan
 from book_expert.config import Settings
 from book_expert.eval.metrics import load_cases, run_answer_eval, run_retrieval_eval
+from book_expert.eval.stage_eval import run_stage_eval, write_report
 from book_expert.eval.synthetic import seed_synthetic_corpus
 from book_expert.ingestion.document import DocumentError
 from book_expert.ingestion.extract import extract_document
@@ -633,6 +634,35 @@ def mcp() -> None:
         runtime.server.run("stdio")
     finally:
         runtime.close()
+
+
+@app.command("stage-eval")
+def stage_eval(
+    cases: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    limit: int | None = typer.Option(None, "--limit", min=1),
+    output: Path = typer.Option(
+        Path("data/artifacts/stage-eval.local.json"),
+        "--output",
+    ),
+) -> None:
+    """Per-stage eval: routing, retrieval, citations, latency, gate."""
+    settings = Settings()
+    report = run_stage_eval(settings, cases, limit=limit)
+    write_report(report, output)
+    typer.echo(
+        json.dumps(
+            {
+                "cases": report["cases"],
+                "gate": report["gate"],
+                "routing": report["routing"],
+                "retrieval": report["retrieval"],
+                "answers": report["answers"],
+                "latency_ms": report["latency_ms"],
+            },
+            ensure_ascii=False,
+        )
+    )
+    console.print(f"отчёт: {output}")
 
 
 @app.command("eval")
