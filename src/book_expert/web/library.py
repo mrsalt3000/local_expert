@@ -52,6 +52,8 @@ class BookIndexerLike(Protocol):
 
     def delete_book(self, book_id: str) -> bool: ...
 
+    def close(self) -> None: ...
+
 
 @dataclass(frozen=True, slots=True)
 class LibraryEntry:

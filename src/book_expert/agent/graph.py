@@ -12,6 +12,7 @@ from langchain.agents import create_agent
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.tools import BaseTool
+from pydantic import SecretStr
 
 from book_expert.config import Settings
 from book_expert.providers import ProviderError, ProviderUnavailableError
@@ -95,7 +96,7 @@ class AgentRunner:
         config = {"recursion_limit": self.settings.agent_max_steps * 2 + 1}
         try:
             state = invoke_with_timeout(
-                lambda: graph.invoke(payload, config=config),
+                lambda: graph.invoke(payload, config=config),  # type: ignore[call-overload]
                 self.settings.agent_timeout_s if timeout is None else timeout,
             )
         except Exception as exc:
@@ -147,7 +148,7 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
     return ChatOpenAI(
         model=settings.openai_chat_model,
         base_url=settings.openai_base_url,
-        api_key=settings.openai_api_key.get_secret_value(),
+        api_key=SecretStr(settings.openai_api_key.get_secret_value()),
         temperature=0.0,
     )
 
@@ -174,7 +175,7 @@ def normalize_agent_error(exc: Exception) -> Exception:
     if isinstance(exc, (AgentError, ProviderError, ValueError)):
         return exc
     provider_error = _find_cause(exc, ProviderError)
-    if provider_error is not None:
+    if isinstance(provider_error, ProviderError):
         return provider_error
     if _find_cause(exc, (httpx.HTTPError, ConnectionError, OSError)) is not None:
         return ProviderUnavailableError(

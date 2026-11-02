@@ -502,18 +502,27 @@ def ask(
     try:
         services = _make_retrieval(settings)
         if super_mode:
-            answerer = services.super_advanced
+            answer = services.super_advanced.ask(
+                question,
+                book_ids=book or None,
+                auto_route=not no_route,
+                dense=not lexical_only,
+            )
         elif advanced:
-            answerer = services.advanced
+            answer = services.advanced.ask(
+                question,
+                book_ids=book or None,
+                auto_route=not no_route,
+                dense=not lexical_only,
+            )
         else:
-            answerer = services.answerer
-        answer = answerer.ask(
-            question,
-            book_ids=book or None,
-            auto_route=not no_route,
-            dense=not lexical_only,
-            relevance_filter=settings.answer_relevance_filter,
-        )
+            answer = services.answerer.ask(
+                question,
+                book_ids=book or None,
+                auto_route=not no_route,
+                dense=not lexical_only,
+                relevance_filter=settings.answer_relevance_filter,
+            )
     except (ProviderError, ValueError, OSError) as exc:
         _fail(str(exc), json_output)
         return

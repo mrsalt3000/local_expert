@@ -143,7 +143,7 @@ class Workspace:
         target = self.resolve(path)
         if not target.is_dir():
             raise PolicyViolation(f"not a directory: {path}")
-        entries = []
+        entries: list[dict[str, object]] = []
         for entry in sorted(target.iterdir(), key=lambda item: item.name):
             resolved = entry.resolve()
             if resolved != self.root and self.root not in resolved.parents:

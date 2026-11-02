@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 
 from book_expert.retrieval.advanced import (
     AdvancedAnswerer,
@@ -38,7 +39,7 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
         auto_route: bool = True,
         dense: bool = True,
         progress: ProgressCallback | None = None,
-        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ):
         selected, route = self._route(query, book_ids, auto_route)
         plan = list(self._plan(query, history))
@@ -126,7 +127,7 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
         query: str,
         plan: list[str],
         hits,
-        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ) -> tuple[bool, tuple[str, ...]]:
         briefs = []
         for index, hit in enumerate(hits[:SUPER_MAX_HITS], start=1):

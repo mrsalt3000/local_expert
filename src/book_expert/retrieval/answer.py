@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import replace
 
 from book_expert.agent.trace import TraceRecorder
@@ -63,7 +64,7 @@ class GroundedAnswerer:
         auto_route: bool = True,
         limit: int | None = None,
         dense: bool = True,
-        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
         relevance_filter: bool = False,
     ) -> Answer:
         selected = book_ids
@@ -234,7 +235,7 @@ class GroundedAnswerer:
         self,
         query: str,
         hits: tuple[SearchHit, ...],
-        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None,
+        history: Sequence[tuple[str, str]] | None,
         *,
         strict_citations: bool = False,
     ) -> str:
@@ -339,7 +340,7 @@ def sources_prompt(hits: tuple[SearchHit, ...]) -> str:
 def _context_prompt(
     query: str,
     hits: tuple[SearchHit, ...],
-    history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+    history: Sequence[tuple[str, str]] | None = None,
 ) -> str:
     return (
         history_prompt(history)
@@ -351,7 +352,7 @@ def _context_prompt(
 
 
 def history_prompt(
-    history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None,
+    history: Sequence[tuple[str, str]] | None,
     *,
     max_chars: int = 6000,
 ) -> str:

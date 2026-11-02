@@ -485,7 +485,7 @@ def create_app(
             job = get_library().start_ingest(payload.name, force=payload.force)
         except Exception as exc:
             raise_library_error(exc)
-        return _job_out(job)
+        return _job_out_required(job)
 
     @app.post("/api/library/remove-from-rag", response_model=OkResponse)
     def library_remove(payload: LibraryRemoveRequest) -> OkResponse:
@@ -527,7 +527,7 @@ def create_app(
             )
         except Exception as exc:
             raise_library_error(exc)
-        return _job_out(job)
+        return _job_out_required(job)
 
     @app.post("/api/jobs/{job_id}/cancel", response_model=LibraryJobOut)
     def library_cancel(job_id: str) -> LibraryJobOut:
@@ -535,7 +535,7 @@ def create_app(
             job = get_library().cancel_job(job_id)
         except Exception as exc:
             raise_library_error(exc)
-        return _job_out(job)
+        return _job_out_required(job)
 
     @app.get("/api/jobs/{job_id}", response_model=LibraryJobOut)
     def library_job(job_id: str) -> LibraryJobOut:
@@ -543,7 +543,7 @@ def create_app(
             job = get_library().get_job(job_id)
         except Exception as exc:
             raise_library_error(exc)
-        return _job_out(job)
+        return _job_out_required(job)
 
     @app.get("/api/health", response_model=HealthOut)
     def health() -> HealthOut:
@@ -581,6 +581,13 @@ def _library_out(entry: LibraryEntry) -> LibraryBookOut:
         chunks=entry.chunks,
         error=entry.error,
     )
+
+
+def _job_out_required(job: LibraryJob | None) -> LibraryJobOut:
+    result = _job_out(job)
+    if result is None:
+        raise HTTPException(status_code=500, detail="job is missing")
+    return result
 
 
 def _job_out(job: LibraryJob | None) -> LibraryJobOut | None:
@@ -645,7 +652,11 @@ def _stream_error(exc: Exception) -> dict[str, Any]:
     return {"detail": "internal error", "status": 500}
 
 
-def _rag_response(answer: Answer, *, mode: str = "rag") -> ChatResponse:
+def _rag_response(
+    answer: Answer,
+    *,
+    mode: Literal["rag", "advanced", "super", "agent"] = "rag",
+) -> ChatResponse:
     return ChatResponse(
         mode=mode,
         answer=answer.text,

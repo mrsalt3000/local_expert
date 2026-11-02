@@ -65,11 +65,14 @@ class BookIndexer:
     def ensure_collection(self) -> None:
         if self.client.collection_exists(self.collection):
             vectors = self.client.get_collection(self.collection).config.params.vectors
-            size = (
-                vectors.size
-                if isinstance(vectors, models.VectorParams)
-                else next(iter(vectors.values())).size
-            )
+            if isinstance(vectors, models.VectorParams):
+                size = vectors.size
+            elif isinstance(vectors, dict):
+                size = next(iter(vectors.values())).size
+            else:
+                raise CollectionDimensionError(
+                    f"collection {self.collection!r} has no vector config"
+                )
             if size != self.settings.embedding_dim:
                 raise CollectionDimensionError(
                     f"collection {self.collection!r} has dim {size}, "

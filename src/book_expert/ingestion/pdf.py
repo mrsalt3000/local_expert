@@ -70,8 +70,8 @@ def extract_pdf(
 
         selected = set(pages) if pages is not None else None
         page_items = tuple(
-            _extract_page(page, index)
-            for index, page in enumerate(document)
+            _extract_page(document[index], index)
+            for index in range(document.page_count)
             if selected is None or index in selected
         )
         if strip_running_lines:

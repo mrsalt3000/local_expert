@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from book_expert.agent.trace import TraceRecorder
@@ -69,7 +69,7 @@ class AdvancedAnswerer:
         auto_route: bool = True,
         dense: bool = True,
         progress: ProgressCallback | None = None,
-        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer:
         selected, route = self._route(query, book_ids, auto_route)
         plan = self._plan(query, history)
@@ -174,7 +174,7 @@ class AdvancedAnswerer:
         mode: str,
         rounds: int = 0,
         max_rounds: int = 0,
-        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer:
         answer_books = (
             tuple(selected) if selected is not None else _hit_book_ids(tuple(hits))
@@ -255,7 +255,7 @@ class AdvancedAnswerer:
     def _plan(
         self,
         query: str,
-        history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+        history: Sequence[tuple[str, str]] | None = None,
     ) -> tuple[str, ...]:
         messages = [
             ChatMessage(role="system", content=PLAN_PROMPT),
@@ -308,7 +308,7 @@ def _advanced_prompt(
     query: str,
     plan: tuple[str, ...],
     hits: tuple[SearchHit, ...],
-    history: tuple[tuple[str, str], ...] | list[tuple[str, str]] | None = None,
+    history: Sequence[tuple[str, str]] | None = None,
 ) -> str:
     plan_text = "\n".join(f"{index}. {item}" for index, item in enumerate(plan, 1))
     return (

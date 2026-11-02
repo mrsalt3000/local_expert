@@ -64,7 +64,7 @@ def chunk_document(
                 sections.append(
                     Section(
                         book_id=book_id,
-                        section_path=current_section or fallback_section,
+                        section_path=current_section or fallback_section or "",
                         ordinal=len(sections),
                         title=title,
                         page_start=page.pdf_page_index,

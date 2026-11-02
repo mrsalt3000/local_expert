@@ -29,7 +29,8 @@ def extract_epub(path: str | Path) -> ExtractedDocument:
             if page_number and title.strip():
                 toc.setdefault(page_number - 1, title.strip())
         pages = tuple(
-            _page(page, index, toc.get(index)) for index, page in enumerate(document)
+            _page(document[index], index, toc.get(index))
+            for index in range(document.page_count)
         )
         if not any(not page.is_empty for page in pages):
             raise PdfParseError("EPUB has no extractable text")

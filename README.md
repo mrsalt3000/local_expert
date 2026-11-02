@@ -313,9 +313,13 @@ uv run python scripts/parser_assessment.py data/raw/book.pdf --pages 1-20
 uv sync
 uv run ruff format --check .
 uv run ruff check .
-uv run pytest
+uv run mypy src
+uv run pytest --cov=book_expert --cov-report=term
 uv run pre-commit run --all-files
 ```
+
+CI повторяет те же шаги и падает при покрытии ниже 82% (baseline на
+2026-11-02 — 85%).
 
 Архитектура — [docs/architecture.md](docs/architecture.md), решения —
 [docs/adr/](docs/adr/README.md).
