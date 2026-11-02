@@ -289,9 +289,7 @@
     </select>
     <div class="modes" role="group" aria-label="Режим ответа">
       <button type="button" data-mode="rag" aria-pressed="false">RAG</button>
-      <button type="button" data-mode="agent" aria-pressed="false">Простой</button>
-      <button type="button" data-mode="advanced" aria-pressed="false">Продвинутый</button>
-      <button type="button" data-mode="super" class="active" aria-pressed="true">Супер</button>
+      <button type="button" data-mode="super" class="active" aria-pressed="true">Агент</button>
     </div>
     <button type="button" id="clear" class="ghost">Очистить</button>
   </div>
@@ -406,7 +404,7 @@
   };
 
   function validMode(value) {
-    return value === "rag" || value === "advanced" || value === "super" || value === "agent";
+    return value === "rag" || value === "super";
   }
 
   function sanitizeMessages(items) {
@@ -637,12 +635,8 @@
     }
     if (state.mode === "rag") {
       input.placeholder = "Спросите о книге…";
-    } else if (state.mode === "advanced") {
-      input.placeholder = "Сложный вопрос: план поиска и развёрнутый ответ…";
-    } else if (state.mode === "super") {
-      input.placeholder = "Глубокий вопрос: план, дополнительные раунды и синтез…";
     } else {
-      input.placeholder = "Задача для простого агента…";
+      input.placeholder = "Вопрос агенту: план поиска, дополнительные раунды и синтез…";
     }
   }
 
@@ -656,7 +650,7 @@
       "Ответы строятся только по проиндексированным книгам, с цитатами на страницы.";
     const second = document.createElement("p");
     second.textContent =
-      "RAG — быстрый ответ; Простой — агент; Продвинутый — план запросов; Супер — дополнительные раунды.";
+      "RAG — быстрый ответ по фрагментам; Агент — план запросов, дополнительные раунды и синтез.";
     box.append(title, first, second);
     return box;
   }
@@ -991,14 +985,7 @@
         meta.className = "meta";
         const parts = [];
         if (message.mode) {
-          const label =
-            message.mode === "rag"
-              ? "RAG"
-              : message.mode === "advanced"
-                ? "Продвинутый"
-                : message.mode === "super"
-                  ? "Супер"
-                  : "Простой";
+          const label = message.mode === "rag" ? "RAG" : "Агент";
           if (message.mode === "super" && message.max_rounds) {
             parts.push(`${label} · раунды ${message.rounds}/${message.max_rounds}`);
           } else {
@@ -1031,11 +1018,10 @@
       pending.classList.add("pending-advanced");
       const text = document.createElement("span");
       text.className = "pending-text";
-      const label = state.mode === "super" ? "Супер" : "Продвинутый";
-      const roundInfo =
-        state.mode === "super" && progress.maxRounds
-          ? ` · раунд ${progress.round || 0}/${progress.maxRounds}`
-          : "";
+      const label = "Агент";
+      const roundInfo = progress.maxRounds
+        ? ` · раунд ${progress.round || 0}/${progress.maxRounds}`
+        : "";
       if (!total) {
         text.textContent = `${label}: строю план запросов…`;
       } else if (progress.phase === "synthesize") {
@@ -1051,13 +1037,10 @@
       pending.append(text, bar);
     } else {
       const dots = document.createElement("span");
-      if (state.mode === "rag") {
-        dots.textContent = "Ищу по книге…";
-      } else if (state.mode === "advanced" || state.mode === "super") {
-        dots.textContent = "Строю план и ищу по книге…";
-      } else {
-        dots.textContent = "Простой агент работает…";
-      }
+      dots.textContent =
+        state.mode === "rag"
+          ? "Ищу по книге…"
+          : "Агент строит план и ищет по книге…";
       pending.append(dots);
     }
     wrapper.append(pending);

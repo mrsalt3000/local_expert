@@ -254,6 +254,7 @@
 | 2026-11-02 | T34 | review | negative: deepseek 45/100 при confidence 0.55, порог 0.5 даёт top1 .51, но scope_coverage .90→.82; 4B scope_coverage .44 при 0.6 и .92 при 0.9; retry откатан; в router_eval добавлен scope_coverage, заведена T35 |
 | 2026-11-02 | T35 | accepted | 5 книг/120 кейсов: candidates без LLM .5507/.775, отказов 16, маршрут 0.9 s против LLM .5158/.725, 19 отказов, 2.3 s; `BOOK_EXPERT_ROUTER_USE_LLM=false` по умолчанию; 385 tests |
 | 2026-11-02 | T31 | review | negative: L-6-v2 p50 1136 ms / page@5 .65, turbo-en 1549 ms / .70 против baseline .80 без rerank; default off сохранён |
+| 2026-11-02 | T37 | accepted | UI: только RAG и «Агент» (super), «Агент» по умолчанию; старые чаты нормализуются, API-режимы сохранены |
 | 2026-11-02 | T36 | accepted | relevance-фильтр в ask/ui: citation precision .5507→.5785, отказы 16→14, recall .775 без изменений; `BOOK_EXPERT_ANSWER_RELEVANCE_FILTER=true`; 386 tests |
 
 ### T20 — Book-level routing index
@@ -495,3 +496,15 @@
   (p50 1.56 s). Фильтр включён для `ask`, веб-чата и MCP
   (`BOOK_EXPERT_ANSWER_RELEVANCE_FILTER=true`), stage-eval по умолчанию
   считает без него, чтобы baseline оставался сравнимым.
+
+### T37 — UI: два режима, «Агент» по умолчанию
+
+- [x] Статус: `accepted` (2026-11-02; кнопки RAG и «Агент», default super, скрытые режимы доступны через API)
+- Scope: `web/static/index.html`, `tests/test_web.py`, `README.md`.
+- Acceptance: в интерфейсе только RAG и «Агент»; «Агент» активен на новом
+  чате; сохранённые чаты со старыми режимами открываются как «Агент»;
+  серверные режимы `advanced`/`agent` не ломаются.
+- Verify: pytest, живая страница `/` и `POST /api/chat` без `mode`.
+- Результат: `/` отдаёт `data-mode="rag"` и `data-mode="super"` (label «Агент»,
+  active), `POST /api/chat` без `mode` вернул `mode: "super"` с цитатой;
+  `validMode` сужен до rag/super, сохранённые чаты нормализуются при загрузке.

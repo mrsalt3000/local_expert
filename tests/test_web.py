@@ -195,7 +195,9 @@ def test_index_serves_chat_page(client: TestClient) -> None:
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Book Expert" in response.text
-    assert 'data-mode="agent"' in response.text
+    assert 'data-mode="rag"' in response.text
+    assert 'data-mode="super"' in response.text
+    assert "Агент" in response.text
 
 
 def test_books_endpoint_maps_fields(client: TestClient) -> None:
@@ -477,9 +479,11 @@ def test_default_mode_is_super(client: TestClient) -> None:
 
 def test_mode_buttons_are_ordered_by_complexity(client: TestClient) -> None:
     html = client.get("/").text
-    modes = ["rag", "agent", "advanced", "super"]
+    modes = ["rag", "super"]
     positions = [html.index(f'data-mode="{mode}"') for mode in modes]
     assert positions == sorted(positions)
+    assert 'data-mode="agent"' not in html
+    assert 'data-mode="advanced"' not in html
 
 
 def test_chat_history_is_forwarded(client: TestClient, backend: FakeBackend) -> None:
