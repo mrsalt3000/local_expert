@@ -290,3 +290,68 @@
 - Acceptance: ≥100 reviewed cases, routing и retrieval метрики считаются
   раздельно, draft не смешивается с reviewed.
 - Verify: dataset integrity, eval runs, full checks.
+
+### T25 — Query rewriting перед retrieval
+
+- [ ] Статус: `todo`
+- Scope: `retrieval/rewrite.py`, optional LLM/heuristic rewrite of user query
+  into retrieval query; config flag; apply to RAG/router; tests.
+- Acceptance: 100-case page/chunk recall@5 не падает, citation precision
+  растёт или не падает; latency приемлемая; исходный вопрос сохраняется для
+  ответа.
+- Verify: A/B eval 100 cases, targeted tests, full checks.
+
+### T26 — Chunk-size A/B 500 / 1000 / 1500
+
+- [ ] Статус: `todo`
+- Scope: reindex одной книги в отдельные коллекции с chunk_size/overlap
+  вариантами; 100-case eval; не менять default без выигрыша.
+- Acceptance: выбран лучший вариант по chunk/page recall@5 и citation
+  precision; зафиксированы latency и стоимость reindex.
+- Verify: A/B eval, parser/chunk integrity, full checks.
+
+### T27 — Metadata prefilter для routing и Qdrant
+
+- [ ] Статус: `todo`
+- Scope: извлечь/хранить author, year, format, language; pre-filter в router
+  и поиске; fallback при отсутствии metadata; tests.
+- Acceptance: routing top-1/candidate recall растут или не падают; поиск по
+  metadata не ломает книги без полей.
+- Verify: routing eval, 100-case retrieval, full checks.
+
+### T28 — Per-stage eval и retrieval gate
+
+- [ ] Статус: `todo`
+- Scope: отдельные отчёты routing / retrieval / citation / latency; gate:
+  не генерировать ответ при низком retrieval recall; CLI/JSON.
+- Acceptance: 100-case отчёт с per-stage метриками; gate не увеличивает
+  false refusals без причины.
+- Verify: eval artifacts, unit tests, full checks.
+
+### T29 — Полный contextual reindex production
+
+- [ ] Статус: `todo`
+- Scope: переиндексировать все 1150 книг с contextual embeddings в новую
+  коллекцию, проверить размер/время, переключить `BOOK_EXPERT_QDRANT_COLLECTION`
+  только после A/B, сохранить rollback.
+- Acceptance: 100-case eval не хуже plain; Qdrant points = chunks; rollback
+  документирован.
+- Verify: reindex job, count/integrity, 100-case eval, full checks.
+
+### T30 — Parser quality gate
+
+- [ ] Статус: `todo`
+- Scope: метрики text coverage/chars per page при ingest; флаг/карантин для
+  низкого покрытия; OCR-очередь для scans; отчёт по книге.
+- Acceptance: книги с потерей текста не попадают молча в RAG; отчёт содержит
+  только counts/страницы, без текста.
+- Verify: synthetic low-coverage PDF, targeted tests, full checks.
+
+### T31 — Reranker только при доказанном latency-бюджете
+
+- [ ] Статус: `todo`
+- Scope: вернуться к T23 только с smaller model/offline batch; замерить
+  top-20 rerank latency на 100 кейсах; default off без выигрыша.
+- Acceptance: page recall@5/citation precision растут, p95 latency в бюджете;
+  иначе задача закрывается отрицательным результатом.
+- Verify: latency benchmark, 100-case eval, full checks.
