@@ -246,6 +246,7 @@
 | 2026-11-02 | T29 | in_progress | contextual reindex books_ctx_full: 1151 книга/548999 chunks, systemd job; eval после завершения |
 | 2026-11-02 | T25 | accepted | retrieval query rewrite; citation precision 0.5325→0.5457, recall 0.6433, 365 tests |
 | 2026-11-02 | T27 | accepted | metadata prefilter year/format/author/language; routing top1 0.533, candidate 0.733 |
+| 2026-11-02 | T30 | accepted | parser quality gate: coverage/reject/warn, parser-audit + ingest --quality-gate; 372 tests |
 
 ### T20 — Book-level routing index
 
@@ -343,7 +344,7 @@
 
 ### T30 — Parser quality gate
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted` (2026-11-02; parser-audit + opt-in ingest --quality-gate, 372 tests)
 - Scope: метрики text coverage/chars per page при ingest; флаг/карантин для
   низкого покрытия; OCR-очередь для scans; отчёт по книге.
 - Acceptance: книги с потерей текста не попадают молча в RAG; отчёт содержит

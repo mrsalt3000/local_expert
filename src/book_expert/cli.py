@@ -24,8 +24,10 @@ from book_expert.config import Settings
 from book_expert.eval.metrics import load_cases, run_answer_eval, run_retrieval_eval
 from book_expert.eval.synthetic import seed_synthetic_corpus
 from book_expert.ingestion.document import DocumentError
+from book_expert.ingestion.extract import extract_document
 from book_expert.ingestion.indexer import BookIndexer, IndexingError
 from book_expert.ingestion.pdf import PdfError
+from book_expert.ingestion.quality import QualityThresholds, assess_document
 from book_expert.models import Answer, Book, SearchHit
 from book_expert.providers import Provider, ProviderError, get_provider
 from book_expert.retrieval.advanced import AdvancedAnswerer
@@ -95,6 +97,11 @@ def ingest(
     path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
     title: str | None = typer.Option(None, "--title", help="Название книги."),
     force: bool = typer.Option(False, "--force", help="Переиндексировать книгу."),
+    quality_gate: bool = typer.Option(
+        False,
+        "--quality-gate",
+        help="Не индексировать книгу с потерей текста.",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Машинный вывод."),
 ) -> None:
     """Загрузить книгу (PDF/EPUB/FB2/DJVU) в локальный индекс."""
@@ -104,6 +111,21 @@ def ingest(
     indexer: BookIndexer | None = None
     payload: dict[str, Any] | None = None
     try:
+        if quality_gate:
+            document = extract_document(
+                path,
+                strip_running_lines=settings.strip_running_headers,
+            )
+            quality = assess_document(document)
+            if quality.status == "reject":
+                _fail(
+                    "quality gate: " + ", ".join(quality.reasons),
+                    json_output,
+                )
+            if quality.status == "warn" and not json_output:
+                console.print(
+                    f"[yellow]quality warning[/yellow] {len(quality.issues)} pages"
+                )
         _, provider, indexer = _make_services(settings)
         book = indexer.index_pdf(path, title=title, force=force)
         payload = _book_payload(book, indexer)
@@ -132,6 +154,49 @@ def ingest(
             f"[green]indexed[/green] {payload['title']} "
             f"({payload['pages']} pages, {payload['chunks']} chunks)"
         )
+
+
+@app.command("parser-audit")
+def parser_audit(
+    path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    min_coverage: float = typer.Option(0.9, "--min-coverage"),
+    min_chars: int = typer.Option(50, "--min-chars"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Проверить качество извлечённого текста без индексации."""
+    if not 0.0 <= min_coverage <= 1.0:
+        _fail("min-coverage must be in [0, 1]", json_output)
+    settings = Settings()
+    try:
+        document = extract_document(
+            path,
+            strip_running_lines=settings.strip_running_headers,
+        )
+        report = assess_document(
+            document,
+            QualityThresholds(
+                min_coverage=min_coverage,
+                min_chars_per_page=min_chars,
+            ),
+        )
+    except (DocumentError, PdfError, ValueError, OSError) as exc:
+        _fail(str(exc), json_output)
+        return
+    payload = report.to_dict()
+    if json_output:
+        typer.echo(json.dumps(payload, ensure_ascii=False))
+    else:
+        console.print(
+            f"{report.status} pages={report.total_pages} "
+            f"nonempty={report.nonempty_pages} chars={report.total_chars} "
+            f"coverage={report.coverage:.3f}"
+        )
+        for issue in report.issues[:20]:
+            console.print(
+                f"  page {issue.pdf_page_index}: {issue.reason} ({issue.chars} chars)"
+            )
+    if report.status == "reject":
+        raise typer.Exit(code=1)
 
 
 @app.command()
