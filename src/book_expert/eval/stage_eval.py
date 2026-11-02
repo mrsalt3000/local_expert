@@ -24,6 +24,7 @@ from typing import Any, Literal
 
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
+from book_expert.eval.faithfulness import FaithfulnessJudge
 from book_expert.eval.metrics import load_cases
 from book_expert.providers import get_provider
 from book_expert.retrieval.answer import GroundedAnswerer
@@ -42,6 +43,7 @@ def run_stage_eval(
     limit: int | None = None,
     scope: ScopeMode = "expected",
     relevance_filter: bool = False,
+    faithfulness: bool = False,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     if limit:
@@ -53,6 +55,7 @@ def run_stage_eval(
     searcher = HybridSearcher(settings, provider, catalog)
     router = BookRouter(settings, provider, catalog)
     answerer = GroundedAnswerer(settings, provider, searcher, router)
+    judge = FaithfulnessJudge(provider) if faithfulness else None
     pages = {chunk.id: chunk.pdf_page_index for chunk in catalog.iter_chunks()}
     ready_books = [
         book for book in catalog.list_books() if book.status.value == "ready"
@@ -103,6 +106,13 @@ def run_stage_eval(
                 relevance_filter=relevance_filter,
             )
             answer_ms = (time.perf_counter() - answer_start) * 1000
+            judgement = None
+            if judge is not None and not answer.refused:
+                judgement = judge.evaluate(
+                    case.question,
+                    answer.text,
+                    tuple(hit.text for hit in answer.sources),
+                )
             cited_pages = {citation.pdf_page_index for citation in answer.citations}
             citation_hits = len(cited_pages & expected_pages)
             row = {
@@ -129,6 +139,11 @@ def run_stage_eval(
                 "citation_recall": citation_hits / len(expected_pages)
                 if expected_pages
                 else 0.0,
+                "faithfulness": judgement.faithfulness if judgement else None,
+                "judged_claims": len(judgement.claims) if judgement else 0,
+                "faithfulness_error": (
+                    judgement.error if judgement is not None else None
+                ),
                 "gate_signal": not outcome.hits,
                 "gate_oracle": bool(expected_pages) and page_hits == 0,
             }
@@ -138,7 +153,12 @@ def run_stage_eval(
     finally:
         searcher.close()
         provider.close()
-    return _aggregate(rows, scope=scope, relevance_filter=relevance_filter)
+    return _aggregate(
+        rows,
+        scope=scope,
+        relevance_filter=relevance_filter,
+        faithfulness=faithfulness,
+    )
 
 
 def _scope_book_ids(
@@ -185,12 +205,14 @@ def _aggregate(
     *,
     scope: ScopeMode,
     relevance_filter: bool,
+    faithfulness: bool = False,
 ) -> dict[str, Any]:
     routed = [row for row in rows if not row["route_fallback"]]
     return {
         "cases": len(rows),
         "scope": scope,
         "relevance_filter": relevance_filter,
+        "faithfulness_enabled": faithfulness,
         "gate": {
             "signal": _gate_summary(rows, "gate_signal"),
             "oracle": _gate_summary(rows, "gate_oracle"),
@@ -214,6 +236,9 @@ def _aggregate(
             "refused": sum(bool(row["answer_refused"]) for row in rows),
             "citation_precision": _mean(rows, "citation_precision"),
             "citation_recall": _mean(rows, "citation_recall"),
+            "faithfulness": _mean_optional(rows, "faithfulness"),
+            "judged_cases": sum(1 for row in rows if row["faithfulness"] is not None),
+            "faithfulness_errors": sum(1 for row in rows if row["faithfulness_error"]),
             "no_citations": sum(
                 row["citations"] == 0 and not row["answer_refused"] for row in rows
             ),
@@ -250,6 +275,11 @@ def _gate_summary(rows: list[dict[str, Any]], key: str) -> dict[str, Any]:
 
 def _mean(rows: list[dict[str, Any]], key: str) -> float:
     return round(sum(row[key] for row in rows) / len(rows), 4) if rows else 0.0
+
+
+def _mean_optional(rows: list[dict[str, Any]], key: str) -> float | None:
+    values = [row[key] for row in rows if row.get(key) is not None]
+    return round(sum(values) / len(values), 4) if values else None
 
 
 def _share(rows: list[dict[str, Any]], key: str) -> float:

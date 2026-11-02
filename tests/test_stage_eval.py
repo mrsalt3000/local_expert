@@ -11,6 +11,7 @@ import pytest
 
 from book_expert.config import Settings
 from book_expert.eval import stage_eval
+from book_expert.eval.faithfulness import ClaimJudgement, FaithfulnessReport
 from book_expert.eval.metrics import EvalCase
 from book_expert.models import Answer, Citation, SearchHit
 from book_expert.retrieval.hybrid import SearchOutcome
@@ -298,3 +299,51 @@ def test_write_report(tmp_path: Path) -> None:
     path = tmp_path / "nested" / "report.json"
     stage_eval.write_report({"cases": 1}, path)
     assert json.loads(path.read_text(encoding="utf-8")) == {"cases": 1}
+
+
+class FakeJudge:
+    def __init__(self, provider: Any) -> None:
+        self.provider = provider
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def evaluate(
+        self, question: str, answer_text: str, sources: tuple[str, ...]
+    ) -> FaithfulnessReport:
+        self.calls.append((answer_text, sources))
+        return FaithfulnessReport(
+            claims=(ClaimJudgement("claim", (1,), True, True),),
+            faithfulness=1.0,
+            citation_support_precision=1.0,
+            citation_coverage=1.0,
+        )
+
+
+def test_stage_eval_judges_faithfulness(monkeypatch: pytest.MonkeyPatch) -> None:
+    judge = FakeJudge(FakeProvider())
+    _install(
+        monkeypatch,
+        searcher=FakeSearcher({"q1": [_hit("c1", 10)], "q2": []}),
+        router=FakeRouter({}),
+        answerer=FakeAnswerer(
+            {
+                "q1": ([_citation("c1", 10)], False),
+                "q2": ([], True),
+            }
+        ),
+        chunk_pages={"c1": 10, "c4": 40},
+    )
+    monkeypatch.setattr(stage_eval, "FaithfulnessJudge", lambda provider: judge)
+
+    report = stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False),
+        Path("cases.json"),
+        faithfulness=True,
+    )
+
+    assert report["faithfulness_enabled"] is True
+    assert report["answers"]["faithfulness"] == 1.0
+    assert report["answers"]["judged_cases"] == 1
+    assert report["answers"]["faithfulness_errors"] == 0
+    assert len(judge.calls) == 1
+    assert report["details"][0]["judged_claims"] == 1
+    assert report["details"][1]["faithfulness"] is None

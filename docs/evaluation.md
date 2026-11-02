@@ -17,6 +17,7 @@
 | `MRR` | 1 / rank первого релевантного chunk, усреднённый по вопросам |
 | `citation_precision` | Доля cited chunk id, которые ожидались |
 | `citation_recall` | Доля ожидаемых chunk id, попавших в citations |
+| `faithfulness` | Доля утверждений ответа, поддержанных хотя бы одним найденным фрагментом (LLM-судья, `--faithfulness`) |
 
 ## Процедура
 

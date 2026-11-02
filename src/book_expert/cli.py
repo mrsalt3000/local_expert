@@ -651,6 +651,11 @@ def stage_eval(
         "--relevance-filter",
         help="Отбрасывать хиты, слабо покрывающие редкие термины вопроса.",
     ),
+    faithfulness: bool = typer.Option(
+        False,
+        "--faithfulness",
+        help="LLM-судья: поддержка утверждений ответа цитируемыми фрагментами.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/stage-eval.local.json"),
         "--output",
@@ -664,6 +669,7 @@ def stage_eval(
         limit=limit,
         scope=scope,
         relevance_filter=relevance_filter,
+        faithfulness=faithfulness,
     )
     write_report(report, output)
     typer.echo(
@@ -672,6 +678,7 @@ def stage_eval(
                 "cases": report["cases"],
                 "scope": report["scope"],
                 "relevance_filter": report["relevance_filter"],
+                "faithfulness_enabled": report["faithfulness_enabled"],
                 "gate": report["gate"],
                 "routing": report["routing"],
                 "retrieval": report["retrieval"],

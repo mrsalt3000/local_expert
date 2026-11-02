@@ -516,6 +516,8 @@ def test_answer_uses_context_and_citations(tmp_path: Path) -> None:
     assert citation.printed_page_label == "12"
     assert citation.quote == "Alpha relevant passage about retrieval."
     assert searcher.calls[0]["book_ids"] == ["book-1"]
+    assert answer.sources[0].chunk_id == citation.chunk_id
+    assert len(answer.sources) >= 1
 
     prompt = provider.messages[1].content
     assert '<source id="1" book="Book One" page="12" section="Chapter 1">' in prompt

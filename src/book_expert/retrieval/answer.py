@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import replace
 
 from book_expert.agent.trace import TraceRecorder
 from book_expert.config import Settings
@@ -259,6 +260,7 @@ class GroundedAnswerer:
         query: str,
         hits: tuple[SearchHit, ...],
     ) -> Answer:
+        answer = replace(answer, sources=tuple(hits))
         if self.trace is not None:
             self.trace.write(
                 "answer",
