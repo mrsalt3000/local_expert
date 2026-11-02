@@ -342,6 +342,7 @@ def test_stage_eval_judges_faithfulness(monkeypatch: pytest.MonkeyPatch) -> None
 
     assert report["faithfulness_enabled"] is True
     assert report["answers"]["faithfulness"] == 1.0
+    assert report["answers"]["citation_support_precision"] == 1.0
     assert report["answers"]["judged_cases"] == 1
     assert report["answers"]["faithfulness_errors"] == 0
     assert len(judge.calls) == 1

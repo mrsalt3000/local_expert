@@ -140,6 +140,12 @@ def run_stage_eval(
                 if expected_pages
                 else 0.0,
                 "faithfulness": judgement.faithfulness if judgement else None,
+                "citation_support_precision": (
+                    judgement.citation_support_precision if judgement else None
+                ),
+                "citation_coverage": (
+                    judgement.citation_coverage if judgement else None
+                ),
                 "judged_claims": len(judgement.claims) if judgement else 0,
                 "faithfulness_error": (
                     judgement.error if judgement is not None else None
@@ -237,6 +243,9 @@ def _aggregate(
             "citation_precision": _mean(rows, "citation_precision"),
             "citation_recall": _mean(rows, "citation_recall"),
             "faithfulness": _mean_optional(rows, "faithfulness"),
+            "citation_support_precision": _mean_optional(
+                rows, "citation_support_precision"
+            ),
             "judged_cases": sum(1 for row in rows if row["faithfulness"] is not None),
             "faithfulness_errors": sum(1 for row in rows if row["faithfulness_error"]),
             "no_citations": sum(
