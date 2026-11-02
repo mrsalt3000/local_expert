@@ -245,6 +245,7 @@
 | 2026-11-01 | T23 | accepted | BAAI/bge-reranker-v2-m3-int8 не уложился в 10 мин на 52 кейсах; default off |
 | 2026-11-02 | T29 | in_progress | contextual reindex books_ctx_full: 1151 книга/548999 chunks, systemd job; eval после завершения |
 | 2026-11-02 | T25 | accepted | retrieval query rewrite; citation precision 0.5325→0.5457, recall 0.6433, 365 tests |
+| 2026-11-02 | T27 | accepted | metadata prefilter year/format/author/language; routing top1 0.533, candidate 0.733 |
 
 ### T20 — Book-level routing index
 
@@ -314,7 +315,7 @@
 
 ### T27 — Metadata prefilter для routing и Qdrant
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted` (2026-11-02; top1 0.533, candidate 0.733 без регрессии)
 - Scope: извлечь/хранить author, year, format, language; pre-filter в router
   и поиске; fallback при отсутствии metadata; tests.
 - Acceptance: routing top-1/candidate recall растут или не падают; поиск по

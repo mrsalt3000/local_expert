@@ -11,6 +11,7 @@ from typing import Any
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.providers import get_provider
+from book_expert.retrieval.metadata import apply_metadata_filter
 from book_expert.retrieval.router import BookRouter, _candidate_books
 from book_expert.retrieval.rewrite import rewrite_query
 
@@ -74,13 +75,14 @@ def evaluate(path: Path) -> dict[str, Any]:
                 or not all(isinstance(value, str) for value in expected)
             ):
                 raise ValueError(f"case {index}: expected_book_ids must be non-empty")
+            retrieval_query = (
+                rewrite_query(question) if settings.query_rewrite_enabled else question
+            )
             candidates = {
                 book.id
                 for book in _candidate_books(
-                    rewrite_query(question)
-                    if settings.query_rewrite_enabled
-                    else question,
-                    books,
+                    retrieval_query,
+                    apply_metadata_filter(books, retrieval_query),
                     catalog,
                     profiles=router.profiles,
                     provider=provider,
