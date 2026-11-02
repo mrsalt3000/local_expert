@@ -274,6 +274,20 @@ gate `oracle` — в top-k нет ожидаемой страницы (верх�
 размеченного набора привязан к конкретной сборке индекса и расходится после
 переиндексации.
 
+`--k` задаёт число хитов в ответе (по умолчанию `BOOK_EXPERT_TOP_K`, то есть
+боевой путь), `--faithfulness` включает LLM-судью: он проверяет, поддержано ли
+каждое утверждение цитируемым фрагментом (`citation_support_precision`) и хоть
+каким-то найденным фрагментом (`faithfulness`). Page-overlap
+`citation_precision` остаётся дешёвым sanity-check. Каждый отчёт содержит блок
+`meta` с провайдером, моделями, `k`, scope, commit и sha256 датасета — по нему
+сверяются прогоны, потому что экспортированные `BOOK_EXPERT_*` перекрывают
+`.env`.
+
+```bash
+uv run book-expert stage-eval data/eval/combined-120.local.json \
+  --scope candidates --relevance-filter --k 10 --faithfulness
+```
+
 Parser assessment (Docling/PyMuPDF) описан в
 [docs/parsing-assessment.md](docs/parsing-assessment.md). Для локального
 сравнения на выбранных страницах:

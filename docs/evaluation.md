@@ -49,14 +49,21 @@ eval и удаляет его после завершения.
 
 ```bash
 uv run book-expert eval path/to/cases.json --k 5 --json
+uv run book-expert stage-eval path/to/cases.json --scope candidates --relevance-filter
+uv run book-expert stage-eval path/to/cases.json --scope candidates --k 10 --faithfulness
 ```
 
 Без Qdrant используйте `--lexical-only`; для авто-routing — `--route`.
+`stage-eval --k` задаёт число хитов в ответе (по умолчанию
+`BOOK_EXPERT_TOP_K`), `--faithfulness` включает LLM-судью утверждений.
 
 5. Сохранить отчёт в `data/artifacts/` (git-ignored) или приложить сводку без
    текста книги.
-6. Для воспроизводимости фиксировать модель, embedding model, версию Qdrant и
-   commit в описании прогона.
+6. Воспроизводимость обеспечивает сам отчёт: `stage-eval` пишет блок `meta` с
+   провайдером, chat/embedding-моделью, `top_k`, `k`, scope, флагом
+   relevance-фильтра, коллекцией Qdrant, commit, sha256 датасета, временем и
+   списком экспортированных `BOOK_EXPERT_*`. Переменные окружения имеют
+   приоритет над `.env`, поэтому при сравнении прогонов сверяйте `meta`.
 
 ## Пороги приёмки (v1)
 

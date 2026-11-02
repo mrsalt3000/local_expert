@@ -33,6 +33,10 @@ class FakeCatalog:
 
 
 class FakeProvider:
+    name = "fake"
+    chat_model = "fake-chat"
+    embedding_model = "fake-embed"
+
     def close(self) -> None:
         pass
 
@@ -350,7 +354,9 @@ def test_stage_eval_judges_faithfulness(monkeypatch: pytest.MonkeyPatch) -> None
     assert report["details"][1]["faithfulness"] is None
 
 
-def test_stage_eval_uses_top_k(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_stage_eval_uses_top_k_and_records_meta(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     cases_path = tmp_path / "cases.json"
     cases_path.write_text("[]", encoding="utf-8")
     _install(
@@ -367,6 +373,16 @@ def test_stage_eval_uses_top_k(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     )
 
     assert report["k"] == 11
+    meta = report["meta"]
+    assert meta["provider"] == "fake"
+    assert meta["chat_model"] == "fake-chat"
+    assert meta["embedding_model"] == "fake-embed"
+    assert meta["top_k_setting"] == 11
+    assert meta["k"] == 11
+    assert meta["cases"] == 2
+    assert len(meta["dataset_sha256"]) == 64
+    assert meta["generated_at"]
+
     overridden = stage_eval.run_stage_eval(
         Settings(query_rewrite_enabled=False, top_k=11),
         cases_path,

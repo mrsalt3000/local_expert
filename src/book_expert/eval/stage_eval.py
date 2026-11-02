@@ -17,8 +17,12 @@ Retrieval gate симулируется двумя способами, отве�
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import subprocess
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -174,7 +178,9 @@ def run_stage_eval(
                 print(f"{index}/{len(cases)}", flush=True)
     finally:
         searcher.close()
-        provider.close()
+        close = getattr(provider, "close", None)
+        if callable(close):
+            close()
     report = _aggregate(
         rows,
         scope=scope,
@@ -182,6 +188,16 @@ def run_stage_eval(
         faithfulness=faithfulness,
     )
     report["k"] = result_k
+    report["meta"] = _report_meta(
+        settings,
+        provider,
+        cases_path,
+        result_k=result_k,
+        scope=scope,
+        relevance_filter=relevance_filter,
+        faithfulness=faithfulness,
+        cases=len(cases),
+    )
     return report
 
 
@@ -310,6 +326,59 @@ def _mean(rows: list[dict[str, Any]], key: str) -> float:
 def _mean_optional(rows: list[dict[str, Any]], key: str) -> float | None:
     values = [row[key] for row in rows if row.get(key) is not None]
     return round(sum(values) / len(values), 4) if values else None
+
+
+def _report_meta(
+    settings: Settings,
+    provider: Any,
+    cases_path: str | Path,
+    *,
+    result_k: int,
+    scope: ScopeMode,
+    relevance_filter: bool,
+    faithfulness: bool,
+    cases: int,
+) -> dict[str, Any]:
+    path = Path(cases_path)
+    try:
+        dataset_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        dataset_sha256 = None
+    return {
+        "provider": getattr(provider, "name", None),
+        "chat_model": getattr(provider, "chat_model", None),
+        "embedding_model": getattr(provider, "embedding_model", None),
+        "top_k_setting": settings.top_k,
+        "k": result_k,
+        "scope": scope,
+        "relevance_filter": relevance_filter,
+        "faithfulness": faithfulness,
+        "cases": cases,
+        "qdrant_collection": settings.qdrant_collection,
+        "git_commit": _git_commit(settings.workspace_path),
+        "dataset": path.name,
+        "dataset_sha256": dataset_sha256,
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "env_book_expert": sorted(
+            key for key in os.environ if key.startswith("BOOK_EXPERT_")
+        ),
+    }
+
+
+def _git_commit(workspace: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    commit = result.stdout.strip()
+    return commit or None
 
 
 def _share(rows: list[dict[str, Any]], key: str) -> float:

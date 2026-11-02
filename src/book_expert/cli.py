@@ -688,6 +688,7 @@ def stage_eval(
                 "scope": report["scope"],
                 "relevance_filter": report["relevance_filter"],
                 "faithfulness_enabled": report["faithfulness_enabled"],
+                "meta": report["meta"],
                 "gate": report["gate"],
                 "routing": report["routing"],
                 "retrieval": report["retrieval"],
