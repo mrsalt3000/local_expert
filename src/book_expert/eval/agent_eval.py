@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -144,7 +145,7 @@ def run_agent_eval(
         close = getattr(provider, "close", None)
         if callable(close):
             close()
-    report = _aggregate(rows)
+    report = _aggregate(rows, cases, pages)
     report["meta"] = _report_meta(
         settings,
         provider,
@@ -174,10 +175,19 @@ def run_agent_eval(
     return report
 
 
-def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _aggregate(
+    rows: list[dict[str, Any]],
+    cases: Sequence[Any],
+    pages: dict[str, tuple[str, int]],
+) -> dict[str, Any]:
     return {
         "cases": len(rows),
         "retrieval": {
+            "cases_unmapped": sum(
+                1
+                for case in cases
+                if any(chunk_id not in pages for chunk_id in case.expected_chunk_ids)
+            ),
             "page_recall": _mean(rows, "page_recall"),
             "source_page_recall": _mean(rows, "source_page_recall"),
             "citation_precision": _mean(rows, "citation_precision"),

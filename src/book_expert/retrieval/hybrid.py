@@ -124,6 +124,10 @@ class HybridSearcher:
                 use_lemmas=self.settings.lexical_use_lemmas,
             )
             sources.append("lexical_or")
+            seen_lexical = {hit.chunk_id for hit in lexical_hits}
+            lexical_or_hits = [
+                hit for hit in lexical_or_hits if hit.chunk_id not in seen_lexical
+            ]
 
         if lexical_or_hits:
             fused = rrf_fuse(

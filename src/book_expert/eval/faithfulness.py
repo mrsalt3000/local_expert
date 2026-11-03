@@ -178,7 +178,7 @@ class FaithfulnessJudge:
             for start in range(0, len(claims), JUDGE_BATCH_SIZE):
                 batch = claims[start : start + JUDGE_BATCH_SIZE]
                 max_tokens = (
-                    min(4000, 80 * len(batch))
+                    min(4000, 120 * len(batch))
                     if self.quote_mode
                     else min(4000, 32 * len(batch))
                 )
@@ -200,14 +200,12 @@ class FaithfulnessJudge:
                             for number in cited
                             if 1 <= number <= len(sources)
                         ]
+                        cited_ok = _quote_found(quote["quote"], cited_sources)
                         verdicts.append(
                             {
-                                "supported_by_cited": _quote_found(
-                                    quote["quote"], cited_sources
-                                ),
-                                "supported_by_context": _quote_found(
-                                    quote["context_quote"], sources
-                                ),
+                                "supported_by_cited": cited_ok,
+                                "supported_by_context": cited_ok
+                                or _quote_found(quote["context_quote"], sources),
                             }
                         )
                 else:
@@ -328,7 +326,13 @@ def parse_quote_verdicts(text: str, count: int) -> list[dict[str, str]]:
 
 
 def _normalize_quote(text: str) -> str:
-    return " ".join(text.casefold().replace("ё", "е").split())
+    return " ".join(
+        text.casefold()
+        .replace("ё", "е")
+        .replace("\u00ad", "")
+        .replace("…", "...")
+        .split()
+    )
 
 
 def _quote_found(quote: str, sources: Sequence[str]) -> bool:

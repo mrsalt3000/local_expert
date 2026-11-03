@@ -283,6 +283,7 @@ def test_quote_mode_requires_substring_from_source() -> None:
     )
 
     assert good.claims[0].supported_by_cited is True
+    assert good.claims[0].supported_by_context is True
     assert bad.claims[0].supported_by_cited is False
 
 

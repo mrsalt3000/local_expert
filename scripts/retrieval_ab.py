@@ -105,6 +105,12 @@ def main() -> None:
         "--variant", choices=("or", "scope", "expand", "candidates"), required=True
     )
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--variant-limit",
+        type=int,
+        default=40,
+        help="candidate scope для --variant candidates (baseline всегда 24).",
+    )
     args = parser.parse_args()
 
     settings = Settings(top_k=20)
@@ -160,7 +166,7 @@ def main() -> None:
                     profiles=router.profiles,
                     provider=provider,
                     use_lemmas=settings.lexical_use_lemmas,
-                    limit=40,
+                    limit=args.variant_limit,
                 )
                 base_hits = searcher.search(query, book_ids=ids, limit=20).hits
                 var_hits = searcher.search(

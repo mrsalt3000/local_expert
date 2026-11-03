@@ -1251,15 +1251,19 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
 
 ### T82 — Миграция на qwen3-embedding:0.6b (3C)
 
-- [ ] Статус: `in_progress` (2026-11-03; пилот положительный, полный reindex идёт)
+- [ ] Статус: `in_progress` (2026-11-03; пилот несопоставим, решает полный reindex)
 - Scope: embeddings/коллекция; прод-дефолты пока **не** переключены.
 - Пилот: 10 книг / 6001 чанк в `books_qwen3emb`, те же 69 кейсов.
   - bge-m3: page recall@5 **.7826**, @k **.8696**, MRR **.7296**;
   - qwen3: page recall@5 **.8696**, @k **.8696**, MRR **.7802**;
   - candidate book coverage .913 в обоих.
-  То есть +8.7 п.п. recall@5 и +5.1 п.п. MRR без потери @k.
-- Полный reindex: коллекция `books_qwen3emb_full`, **549 тыс. чанков**,
-  batch 32 (~24.8 chunks/s), ETA **6–7 ч**, резюмируется по `book_id`.
+  **Важно:** +8.7 п.п. recall@5 и +5.1 п.п. MRR **нельзя приписывать
+  эмбеддингам**. Qwen3-коллекция содержит только 10 книг, тогда как bge-m3
+  ищет 24 кандидата из 1160, а `BookProfileStore` для qwen3 отключён guard'ом
+  по модели. Это верхняя граница конфаунда, а не эффект модели; сравнение
+  будет корректным только на полной коллекции.
+- Полный reindex: коллекция `books_qwen3emb_full`, **556 948 чанков**,
+  batch 32 (16.7–24.8 chunks/s), ETA **7.7–9.1 ч**, резюмируется по `book_id`.
   Запущен как `systemd --user` unit `book-expert-reindex-qwen3.service`
   (скрипт `scripts/reindex_embeddings.py`), лог —
   `data/artifacts/qwen3-reindex.log`; после обрыва —

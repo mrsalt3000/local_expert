@@ -22,6 +22,7 @@ import json
 import os
 import subprocess
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -212,6 +213,8 @@ def run_stage_eval(
             close()
     report = _aggregate(
         rows,
+        cases=cases,
+        pages=pages,
         scope=scope,
         relevance_filter=relevance_filter,
         faithfulness=faithfulness,
@@ -280,6 +283,8 @@ def _page_mrr(
 def _aggregate(
     rows: list[dict[str, Any]],
     *,
+    cases: Sequence[Any],
+    pages: dict[str, tuple[str, int]],
     scope: ScopeMode,
     relevance_filter: bool,
     faithfulness: bool = False,
@@ -305,6 +310,11 @@ def _aggregate(
             },
         },
         "retrieval": {
+            "cases_unmapped": sum(
+                1
+                for case in cases
+                if any(chunk_id not in pages for chunk_id in case.expected_chunk_ids)
+            ),
             "page_recall_at_5": _mean(rows, "page_recall@5"),
             "page_recall_at_k": _mean(rows, "page_recall@k"),
             "page_mrr_at_5": _mean(rows, "page_mrr@5"),

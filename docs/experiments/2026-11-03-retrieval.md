@@ -90,8 +90,12 @@ uv run python scripts/retrieval_ab.py data/eval/multi-book-40.local.json --varia
 Negative: расширение candidate scope добавляет шум. Дефолт 24 не меняется.
 
 ```bash
-uv run python scripts/retrieval_ab.py data/eval/multi-book-40.local.json --variant candidates
+BOOK_EXPERT_LEXICAL_OR_WEIGHT=0 uv run python scripts/retrieval_ab.py \
+  data/eval/multi-book-40.local.json --variant candidates --variant-limit 32
 ```
+
+T73 снимался при `LEXICAL_OR_WEIGHT=0`; при дефолтном 0.1 baseline MRR —
+.7296. Для 50 добавьте `--variant-limit 50`.
 
 ## T74 — hard-negative калибровка судьи
 
@@ -188,8 +192,12 @@ judged, ошибок 0. Это жёсткий аудит-режим: бинар�
 | bge-m3 | .7826 | .8696 | .7296 | .913 |
 | qwen3-embedding:0.6b | **.8696** | .8696 | **.7802** | .913 |
 
-Прирост: **+8.7 п.п.** recall@5 и **+5.1 п.п.** MRR без потери recall@k.
-Пропускная способность qwen3 — **~24.8 chunks/s** (batch 32; 64/128 медленнее),
-полный каталог 549k чанков — **6–7 ч**. Полный reindex идёт в
-`books_qwen3emb_full`; прод-дефолты не переключены до проверки на 69/120
+**Пилот несопоставим:** qwen3-коллекция содержит только 10 книг, а bge-m3
+ищет 24 кандидата из 1160; profile-store для qwen3 отключён guard'ом по
+модели. Эти +8.7/+5.1 — верхняя граница конфаунда, а не эффект эмбеддингов.
+Решение даст только полная коллекция.
+
+Пропускная способность qwen3 — **16.7–24.8 chunks/s** (batch 32; 64/128
+медленнее), полный каталог **556 948 чанков** — **7.7–9.1 ч**. Reindex идёт
+в `books_qwen3emb_full`; прод-дефолты не переключены до проверки на 69/120
 кейсах и пересборки profile store.
