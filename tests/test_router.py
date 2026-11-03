@@ -314,6 +314,40 @@ class _EmbedProvider:
         return EmbeddingResult(vectors=((1.0, 0.0),), model="fake-embed", dim=2)
 
 
+class _TwoBookCatalog:
+    def search_lexical(self, query: str, **kwargs: object) -> list[object]:
+        return [
+            SimpleNamespace(book_id="book-lex"),
+            SimpleNamespace(book_id="book-second"),
+        ]
+
+
+def test_candidate_limit_truncates_scope() -> None:
+    from book_expert.retrieval.router import _candidate_books
+
+    books = [
+        Book(
+            id=book_id,
+            title=book_id,
+            path=Path(f"/tmp/{book_id}.pdf"),
+            content_hash=book_id,
+            status=BookStatus.ready,
+        )
+        for book_id in ("book-lex", "book-second", "book-third")
+    ]
+
+    ordered = _candidate_books(
+        "query",
+        books,
+        _TwoBookCatalog(),
+        profiles=None,
+        provider=None,
+        limit=1,  # type: ignore[arg-type]
+    )
+
+    assert [book.id for book in ordered] == ["book-lex"]
+
+
 def test_candidate_order_is_lexical_first_and_provider_independent() -> None:
     from book_expert.retrieval.router import _candidate_books
 

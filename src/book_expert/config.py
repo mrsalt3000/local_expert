@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     relevance_filter_min_ratio: float = 0.5
     answer_relevance_filter: bool = True
     answer_max_citations: int = 5
+    candidate_limit: int = 24
     advanced_query_limit: int = 4
     super_max_rounds: int = 5
     super_refine_enabled: bool = False
@@ -118,6 +119,13 @@ class Settings(BaseSettings):
     )
     @classmethod
     def _check_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("value must be positive")
+        return value
+
+    @field_validator("candidate_limit")
+    @classmethod
+    def _check_candidate_limit(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("value must be positive")
         return value

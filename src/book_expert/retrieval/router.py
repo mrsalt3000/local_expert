@@ -115,6 +115,7 @@ class BookRouter:
             profiles=self.profiles,
             provider=self.provider,
             use_lemmas=self.settings.lexical_use_lemmas,
+            limit=self.settings.candidate_limit,
         )
         if not self.settings.router_use_llm:
             return BookRoute(
@@ -176,6 +177,7 @@ def _candidate_books(
     profiles: BookProfileStore | None = None,
     provider: Provider | None = None,
     use_lemmas: bool = True,
+    limit: int = CANDIDATE_LIMIT,
 ) -> list[Book]:
     """Сужает каталог до правдоподобных книг до вызова LLM."""
     by_id = {book.id: book for book in books}
@@ -200,11 +202,11 @@ def _candidate_books(
         if book is not None and book.id not in seen:
             ordered.append(book)
             seen.add(book.id)
-            if len(ordered) >= CANDIDATE_LIMIT:
+            if len(ordered) >= limit:
                 break
 
     query_tokens = _meta_tokens(query)
-    if query_tokens and len(ordered) < CANDIDATE_LIMIT:
+    if query_tokens and len(ordered) < limit:
         scored = sorted(
             (
                 (_metadata_score(book, query_tokens), book)
@@ -214,12 +216,12 @@ def _candidate_books(
             key=lambda item: (-item[0], item[1].title.casefold()),
         )
         for score, book in scored:
-            if score <= 0 or len(ordered) >= CANDIDATE_LIMIT:
+            if score <= 0 or len(ordered) >= limit:
                 break
             ordered.append(book)
             seen.add(book.id)
 
-    if len(ordered) < CANDIDATE_LIMIT and profiles is not None and provider is not None:
+    if len(ordered) < limit and profiles is not None and provider is not None:
         try:
             vector = provider.embed([query]).vectors[0]
             profile_ids = profiles.search(vector, limit=PROFILE_LIMIT)
@@ -230,12 +232,12 @@ def _candidate_books(
             if book is not None and book.id not in seen:
                 ordered.append(book)
                 seen.add(book.id)
-            if len(ordered) >= CANDIDATE_LIMIT:
+            if len(ordered) >= limit:
                 break
 
     if not ordered:
-        ordered = books[:CANDIDATE_LIMIT]
-    return ordered[:CANDIDATE_LIMIT]
+        ordered = books[:limit]
+    return ordered[:limit]
 
 
 def _meta_tokens(text: str) -> set[str]:

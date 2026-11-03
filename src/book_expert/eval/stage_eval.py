@@ -222,6 +222,7 @@ def _scope_book_ids(
             profiles=router.profiles,
             provider=provider,
             use_lemmas=settings.lexical_use_lemmas,
+            limit=settings.candidate_limit,
         )
         return [book.id for book in candidates] or None
     return list(expected_books) or None
@@ -349,6 +350,7 @@ def _report_meta(
         "chat_model": getattr(provider, "chat_model", None),
         "embedding_model": getattr(provider, "embedding_model", None),
         "top_k_setting": settings.top_k,
+        "candidate_limit": settings.candidate_limit,
         "k": result_k,
         "scope": scope,
         "relevance_filter": relevance_filter,
