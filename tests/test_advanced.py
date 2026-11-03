@@ -121,6 +121,8 @@ def test_bad_plan_falls_back_to_original_query(tmp_path: Path) -> None:
     assert answer.plan == ("вопрос",)
     assert [call[0] for call in searcher.calls] == ["вопрос"]
     assert answer.citations[0].chunk_id == "c1"
+    assert [hit.chunk_id for hit in answer.sources] == ["c1"]
+    assert [hit.chunk_id for hit in answer.context] == ["c1"]
 
 
 def test_no_hits_refuses_without_answer_call(tmp_path: Path) -> None:

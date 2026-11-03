@@ -714,6 +714,12 @@ def stage_eval(
 def agent_evaluate(
     cases: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
     limit: int | None = typer.Option(None, "--limit", min=1),
+    offset: int = typer.Option(0, "--offset", min=0),
+    faithfulness: bool = typer.Option(
+        False,
+        "--faithfulness",
+        help="LLM-судья: поддержка утверждений ответа цитируемыми фрагментами.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/agent-eval.local.json"),
         "--output",
@@ -722,7 +728,9 @@ def agent_evaluate(
     """Eval режима «Агент»: тот же набор, но ответ строит super-answerer."""
     from book_expert.eval.agent_eval import run_agent_eval
 
-    report = run_agent_eval(Settings(), cases, limit=limit)
+    report = run_agent_eval(
+        Settings(), cases, limit=limit, offset=offset, faithfulness=faithfulness
+    )
     write_report(report, output)
     typer.echo(
         json.dumps(

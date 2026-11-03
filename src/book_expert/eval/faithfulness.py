@@ -79,6 +79,8 @@ def split_claims(text: str) -> tuple[tuple[str, tuple[int, ...]], ...]:
         cleaned = cleaned.strip(" \t-—•*#>")
         if len(cleaned) < 3:
             continue
+        if not cited and len(cleaned) < 80 and not re.search(r"[.!?…]$", cleaned):
+            continue
         key = cleaned.casefold()
         if key in seen:
             continue
@@ -101,8 +103,20 @@ class FaithfulnessJudge:
         question: str,
         answer_text: str,
         sources: tuple[str, ...],
+        *,
+        marker_map: dict[int, int] | None = None,
     ) -> FaithfulnessReport:
         claims = split_claims(answer_text)
+        if marker_map:
+            claims = tuple(
+                (
+                    text,
+                    tuple(
+                        marker_map[number] for number in cited if number in marker_map
+                    ),
+                )
+                for text, cited in claims
+            )
         if not claims:
             return FaithfulnessReport((), 0.0, 0.0, 0.0)
         if not sources:

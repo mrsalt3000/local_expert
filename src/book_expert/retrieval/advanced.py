@@ -253,6 +253,8 @@ class AdvancedAnswerer:
                 plan=tuple(plan),
                 rounds=rounds,
                 max_rounds=max_rounds,
+                sources=sources,
+                context=tuple(hits),
             ),
             query,
             sources,

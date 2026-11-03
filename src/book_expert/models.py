@@ -103,3 +103,4 @@ class Answer:
     rounds: int = 0
     max_rounds: int = 0
     sources: tuple[SearchHit, ...] = ()
+    context: tuple[SearchHit, ...] = ()

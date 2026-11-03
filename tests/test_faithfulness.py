@@ -72,6 +72,14 @@ def test_split_claims_ignores_short_fragments() -> None:
     assert split_claims("Да. [1]") == (("Да.", (1,)),)
 
 
+def test_split_claims_skips_headings_without_markers() -> None:
+    text = "Определение\nТекст утверждения.\nПлан:"
+
+    claims = split_claims(text)
+
+    assert [claim for claim, _ in claims] == ["Текст утверждения."]
+
+
 def test_parse_verdicts_fills_missing_ids_with_false() -> None:
     verdicts = parse_verdicts(
         '{"claims": [{"id": 1, "supported_by_cited": true, '
@@ -127,6 +135,23 @@ def test_judge_computes_faithfulness_and_citation_support() -> None:
     assert len(report.unsupported) == 2
     assert report.error is None
     assert "Вопрос" in provider.messages[1].content
+
+
+def test_judge_maps_markers_to_context_positions() -> None:
+    provider = FakeJudgeProvider(
+        '{"claims": [{"id": 1, "supported_by_cited": true, '
+        '"supported_by_context": true}]}'
+    )
+
+    report = FaithfulnessJudge(provider).evaluate(
+        "Вопрос",
+        "Утверждение [1].",
+        ("Первый фрагмент.", "Второй фрагмент."),
+        marker_map={1: 2},
+    )
+
+    assert "1. [2] Утверждение." in provider.messages[-1].content
+    assert report.citation_support_precision == 1.0
 
 
 def test_judge_returns_zero_without_sources() -> None:

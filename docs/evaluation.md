@@ -20,6 +20,7 @@
 | `page_recall@k` / `page_mrr@k` | То же по страницам: устойчиво к переиндексации и к смене chunk id |
 | `page_recall@5` / `chunk_recall@5` | Метрики на первых пяти хитах; не зависят от `--k`, поэтому сравнимы между прогонами с разным k |
 | `faithfulness` | Доля утверждений ответа, поддержанных хотя бы одним найденным фрагментом (LLM-судья, `--faithfulness`) |
+| `source_page_recall` | Доля ожидаемых страниц, попавших в найденные фрагменты (для «Агента» — до отбора цитат) |
 | `citation_support_precision` | Доля утверждений с маркером `[n]`, где фрагмент `n` действительно поддерживает утверждение |
 | `citation_coverage` | Доля утверждений, у которых вообще есть маркер цитаты |
 
@@ -51,8 +52,11 @@ eval и удаляет его после завершения.
 uv run book-expert eval path/to/cases.json --k 5 --json
 uv run book-expert stage-eval path/to/cases.json --scope candidates --relevance-filter
 uv run book-expert stage-eval path/to/cases.json --scope candidates --k 10 --faithfulness
+uv run book-expert agent-eval path/to/cases.json --limit 20 --faithfulness
 ```
 
+`agent-eval` прогоняет `SuperAdvancedAnswerer` — путь, который UI открывает
+по умолчанию; метрики те же, page recall считается по цитатам ответа.
 Без Qdrant используйте `--lexical-only`; для авто-routing — `--route`.
 `stage-eval --k` задаёт число хитов в ответе (по умолчанию
 `BOOK_EXPERT_TOP_K`), `--faithfulness` включает LLM-судью утверждений.

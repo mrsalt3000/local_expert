@@ -13,6 +13,7 @@ from typing import Any
 
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
+from book_expert.eval.faithfulness import FaithfulnessJudge
 from book_expert.eval.metrics import load_cases
 from book_expert.eval.stage_eval import _percentile, _report_meta
 from book_expert.providers import get_provider
@@ -26,10 +27,11 @@ def run_agent_eval(
     cases_path: str | Path,
     *,
     limit: int | None = None,
+    offset: int = 0,
+    faithfulness: bool = False,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
-    if limit:
-        cases = cases[:limit]
+    cases = cases[offset : offset + limit] if limit else cases[offset:]
     settings.ensure_dirs()
     catalog = Catalog(settings.catalog_path)
     catalog.initialize()
@@ -37,6 +39,7 @@ def run_agent_eval(
     searcher = HybridSearcher(settings, provider, catalog)
     router = BookRouter(settings, provider, catalog)
     answerer = SuperAdvancedAnswerer(settings, provider, searcher, router)
+    judge = FaithfulnessJudge(provider) if faithfulness else None
     pages = {chunk.id: chunk.pdf_page_index for chunk in catalog.iter_chunks()}
     rows: list[dict[str, Any]] = []
     try:
@@ -50,7 +53,28 @@ def run_agent_eval(
             answer = answerer.ask(case.question, book_ids=None, auto_route=True)
             elapsed_ms = (time.perf_counter() - started) * 1000
             cited_pages = {citation.pdf_page_index for citation in answer.citations}
+            source_pages = {hit.pdf_page_index for hit in answer.sources}
             page_hits = len(cited_pages & expected_pages)
+            source_hits = len(source_pages & expected_pages)
+            judgement = None
+            if judge is not None and not answer.refused:
+                context = answer.context or answer.sources
+                context_index = {
+                    hit.chunk_id: position
+                    for position, hit in enumerate(context, start=1)
+                }
+                marker_map = {
+                    citation.number: context_index.get(
+                        citation.chunk_id, citation.number
+                    )
+                    for citation in answer.citations
+                }
+                judgement = judge.evaluate(
+                    case.question,
+                    answer.text,
+                    tuple(hit.text for hit in context),
+                    marker_map=marker_map,
+                )
             rows.append(
                 {
                     "index": index,
@@ -60,10 +84,21 @@ def run_agent_eval(
                     "citation_precision": page_hits / len(cited_pages)
                     if cited_pages
                     else 0.0,
+                    "source_page_recall": source_hits / len(expected_pages)
+                    if expected_pages
+                    else 0.0,
                     "refused": answer.refused,
                     "citations": len(answer.citations),
                     "plan": len(answer.plan),
                     "rounds": answer.rounds,
+                    "faithfulness": judgement.faithfulness if judgement else None,
+                    "citation_support_precision": (
+                        judgement.citation_support_precision if judgement else None
+                    ),
+                    "judged_claims": len(judgement.claims) if judgement else 0,
+                    "faithfulness_error": (
+                        judgement.error if judgement is not None else None
+                    ),
                     "elapsed_ms": round(elapsed_ms, 1),
                 }
             )
@@ -82,7 +117,7 @@ def run_agent_eval(
         result_k=settings.top_k,
         scope="candidates",
         relevance_filter=False,
-        faithfulness=False,
+        faithfulness=faithfulness,
         cases=len(cases),
     )
     report["meta"]["advanced_query_limit"] = settings.advanced_query_limit
@@ -95,6 +130,7 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "cases": len(rows),
         "retrieval": {
             "page_recall": _mean(rows, "page_recall"),
+            "source_page_recall": _mean(rows, "source_page_recall"),
             "citation_precision": _mean(rows, "citation_precision"),
         },
         "answers": {
@@ -107,6 +143,12 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "no_citations": sum(
                 1 for row in rows if not row["refused"] and row["citations"] == 0
             ),
+            "faithfulness": _mean_optional(rows, "faithfulness"),
+            "citation_support_precision": _mean_optional(
+                rows, "citation_support_precision"
+            ),
+            "judged_cases": sum(1 for row in rows if row["faithfulness"] is not None),
+            "faithfulness_errors": sum(1 for row in rows if row["faithfulness_error"]),
         },
         "plan": {
             "avg_queries": round(_mean(rows, "plan"), 2),
@@ -122,6 +164,11 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _mean(rows: list[dict[str, Any]], key: str) -> float:
     return round(sum(row[key] for row in rows) / len(rows), 4) if rows else 0.0
+
+
+def _mean_optional(rows: list[dict[str, Any]], key: str) -> float | None:
+    values = [row[key] for row in rows if row.get(key) is not None]
+    return round(sum(values) / len(values), 4) if values else None
 
 
 __all__ = ["run_agent_eval"]

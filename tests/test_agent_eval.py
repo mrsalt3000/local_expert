@@ -9,6 +9,7 @@ import pytest
 
 from book_expert.config import Settings
 from book_expert.eval import agent_eval
+from book_expert.eval.faithfulness import ClaimJudgement, FaithfulnessReport
 from book_expert.eval.metrics import EvalCase
 from book_expert.models import Answer, Citation
 
@@ -110,3 +111,62 @@ def test_agent_eval_aggregates_citations_and_plan(
     assert report["meta"]["provider"] == "fake"
     assert report["details"][0]["citation_precision"] == 1.0
     assert answerer.questions == ["q1", "q2"]
+
+
+class FakeJudge:
+    def __init__(self, provider: object) -> None:
+        self.provider = provider
+        self.calls = 0
+
+    def evaluate(
+        self,
+        question: str,
+        answer_text: str,
+        sources: tuple[str, ...],
+        *,
+        marker_map: dict[int, int] | None = None,
+    ):
+        self.calls += 1
+        return FaithfulnessReport(
+            claims=(ClaimJudgement("claim", (1,), True, True),),
+            faithfulness=1.0,
+            citation_support_precision=1.0,
+            citation_coverage=1.0,
+        )
+
+
+def test_agent_eval_judges_faithfulness(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    chunks = [SimpleNamespace(id="c1", pdf_page_index=10)]
+    answerer = FakeAgentAnswerer(
+        {
+            "q1": Answer(text="Ответ [1].", citations=(_citation(10),)),
+            "q2": Answer(text="мало", refused=True),
+        }
+    )
+    judge = FakeJudge(FakeProvider())
+    monkeypatch.setattr(agent_eval, "Catalog", lambda path: FakeCatalog(chunks))
+    monkeypatch.setattr(agent_eval, "get_provider", lambda settings: FakeProvider())
+    monkeypatch.setattr(agent_eval, "HybridSearcher", lambda *a, **k: FakeSearcher())
+    monkeypatch.setattr(agent_eval, "BookRouter", lambda *a, **k: FakeRouter())
+    monkeypatch.setattr(agent_eval, "SuperAdvancedAnswerer", lambda *a, **k: answerer)
+    monkeypatch.setattr(agent_eval, "FaithfulnessJudge", lambda provider: judge)
+    monkeypatch.setattr(
+        agent_eval,
+        "load_cases",
+        lambda path: (
+            EvalCase("q1", ("c1",), ("book-1",)),
+            EvalCase("q2", ("c1",), ("book-1",)),
+        ),
+    )
+
+    report = agent_eval.run_agent_eval(
+        Settings(), tmp_path / "cases.json", faithfulness=True
+    )
+
+    assert report["answers"]["faithfulness"] == 1.0
+    assert report["answers"]["citation_support_precision"] == 1.0
+    assert report["answers"]["judged_cases"] == 1
+    assert report["meta"]["faithfulness"] is True
+    assert judge.calls == 1
