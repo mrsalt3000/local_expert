@@ -601,3 +601,29 @@ def test_index_has_feedback_buttons(client: TestClient) -> None:
     assert "feedback-btn" in html
     assert "/api/feedback" in html
     assert "sendFeedback" in html
+
+
+def test_chat_super_timeout_returns_504(
+    backend: FakeBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from book_expert.web import app as web_app
+    from book_expert.web.answer_worker import AnswerTimeoutError
+
+    monkeypatch.setattr(web_app, "BookChatBackend", type(backend))
+
+    def boom(*args: object, **kwargs: object) -> Answer:
+        raise AnswerTimeoutError("super exceeded 1s")
+
+    monkeypatch.setattr(web_app, "answer_in_process", boom)
+    settings = Settings(workspace=tmp_path, data_dir=tmp_path / "data")
+    app = create_app(settings, backend)
+
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/api/chat", json={"message": "Вопрос", "mode": "super"}
+        )
+
+    assert response.status_code == 504
+    assert "exceeded" in response.json()["detail"]

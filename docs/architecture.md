@@ -116,10 +116,14 @@ project-scope `.qwen/settings.json` с сервером `book-expert`.
 затем модель синтезирует развёрнутый ответ; в ответе есть `plan` и citations.
 Для UI есть `POST /api/chat/stream`: SSE-события `plan`, `query_start`,
 `query_done`, `round`, `synthesizing` и `done`, по ним рисуется процент,
-текущий запрос и номер раунда. Режим `mode=super` (`SuperAdvancedAnswerer`)
-после начального плана до `BOOK_EXPERT_SUPER_MAX_ROUNDS` (по умолчанию 5)
-раз спрашивает refiner-модель, каких аспектов не хватает, добавляет новые
-запросы, снова ищет и только затем синтезирует ответ.
+текущий запрос и номер раунда. Ответ advanced/super считается в отдельном
+процессе (`web/answer_worker.py`, `BOOK_EXPERT_ANSWER_HARD_TIMEOUT=true`):
+по `BOOK_EXPERT_ANSWER_TIMEOUT_S` (по умолчанию 180 с) процесс убивается,
+клиент получает SSE-событие `error` со статусом 504. Режим `mode=super`
+(`SuperAdvancedAnswerer`) после начального плана до
+`BOOK_EXPERT_SUPER_MAX_ROUNDS` (по умолчанию 5) раз спрашивает refiner-модель,
+каких аспектов не хватает, добавляет новые запросы, снова ищет и только затем
+синтезирует ответ.
 С `mode=agent` работает `AgentRunner` с теми же tool-политиками и audit.
 История диалога живёт в `localStorage` браузера: чаты раздельные, у каждого
 своя история, режим и книга. Последние 12 реплик активного чата уходят в
@@ -172,9 +176,10 @@ Windows-формат) и возвращает количество книг, о�
   лимиты шагов/таймаутов обязательны. Веб-агент выполняется в отдельном
   процессе (`agent/worker.py`, `BOOK_EXPERT_AGENT_HARD_TIMEOUT=true`): по
   `BOOK_EXPERT_AGENT_TIMEOUT_S` процесс убивается вместе с сетевыми
-  клиентами и инструментами. CLI-агент по-прежнему использует мягкий
-  caller-side таймаут; side effects ограничены `max_steps`, таймаутами
-  инструментов и bwrap.
+  клиентами и инструментами. SSE-ответы advanced/super — тоже в отдельном
+  процессе (`web/answer_worker.py`), дедлайн `BOOK_EXPERT_ANSWER_TIMEOUT_S`.
+  CLI-агент по-прежнему использует мягкий caller-side таймаут; side effects
+  ограничены `max_steps`, таймаутами инструментов и bwrap.
 
 ## Отказы и деградация
 

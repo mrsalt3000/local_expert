@@ -20,6 +20,13 @@ from book_expert.agent.graph import AgentError, AgentTimeoutError
 from book_expert.config import Settings
 from book_expert.models import Answer, Book
 from book_expert.providers import ProviderError, ProviderUnavailableError
+from book_expert.web.answer_worker import (
+    AnswerTimeoutError,
+    WorkerAnswerError,
+    answer_in_process,
+    stream_answer_in_process,
+    stream_error as _stream_error,
+)
 from book_expert.web.backend import BookChatBackend
 from book_expert.web.metrics import RequestMetrics
 from book_expert.web.library import (
@@ -344,13 +351,26 @@ def create_app(
                 answer = active.ask_rag(payload.message, book_ids, history=history)
                 response = _rag_response(answer)
                 refused = answer.refused
-            elif payload.mode == "advanced":
-                answer = active.ask_advanced(payload.message, book_ids, history=history)
-                response = _rag_response(answer, mode="advanced")
-                refused = answer.refused
-            elif payload.mode == "super":
-                answer = active.ask_super(payload.message, book_ids, history=history)
-                response = _rag_response(answer, mode="super")
+            elif payload.mode in {"advanced", "super"}:
+                if app.state.settings.answer_hard_timeout and isinstance(
+                    active, BookChatBackend
+                ):
+                    answer = answer_in_process(
+                        app.state.settings,
+                        payload.mode,
+                        payload.message,
+                        book_ids=book_ids,
+                        history=history,
+                    )
+                elif payload.mode == "advanced":
+                    answer = active.ask_advanced(
+                        payload.message, book_ids, history=history
+                    )
+                else:
+                    answer = active.ask_super(
+                        payload.message, book_ids, history=history
+                    )
+                response = _rag_response(answer, mode=payload.mode)
                 refused = answer.refused
             else:
                 text = active.ask_agent(payload.message, book_ids, history=history)
@@ -367,6 +387,12 @@ def create_app(
         except ValueError as exc:
             failed = True
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except AnswerTimeoutError as exc:
+            failed = True
+            raise HTTPException(status_code=504, detail=str(exc)) from exc
+        except WorkerAnswerError as exc:
+            failed = True
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
         finally:
             elapsed_ms = (perf_counter() - started) * 1000
             metrics.record(
@@ -390,6 +416,14 @@ def create_app(
         started = perf_counter()
 
         def generate() -> Iterator[str]:
+            backend = get_backend()
+            if app.state.settings.answer_hard_timeout and isinstance(
+                backend, BookChatBackend
+            ):
+                yield from _hard_timeout_stream(
+                    app.state.settings, payload, book_ids, history, started
+                )
+                return
             events: Queue[dict[str, Any] | None] = Queue()
 
             def emit(event: dict[str, Any]) -> None:
@@ -397,7 +431,6 @@ def create_app(
 
             def worker() -> None:
                 try:
-                    backend = get_backend()
                     if payload.mode == "super":
                         answer = backend.ask_super(
                             payload.message,
@@ -640,16 +673,34 @@ def _book_out(book: Book) -> BookOut:
     )
 
 
-def _stream_error(exc: Exception) -> dict[str, Any]:
-    if isinstance(exc, ProviderError):
-        return {"detail": str(exc), "status": 503}
-    if isinstance(exc, ValueError):
-        return {"detail": str(exc), "status": 400}
-    if isinstance(exc, AgentTimeoutError):
-        return {"detail": str(exc), "status": 504}
-    if isinstance(exc, AgentError):
-        return {"detail": str(exc), "status": 502}
-    return {"detail": "internal error", "status": 500}
+def _sse(event: dict[str, Any]) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+def _hard_timeout_stream(
+    settings: Settings,
+    payload: ChatRequest,
+    book_ids: Sequence[str] | None,
+    history: Sequence[tuple[str, str]],
+    started: float,
+) -> Iterator[str]:
+    """SSE из дочернего процесса: прогресс идёт, зависание убивается по таймауту."""
+    try:
+        for event in stream_answer_in_process(
+            settings,
+            payload.mode,
+            payload.message,
+            book_ids=book_ids,
+            history=history,
+        ):
+            if event["type"] == "done":
+                response = _rag_response(event["answer"], mode=payload.mode)
+                response.elapsed_ms = int((perf_counter() - started) * 1000)
+                yield _sse({"type": "done", "response": response.model_dump()})
+            else:
+                yield _sse(event)
+    except Exception as exc:  # noqa: BLE001 - SSE обязан вернуть error-событие
+        yield _sse({"type": "error", **_stream_error(exc)})
 
 
 def _rag_response(

@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     relevance_filter_min_ratio: float = 0.5
     answer_relevance_filter: bool = True
     answer_max_citations: int = 5
+    answer_timeout_s: int = 180
+    answer_hard_timeout: bool = True
     candidate_limit: int = 24
     advanced_query_limit: int = 8
     super_max_rounds: int = 5
@@ -111,6 +113,7 @@ class Settings(BaseSettings):
         "ollama_num_ctx",
         "agent_max_steps",
         "agent_timeout_s",
+        "answer_timeout_s",
         "command_timeout_s",
         "advanced_query_limit",
         "super_max_rounds",

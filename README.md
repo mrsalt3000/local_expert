@@ -113,9 +113,12 @@ uv run book-expert ui
 
 ```dotenv
 # фрагментов на каждый поисковый запрос (advanced и super)
-BOOK_EXPERT_ADVANCED_QUERY_LIMIT=4
+BOOK_EXPERT_ADVANCED_QUERY_LIMIT=8
 # сколько раз super может вернуться к плану за доп. запросами
 BOOK_EXPERT_SUPER_MAX_ROUNDS=5
+# жёсткий таймаут SSE-ответа advanced/super: процесс убивается по дедлайну
+BOOK_EXPERT_ANSWER_HARD_TIMEOUT=true
+BOOK_EXPERT_ANSWER_TIMEOUT_S=180
 ```
 
 Сервер слушает только loopback и не имеет авторизации. История диалога
