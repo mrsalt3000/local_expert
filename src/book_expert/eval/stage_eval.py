@@ -70,7 +70,10 @@ def run_stage_eval(
         else None
     )
     judge = FaithfulnessJudge(judge_client or provider) if faithfulness else None
-    pages = {chunk.id: chunk.pdf_page_index for chunk in catalog.iter_chunks()}
+    pages = {
+        chunk.id: (chunk.book_id, chunk.pdf_page_index)
+        for chunk in catalog.iter_chunks()
+    }
     ready_books = [
         book for book in catalog.list_books() if book.status.value == "ready"
     ]
@@ -108,7 +111,9 @@ def run_stage_eval(
                 limit=result_k,
             )
             retrieval_ms = (time.perf_counter() - retrieval_start) * 1000
-            retrieved_pages = [hit.pdf_page_index for hit in outcome.hits]
+            retrieved_pages = [
+                (hit.book_id, hit.pdf_page_index) for hit in outcome.hits
+            ]
             top5_pages = retrieved_pages[:5]
             page_hits = len(expected_pages & set(top5_pages))
             page_hits_k = len(expected_pages & set(retrieved_pages))
@@ -132,7 +137,10 @@ def run_stage_eval(
                     answer.text,
                     tuple(hit.text for hit in answer.sources),
                 )
-            cited_pages = {citation.pdf_page_index for citation in answer.citations}
+            cited_pages = {
+                (citation.book_id, citation.pdf_page_index)
+                for citation in answer.citations
+            }
             citation_hits = len(cited_pages & expected_pages)
             row = {
                 "index": index,
@@ -243,8 +251,8 @@ def _scope_book_ids(
 
 
 def _page_mrr(
-    retrieved_pages: list[int],
-    expected_pages: set[int],
+    retrieved_pages: list[tuple[str, int]],
+    expected_pages: set[tuple[str, int]],
     k: int,
 ) -> float:
     if not expected_pages:
@@ -373,6 +381,7 @@ def _report_meta(
         "cases": cases,
         "qdrant_collection": settings.qdrant_collection,
         "git_commit": _git_commit(settings.workspace_path),
+        "git_dirty": _git_dirty(settings.workspace_path),
         "dataset": path.name,
         "dataset_sha256": dataset_sha256,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -396,6 +405,21 @@ def _git_commit(workspace: Path) -> str | None:
         return None
     commit = result.stdout.strip()
     return commit or None
+
+
+def _git_dirty(workspace: Path) -> bool | None:
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return bool(result.stdout.strip())
 
 
 def _share(rows: list[dict[str, Any]], key: str) -> float:

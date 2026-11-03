@@ -46,7 +46,10 @@ def run_agent_eval(
         else None
     )
     judge = FaithfulnessJudge(judge_client or provider) if faithfulness else None
-    pages = {chunk.id: chunk.pdf_page_index for chunk in catalog.iter_chunks()}
+    pages = {
+        chunk.id: (chunk.book_id, chunk.pdf_page_index)
+        for chunk in catalog.iter_chunks()
+    }
     rows: list[dict[str, Any]] = []
     try:
         for index, case in enumerate(cases, start=1):
@@ -59,12 +62,15 @@ def run_agent_eval(
             answer = answerer.ask(case.question, book_ids=None, auto_route=True)
             elapsed_ms = (time.perf_counter() - started) * 1000
             expected_book = next(iter(case.expected_book_ids), None)
-            cited_pages = {citation.pdf_page_index for citation in answer.citations}
+            cited_pages = {
+                (citation.book_id, citation.pdf_page_index)
+                for citation in answer.citations
+            }
             citation_book_hits = sum(
                 1 for citation in answer.citations if citation.book_id == expected_book
             )
             context = answer.context or answer.sources
-            source_pages = {hit.pdf_page_index for hit in context}
+            source_pages = {(hit.book_id, hit.pdf_page_index) for hit in context}
             page_hits = len(cited_pages & expected_pages)
             source_hits = len(source_pages & expected_pages)
             judgement = None

@@ -122,7 +122,7 @@ def _install(
     chunk_pages: dict[str, int],
 ) -> None:
     chunks = [
-        SimpleNamespace(id=chunk_id, pdf_page_index=page)
+        SimpleNamespace(id=chunk_id, pdf_page_index=page, book_id="book-1")
         for chunk_id, page in chunk_pages.items()
     ]
     monkeypatch.setattr(stage_eval, "Catalog", lambda path: FakeCatalog(chunks))
@@ -215,6 +215,44 @@ def test_stage_eval_citation_metrics_use_pages(monkeypatch: pytest.MonkeyPatch) 
     assert row["chunk_recall@5"] == 0.0
     assert row["page_recall@5"] == 1.0
     assert row["citation_precision"] == 1.0
+
+
+def test_page_metrics_ignore_same_page_in_another_book(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    other_hit = SearchHit(
+        chunk_id="c9",
+        book_id="book-2",
+        text="synthetic",
+        score=1.0,
+        pdf_page_index=10,
+    )
+    other_citation = Citation(
+        book_id="book-2",
+        book_title="Book Two",
+        pdf_page_index=10,
+        chunk_id="c9",
+    )
+    searcher = FakeSearcher({"q1": [other_hit], "q2": []})
+    answerer = FakeAnswerer({"q1": ([other_citation], False), "q2": ([], True)})
+    _install(
+        monkeypatch,
+        searcher=searcher,
+        router=FakeRouter({}),
+        answerer=answerer,
+        chunk_pages={"c1": 10, "c4": 40},
+    )
+
+    report = stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False),
+        Path("cases.json"),
+        scope="expected",
+    )
+
+    row = report["details"][0]
+    assert row["page_recall@5"] == 0.0
+    assert row["page_recall@k"] == 0.0
+    assert row["citation_precision"] == 0.0
 
 
 def test_stage_eval_reports_false_refusal(monkeypatch: pytest.MonkeyPatch) -> None:

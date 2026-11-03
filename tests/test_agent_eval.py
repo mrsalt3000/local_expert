@@ -70,8 +70,8 @@ def test_agent_eval_aggregates_citations_and_plan(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     chunks = [
-        SimpleNamespace(id="c1", pdf_page_index=10),
-        SimpleNamespace(id="c2", pdf_page_index=20),
+        SimpleNamespace(id="c1", pdf_page_index=10, book_id="book-1"),
+        SimpleNamespace(id="c2", pdf_page_index=20, book_id="book-1"),
     ]
     answerer = FakeAgentAnswerer(
         {
@@ -141,7 +141,7 @@ class FakeJudge:
 def test_agent_eval_judges_faithfulness(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    chunks = [SimpleNamespace(id="c1", pdf_page_index=10)]
+    chunks = [SimpleNamespace(id="c1", pdf_page_index=10, book_id="book-1")]
     answerer = FakeAgentAnswerer(
         {
             "q1": Answer(text="Ответ [1].", citations=(_citation(10),)),
@@ -207,8 +207,8 @@ def test_agent_eval_counts_context_pages_not_citations(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     chunks = [
-        SimpleNamespace(id="c1", pdf_page_index=10),
-        SimpleNamespace(id="c2", pdf_page_index=20),
+        SimpleNamespace(id="c1", pdf_page_index=10, book_id="book-1"),
+        SimpleNamespace(id="c2", pdf_page_index=20, book_id="book-1"),
     ]
     source = SearchHit(
         chunk_id="c1",
@@ -267,7 +267,7 @@ def test_agent_eval_uses_separate_judge_provider(
             close=lambda: None,
         )
 
-    chunks = [SimpleNamespace(id="c1", pdf_page_index=10)]
+    chunks = [SimpleNamespace(id="c1", pdf_page_index=10, book_id="book-1")]
     answerer = FakeAgentAnswerer(
         {"q1": Answer(text="Ответ [1].", citations=(_citation(10),))}
     )
