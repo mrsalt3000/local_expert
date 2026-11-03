@@ -373,10 +373,10 @@ def test_delete_unindexed_file(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("H:\\DISK\\Книги", "/mnt/h/DISK/Книги"),
+        ("D:\\Books", "/mnt/d/Books"),
         ("C:/temp/books", "/mnt/c/temp/books"),
-        ("\\\\wsl.localhost\\Ubuntu\\home\\mrsalt", "/home/mrsalt"),
-        ("/mnt/h/DISK/Книги", "/mnt/h/DISK/Книги"),
+        ("\\\\wsl.localhost\\Ubuntu\\home\\user", "/home/user"),
+        ("/mnt/d/Books", "/mnt/d/Books"),
     ],
 )
 def test_normalize_source_path(raw: str, expected: str) -> None:
