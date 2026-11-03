@@ -11,7 +11,7 @@ from book_expert.config import Settings
 from book_expert.eval import agent_eval
 from book_expert.eval.faithfulness import ClaimJudgement, FaithfulnessReport
 from book_expert.eval.metrics import EvalCase
-from book_expert.models import Answer, Citation
+from book_expert.models import Answer, Citation, SearchHit
 
 
 class FakeCatalog:
@@ -173,3 +173,81 @@ def test_agent_eval_judges_faithfulness(
     assert report["answers"]["judged_cases"] == 1
     assert report["meta"]["faithfulness"] is True
     assert judge.calls == 1
+
+
+def test_source_page_recall_uses_full_context() -> None:
+    source = SearchHit(
+        chunk_id="c1",
+        book_id="book-1",
+        book_title="Book One",
+        text="cited",
+        score=1.0,
+        pdf_page_index=10,
+    )
+    context_hit = SearchHit(
+        chunk_id="c2",
+        book_id="book-1",
+        book_title="Book One",
+        text="context",
+        score=0.5,
+        pdf_page_index=20,
+    )
+    answer = Answer(
+        text="Ответ [1].",
+        citations=(_citation(10),),
+        sources=(source,),
+        context=(source, context_hit),
+    )
+
+    assert {hit.pdf_page_index for hit in answer.context} == {10, 20}
+    assert answer.sources[0].pdf_page_index == 10
+
+
+def test_agent_eval_counts_context_pages_not_citations(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    chunks = [
+        SimpleNamespace(id="c1", pdf_page_index=10),
+        SimpleNamespace(id="c2", pdf_page_index=20),
+    ]
+    source = SearchHit(
+        chunk_id="c1",
+        book_id="book-1",
+        book_title="Book One",
+        text="cited",
+        score=1.0,
+        pdf_page_index=10,
+    )
+    context_hit = SearchHit(
+        chunk_id="c2",
+        book_id="book-1",
+        book_title="Book One",
+        text="context",
+        score=0.5,
+        pdf_page_index=20,
+    )
+    answerer = FakeAgentAnswerer(
+        {
+            "q1": Answer(
+                text="Ответ [1].",
+                citations=(_citation(10),),
+                sources=(source,),
+                context=(source, context_hit),
+            )
+        }
+    )
+    monkeypatch.setattr(agent_eval, "Catalog", lambda path: FakeCatalog(chunks))
+    monkeypatch.setattr(agent_eval, "get_provider", lambda settings: FakeProvider())
+    monkeypatch.setattr(agent_eval, "HybridSearcher", lambda *a, **k: FakeSearcher())
+    monkeypatch.setattr(agent_eval, "BookRouter", lambda *a, **k: FakeRouter())
+    monkeypatch.setattr(agent_eval, "SuperAdvancedAnswerer", lambda *a, **k: answerer)
+    monkeypatch.setattr(
+        agent_eval,
+        "load_cases",
+        lambda path: (EvalCase("q1", ("c2",), ("book-1",)),),
+    )
+
+    report = agent_eval.run_agent_eval(Settings(), tmp_path / "cases.json")
+
+    assert report["retrieval"]["page_recall"] == 0.0
+    assert report["retrieval"]["source_page_recall"] == 1.0

@@ -57,12 +57,12 @@ def run_agent_eval(
             citation_book_hits = sum(
                 1 for citation in answer.citations if citation.book_id == expected_book
             )
-            source_pages = {hit.pdf_page_index for hit in answer.sources}
+            context = answer.context or answer.sources
+            source_pages = {hit.pdf_page_index for hit in context}
             page_hits = len(cited_pages & expected_pages)
             source_hits = len(source_pages & expected_pages)
             judgement = None
             if judge is not None and not answer.refused:
-                context = answer.context or answer.sources
                 context_index = {
                     hit.chunk_id: position
                     for position, hit in enumerate(context, start=1)
