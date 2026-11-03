@@ -51,6 +51,7 @@ def run_stage_eval(
     k: int | None = None,
     judge_provider: str | None = None,
     strict_judge: bool = False,
+    quote_judge: bool = False,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     if limit:
@@ -71,7 +72,11 @@ def run_stage_eval(
         else None
     )
     judge = (
-        FaithfulnessJudge(judge_client or provider, strict=strict_judge)
+        FaithfulnessJudge(
+            judge_client or provider,
+            strict=strict_judge,
+            quote_mode=quote_judge,
+        )
         if faithfulness
         else None
     )
@@ -226,6 +231,9 @@ def run_stage_eval(
         report["meta"]["judge_provider"] = getattr(judge.provider, "name", None)
         report["meta"]["judge_chat_model"] = getattr(judge.provider, "chat_model", None)
         report["meta"]["judge_strict"] = strict_judge
+        report["meta"]["judge_mode"] = (
+            "quote" if quote_judge else "strict" if strict_judge else "binary"
+        )
     return report
 
 

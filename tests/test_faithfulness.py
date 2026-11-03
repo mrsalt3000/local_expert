@@ -250,6 +250,42 @@ def test_judge_strict_prompt_is_opt_in() -> None:
     assert "СТРОГО" in strict.messages[0].content
 
 
+def test_quote_mode_requires_substring_from_source() -> None:
+    source = "В книге сказано: точная цитата подтверждает утверждение полностью."
+    valid = json.dumps(
+        {
+            "claims": [
+                {
+                    "id": 1,
+                    "quote": "точная цитата подтверждает утверждение",
+                    "context_quote": "",
+                }
+            ]
+        }
+    )
+    missing = json.dumps(
+        {
+            "claims": [
+                {
+                    "id": 1,
+                    "quote": "этой фразы нет в источнике совсем",
+                    "context_quote": "",
+                }
+            ]
+        }
+    )
+
+    good = FaithfulnessJudge(FakeJudgeProvider(valid), quote_mode=True).evaluate(
+        "Вопрос", "Утверждение [1].", (source,)
+    )
+    bad = FaithfulnessJudge(FakeJudgeProvider(missing), quote_mode=True).evaluate(
+        "Вопрос", "Утверждение [1].", (source,)
+    )
+
+    assert good.claims[0].supported_by_cited is True
+    assert bad.claims[0].supported_by_cited is False
+
+
 class BatchEchoProvider(FakeJudgeProvider):
     """Отвечает валидным JSON на каждый батч — проверяет склейку вердиктов."""
 

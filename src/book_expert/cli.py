@@ -682,6 +682,11 @@ def stage_eval(
         "--strict-judge",
         help="Строгий судья: частичное совпадение темы не считается поддержкой.",
     ),
+    quote_judge: bool = typer.Option(
+        False,
+        "--quote-judge",
+        help="Судья требует дословную цитату из источника и проверяет её подстрокой.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/stage-eval.local.json"),
         "--output",
@@ -699,6 +704,7 @@ def stage_eval(
         k=k,
         judge_provider=judge_provider,
         strict_judge=strict_judge,
+        quote_judge=quote_judge,
     )
     write_report(report, output)
     typer.echo(
@@ -742,6 +748,11 @@ def agent_evaluate(
         "--strict-judge",
         help="Строгий судья: частичное совпадение темы не считается поддержкой.",
     ),
+    quote_judge: bool = typer.Option(
+        False,
+        "--quote-judge",
+        help="Судья требует дословную цитату из источника и проверяет её подстрокой.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/agent-eval.local.json"),
         "--output",
@@ -758,6 +769,7 @@ def agent_evaluate(
         faithfulness=faithfulness,
         judge_provider=judge_provider,
         strict_judge=strict_judge,
+        quote_judge=quote_judge,
     )
     write_report(report, output)
     typer.echo(
