@@ -95,3 +95,14 @@ uv run book-expert agent-eval path/to/cases.json --limit 20 --faithfulness
 Отдельный контракт и rubric — [docs/parsing-assessment.md](parsing-assessment.md).
 Автоматизированный PyMuPDF-прогон пишет `data/eval/parser_assessment.local.json`
 и требует ручного review по 9 критериям.
+
+## Правило решений о качестве
+
+- **Retrieval, routing и citations** сравнивать только на наборе
+  `multi-book-40` (69 reviewed-кейсов, 10 книг). Одиночный срез из 20 кейсов
+  шумит по recall (.60–.80 на одних и тех же дефолтах) и годится лишь для
+  быстрой проверки гипотезы.
+- **Generation-метрики** (faithfulness, claim-level support) устойчивы и на
+  20 кейсах, но итоговые числа фиксировать на полном наборе.
+- Любое изменение, влияющее на качество, подтверждать A/B на 69 кейсах или
+  на 120 (5 книг) + 69 (10 книг), а не на одном малом срезе.

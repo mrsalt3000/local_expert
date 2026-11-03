@@ -871,3 +871,89 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   полей не было — прогоны нельзя было сравнить по конфигурации.
 - Результат: `meta` дополнен четырьмя полями, тест обновлён; поведение
   пайплайна не менялось.
+
+### T59 — Исправить тавтологичную метрику source_page_recall
+
+- [x] Статус: `accepted` (2026-11-03; найдено независимым аудитом 7.9/10)
+- Scope: `eval/agent_eval.py`, `tests/test_agent_eval.py`, `tasklist.md`.
+- Acceptance: `source_page_recall` считается по `Answer.context` (полный
+  набор найденных фрагментов), а не по урезанным `Answer.sources`;
+  тест: citation на стр. 10, context стр. 10+20, ожидаемая стр. 20 →
+  `page_recall 0.0`, `source_page_recall 1.0`.
+- Verify: unit-тест, повторный `agent-eval --limit 20`, `pytest`, `mypy`.
+- Основание: `advanced._synthesize` кладёт в `sources` результат
+  `cap_citations` (≤5), поэтому метрика совпадала с citation recall по
+  построению.
+- Результат: на 20 кейсах page recall **.70**, source recall **.75** —
+  retrieval и цитирование действительно расходятся на 5 п.п.; вывод T51
+  «не расходятся» исправлен.
+
+### T60 — MCP ask_books: лимит 5 → 8
+
+- [x] Статус: `accepted` (2026-11-03; решение пользователя 5B)
+- Scope: `mcp_server.py`, `tests/test_mcp_server.py`, `README.md`,
+  `docs/architecture.md`.
+- Acceptance: `ask_books` по умолчанию берёт 8 источников; тест ожидает 8;
+  доки не говорят top-5.
+- Verify: `pytest tests/test_mcp_server.py`, `ruff`.
+- Основание: веб-RAG перешёл на top_k=20, MCP оставался на 5; выбран
+  компромисс 8 — recall выше, payload ещё умеренный.
+- Результат: дефолт 8, тесты/доки обновлены.
+
+### T61 — Судья faithfulness обрезает ответы на 24 утверждениях
+
+- [ ] Статус: `todo` (2026-11-03; найдено независимым аудитом)
+- Scope: `eval/faithfulness.py`, `eval/agent_eval.py`,
+  `eval/stage_eval.py`, `docs/evaluation.md`.
+- Acceptance: `MAX_CLAIMS` поднят (≥48) или ответы не обрезаются; в отчёт
+  пишется доля обрезанных ответов; кросс-модельный судья и 20 вручную
+  размеченных ответов (Verify из T40) выполнены.
+- Verify: повторный `--faithfulness` на 120 и 20 кейсах, сверка с ручной
+  разметкой; `pytest`.
+- Основание: в `audit-agent20-final2` 17 из 19 ответов «Агента» обрезаны на
+  24 утверждениях; судья — та же deepseek-модель, ручной эталон отсутствует.
+- Ожидаемый эффект: честная оценка неподдержанных утверждений; текущие
+  .9786/.9938 могут быть завышены.
+
+### T58 — Жёсткий таймаут агента через worker-процесс
+
+- [x] Статус: `accepted` (2026-11-03; процесс убивается, live-проверка 1.01 с)
+- Scope: `agent/worker.py`, `agent/graph.py`, `web/backend.py`, `config.py`,
+  `.env.example`, `docs/architecture.md`, `tests/test_agent_worker.py`,
+  `tests/test_agent.py`.
+- Acceptance: веб-агент выполняет граф в дочернем процессе; по таймауту
+  процесс и его клиенты убиваются, API отвечает 504; успешный путь работает;
+  ошибки дочернего процесса доходят до родителя как `AgentError`/`ProviderError`.
+- Verify: unit-тесты на success/timeout/error, live-запуск с
+  `agent_timeout_s=1` (ожидается `AgentTimeoutError` ~1 с) и с 120 (ответ),
+  `pytest`, `mypy`, `pre-commit`.
+- Основание: `ThreadPoolExecutor` перестаёт ждать, но LangGraph продолжает
+  работу; это был последний архитектурный блокер из аудита.
+- Попутный баг: `build_chat_model` не поддерживал `provider=deepseek` и падал
+  с «Missing credentials» — добавлена ветка DeepSeek (`deepseek_api_key`,
+  `deepseek_base_url`, `deepseek_chat_model`).
+- Результат: `agent_hard_timeout=true` по умолчанию; live timeout — **1.01 с**,
+  успешный агент — **11.1 с / 5 шагов**; 4 unit-теста worker, тест DeepSeek.
+
+### T62 — Жёсткий таймаут для super/advanced (дефолтный UI)
+
+- [ ] Статус: `todo` (2026-11-03; найдено независимым аудитом 7.9/10)
+- Scope: `web/app.py` (SSE-воркер), `retrieval/advanced.py`,
+  `retrieval/super_advanced.py`, `agent/worker.py`, `tests/`.
+- Acceptance: дефолтный режим «Агент» (`mode=super`) и `advanced` тоже
+  ограничены жёстким временем; по таймауту клиент получает SSE `error`
+  (или 504 для не-stream), работа не продолжается в фоне; есть тест.
+- Verify: живой `POST /api/chat/stream` с заниженным таймаутом; `pytest`.
+- Основание: T58 закрыл только `mode=agent`; UI по умолчанию открывает
+  `super`, который идёт через Thread без таймаута.
+
+### T63 — Audit hash-chain при параллельных запросах
+
+- [ ] Статус: `todo` (2026-11-03; найдено независимым аудитом 7.9/10)
+- Scope: `agent/audit.py`, `agent/worker.py`, `tests/test_audit_chain.py`.
+- Acceptance: append и verify сериализованы межпроцессной блокировкой
+  (file lock), два параллельных worker-процесса не ломают `seq/prev_hash`;
+  `audit-verify` остаётся true; тест с двумя процессами.
+- Verify: параллельный тест записи 50 событий, `audit-verify`; `pytest`.
+- Основание: `_tail_state` + append без блокировки: два процесса читают
+  один tail и пишут конфликтующие seq.
