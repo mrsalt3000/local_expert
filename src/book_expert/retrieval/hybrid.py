@@ -108,7 +108,33 @@ class HybridSearcher:
             )
             sources.append("lexical")
 
-        if dense_hits and lexical_hits:
+        lexical_or_hits: list[SearchHit] = []
+        active_mode = lexical_query_mode or self.settings.lexical_query_mode
+        if (
+            lexical
+            and self.settings.lexical_or_weight > 0
+            and active_mode != "or_prefix5"
+        ):
+            lexical_or_hits = self.catalog.search_lexical(
+                text,
+                book_ids=book_ids,
+                limit=candidate_limit,
+                query_mode="or_prefix5",
+                use_lemmas=self.settings.lexical_use_lemmas,
+            )
+            sources.append("lexical_or")
+
+        if lexical_or_hits:
+            fused = rrf_fuse(
+                dense_hits,
+                lexical_hits,
+                limit=candidate_limit,
+                dense_weight=self.settings.rrf_dense_weight,
+                lexical_weight=self.settings.rrf_lexical_weight,
+                extra=lexical_or_hits,
+                extra_weight=self.settings.lexical_or_weight,
+            )
+        elif dense_hits and lexical_hits:
             fused = rrf_fuse(
                 dense_hits,
                 lexical_hits,
@@ -196,14 +222,20 @@ def rrf_fuse(
     k: int = RRF_K,
     dense_weight: float = 1.0,
     lexical_weight: float = 1.0,
+    extra: list[SearchHit] | None = None,
+    extra_weight: float = 0.0,
 ) -> tuple[SearchHit, ...]:
-    if dense_weight < 0.0 or lexical_weight < 0.0:
+    if dense_weight < 0.0 or lexical_weight < 0.0 or extra_weight < 0.0:
         raise ValueError("rrf weights must be non-negative")
-    if dense_weight == 0.0 and lexical_weight == 0.0:
+    if dense_weight == 0.0 and lexical_weight == 0.0 and extra_weight == 0.0:
         raise ValueError("at least one RRF weight must be positive")
     scores: dict[str, float] = {}
     best: dict[str, SearchHit] = {}
-    for hits, weight in ((dense, dense_weight), (lexical, lexical_weight)):
+    for hits, weight in (
+        (dense, dense_weight),
+        (lexical, lexical_weight),
+        (extra or [], extra_weight),
+    ):
         if weight == 0.0:
             continue
         for rank, hit in enumerate(hits, start=1):

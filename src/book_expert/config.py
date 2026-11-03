@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     super_scope_limit: int = 3
     rrf_dense_weight: float = 1.0
     rrf_lexical_weight: float = 0.1
+    lexical_or_weight: float = 0.0
     lexical_query_mode: LexicalQueryMode = "and"
     lexical_use_lemmas: bool = True
     page_context_enabled: bool = False
@@ -99,7 +100,7 @@ class Settings(BaseSettings):
             raise ValueError("threshold must be in [0, 1]")
         return value
 
-    @field_validator("rrf_dense_weight", "rrf_lexical_weight")
+    @field_validator("rrf_dense_weight", "rrf_lexical_weight", "lexical_or_weight")
     @classmethod
     def _check_weight(cls, value: float) -> float:
         if value < 0.0:
@@ -160,7 +161,11 @@ class Settings(BaseSettings):
     def _check_chunking(self) -> Settings:
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be smaller than chunk_size")
-        if self.rrf_dense_weight == 0.0 and self.rrf_lexical_weight == 0.0:
+        if (
+            self.rrf_dense_weight == 0.0
+            and self.rrf_lexical_weight == 0.0
+            and self.lexical_or_weight == 0.0
+        ):
             raise ValueError("at least one RRF weight must be positive")
         return self
 

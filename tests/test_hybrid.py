@@ -285,3 +285,54 @@ def test_rrf_weights_must_not_both_be_zero() -> None:
         )
     with pytest.raises(ValueError, match="non-negative"):
         rrf_fuse([_hit("a")], [_hit("b")], limit=1, lexical_weight=-1.0)
+
+
+def test_rrf_extra_list_contributes_to_score() -> None:
+    dense = [_hit("a")]
+    lexical = [_hit("b")]
+    extra = [_hit("c"), _hit("b")]
+
+    fused = rrf_fuse(
+        dense,
+        lexical,
+        limit=3,
+        lexical_weight=0.1,
+        extra=extra,
+        extra_weight=0.1,
+    )
+
+    assert [hit.chunk_id for hit in fused] == ["a", "b", "c"]
+    b = next(hit for hit in fused if hit.chunk_id == "b")
+    assert b.score == pytest.approx(0.1 / 61 + 0.1 / 62)
+
+    only_extra = rrf_fuse(
+        [],
+        [],
+        limit=1,
+        dense_weight=0.0,
+        lexical_weight=0.0,
+        extra=[_hit("x")],
+        extra_weight=1.0,
+    )
+    assert [hit.chunk_id for hit in only_extra] == ["x"]
+
+
+def test_search_adds_or_lexical_when_weight_set(
+    searcher: HybridSearcher, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str | None] = []
+    original = Catalog.search_lexical
+
+    def spy(self: Catalog, query: str, **kwargs: Any) -> list[SearchHit]:
+        calls.append(kwargs.get("query_mode"))
+        return original(self, query, **kwargs)
+
+    monkeypatch.setattr(Catalog, "search_lexical", spy)
+    monkeypatch.setattr(searcher.settings, "lexical_or_weight", 0.1)
+
+    outcome = searcher.search("retrieval")
+
+    assert "and" in calls
+    assert "or_prefix5" in calls
+    assert "lexical_or" in outcome.sources
+    assert outcome.hits
