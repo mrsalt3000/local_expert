@@ -46,6 +46,17 @@ def main() -> int:
     parser.add_argument("--books", type=int, default=10)
     parser.add_argument("--per-book", type=int, default=4)
     parser.add_argument("--seed", type=int, default=20261102)
+    parser.add_argument(
+        "--append",
+        action="store_true",
+        help="Добрать кейсы по книгам и страницам из существующего файла.",
+    )
+    parser.add_argument(
+        "--extra-books",
+        type=int,
+        default=0,
+        help="Сколько новых книг добавить в append-режиме.",
+    )
     parser.add_argument("--provider", default=None)
     parser.add_argument("--model", default=None)
     parser.add_argument(
@@ -65,18 +76,40 @@ def main() -> int:
     catalog.initialize()
     provider = get_provider(settings)
     excluded = _book_ids(args.exclude)
-    books = [
+    existing: list[dict[str, Any]] = []
+    used_pages: set[tuple[str, int]] = set()
+    if args.append and args.output.is_file():
+        existing = json.loads(args.output.read_text(encoding="utf-8"))
+        for case in existing:
+            book_ids = case.get("expected_book_ids") or []
+            page = case.get("_gt_page")
+            if book_ids and isinstance(page, int):
+                used_pages.add((book_ids[0], page))
+    ready = [
         book
         for book in catalog.list_books()
-        if book.status is BookStatus.ready
-        and book.id not in excluded
-        and book.page_count >= args.per_book * 5
+        if book.status is BookStatus.ready and book.id not in excluded
     ]
-    random.Random(args.seed).shuffle(books)
-    cases: list[dict[str, Any]] = []
+    if used_pages:
+        wanted = {book_id for book_id, _ in used_pages}
+        books = [book for book in ready if book.id in wanted]
+        if args.extra_books:
+            fresh = [book for book in ready if book.id not in wanted]
+            random.Random(args.seed).shuffle(fresh)
+            books.extend(fresh[: args.extra_books])
+    else:
+        books = [book for book in ready if book.page_count >= args.per_book * 5]
+        random.Random(args.seed).shuffle(books)
+    cases: list[dict[str, Any]] = list(existing)
     try:
         for book in books[: args.books]:
-            pages = _sample_pages(catalog, book.id, book.page_count, args.per_book)
+            pages = [
+                page
+                for page in _sample_pages(
+                    catalog, book.id, book.page_count, args.per_book * 3
+                )
+                if (book.id, page) not in used_pages
+            ]
             made = 0
             for page in pages:
                 text = (catalog.page_text(book.id, page, max_chars=PAGE_LIMIT) or "")[
@@ -113,11 +146,12 @@ def main() -> int:
         if callable(close):
             close()
 
+    added = len(cases) - len(existing)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(cases, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    print(f"черновиков: {len(cases)} → {args.output}")
+    print(f"добавлено {added}, всего {len(cases)} → {args.output}")
     return 0
 
 
