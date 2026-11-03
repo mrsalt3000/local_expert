@@ -128,7 +128,14 @@ def run_agent_eval(
         faithfulness=faithfulness,
         cases=len(cases),
     )
-    report["meta"]["advanced_query_limit"] = settings.advanced_query_limit
+    report["meta"].update(
+        {
+            "advanced_query_limit": settings.advanced_query_limit,
+            "super_scope_limit": settings.super_scope_limit,
+            "super_refine_enabled": settings.super_refine_enabled,
+            "answer_max_citations": settings.answer_max_citations,
+        }
+    )
     report["mode"] = "super"
     return report
 

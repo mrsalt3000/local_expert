@@ -66,7 +66,9 @@ uv run book-expert agent-eval path/to/cases.json --limit 20 --faithfulness
 6. Воспроизводимость обеспечивает сам отчёт: `stage-eval` пишет блок `meta` с
    провайдером, chat/embedding-моделью, `top_k`, `k`, scope, флагом
    relevance-фильтра, коллекцией Qdrant, commit, sha256 датасета, временем и
-   списком экспортированных `BOOK_EXPERT_*`. Переменные окружения имеют
+   списком экспортированных `BOOK_EXPERT_*`. `agent-eval` добавляет
+   `advanced_query_limit`, `super_scope_limit`, `super_refine_enabled` и
+   `answer_max_citations`. Переменные окружения имеют
    приоритет над `.env`, поэтому при сравнении прогонов сверяйте `meta`.
 
 ## Пороги приёмки (v1)

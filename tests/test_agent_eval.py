@@ -109,6 +109,9 @@ def test_agent_eval_aggregates_citations_and_plan(
     assert report["plan"]["avg_queries"] == 1.0
     assert report["plan"]["avg_rounds"] == 0.5
     assert report["meta"]["provider"] == "fake"
+    assert report["meta"]["super_scope_limit"] == 3
+    assert report["meta"]["super_refine_enabled"] is False
+    assert report["meta"]["answer_max_citations"] == 5
     assert report["details"][0]["citation_precision"] == 1.0
     assert answerer.questions == ["q1", "q2"]
 
