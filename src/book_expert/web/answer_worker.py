@@ -15,6 +15,7 @@ from collections.abc import Iterator, Sequence
 from typing import Any
 
 from book_expert.agent.graph import AgentError, AgentTimeoutError
+from book_expert.agent.trace import TraceRecorder
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.models import Answer
@@ -78,9 +79,15 @@ def stream_answer_in_process(
         ),
         daemon=True,
     )
-    process.start()
+    try:
+        process.start()
+    except Exception:
+        parent.close()
+        child.close()
+        raise
     child.close()
     deadline = time.monotonic() + limit
+    completed = False
     try:
         while True:
             remaining = deadline - time.monotonic()
@@ -91,16 +98,21 @@ def stream_answer_in_process(
             try:
                 message = parent.recv()
             except EOFError as exc:
-                raise AnswerTimeoutError("answer worker exited unexpectedly") from exc
+                raise WorkerAnswerError(
+                    "answer worker exited unexpectedly", 500
+                ) from exc
             kind = message.get("type")
             if kind == "event":
                 yield message["event"]
             elif kind == "answer":
+                completed = True
                 yield {"type": "done", "answer": message["answer"]}
                 return
             elif kind == "error":
                 raise _error_from_message(message)
     finally:
+        if completed:
+            process.join(2)
         if process.is_alive():
             process.terminate()
             process.join(2)
@@ -155,11 +167,16 @@ def _answer_child(
         provider = get_provider(settings)
         searcher = HybridSearcher(settings, provider, catalog)
         router = BookRouter(settings, provider, catalog)
+        trace = TraceRecorder.create(settings, prefix="web")
         answerer: AdvancedAnswerer | SuperAdvancedAnswerer
         if mode == "super":
-            answerer = SuperAdvancedAnswerer(settings, provider, searcher, router)
+            answerer = SuperAdvancedAnswerer(
+                settings, provider, searcher, router, trace=trace
+            )
         else:
-            answerer = AdvancedAnswerer(settings, provider, searcher, router)
+            answerer = AdvancedAnswerer(
+                settings, provider, searcher, router, trace=trace
+            )
 
         def emit(event: dict[str, Any]) -> None:
             conn.send({"type": "event", "event": event})

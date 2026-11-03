@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,15 @@ def _stream_child(connection: Any, *_: Any) -> None:
 
 def _slow_child(connection: Any, *_: Any) -> None:
     time.sleep(5)
+
+
+def _slow_child_with_pid(connection: Any, *_: Any) -> None:
+    Path(os.environ["T61_PID_FILE"]).write_text(str(os.getpid()))
+    time.sleep(5)
+
+
+def _crash_child(connection: Any, *_: Any) -> None:
+    connection.close()
 
 
 def _error_child(connection: Any, *_: Any) -> None:
@@ -99,6 +109,43 @@ def test_stream_maps_worker_error(
 
     assert caught.value.status == 503
     assert stream_error(caught.value) == {"detail": "boom", "status": 503}
+
+
+def test_stream_maps_worker_crash_to_500(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("book_expert.web.answer_worker._answer_child", _crash_child)
+
+    with pytest.raises(WorkerAnswerError) as caught:
+        list(
+            stream_answer_in_process(
+                _settings(tmp_path), "advanced", "Вопрос", timeout=5, context="fork"
+            )
+        )
+
+    assert caught.value.status == 500
+    assert "exited unexpectedly" in str(caught.value)
+
+
+def test_timeout_kills_and_reaps_child(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pid_file = tmp_path / "child.pid"
+    monkeypatch.setenv("T61_PID_FILE", str(pid_file))
+    monkeypatch.setattr(
+        "book_expert.web.answer_worker._answer_child", _slow_child_with_pid
+    )
+
+    with pytest.raises(AnswerTimeoutError):
+        list(
+            stream_answer_in_process(
+                _settings(tmp_path), "advanced", "Вопрос", timeout=0.3, context="fork"
+            )
+        )
+
+    child_pid = int(pid_file.read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(child_pid, 0)
 
 
 def test_timeout_maps_to_504() -> None:

@@ -416,7 +416,11 @@ def create_app(
         started = perf_counter()
 
         def generate() -> Iterator[str]:
-            backend = get_backend()
+            try:
+                backend = get_backend()
+            except Exception as exc:  # noqa: BLE001 - SSE обязан вернуть error
+                yield _sse({"type": "error", **_stream_error(exc)})
+                return
             if app.state.settings.answer_hard_timeout and isinstance(
                 backend, BookChatBackend
             ):

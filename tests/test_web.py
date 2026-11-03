@@ -627,3 +627,26 @@ def test_chat_super_timeout_returns_504(
 
     assert response.status_code == 504
     assert "exceeded" in response.json()["detail"]
+
+
+def test_chat_stream_backend_failure_emits_sse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from book_expert.web import app as web_app
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise ValueError("provider is not configured")
+
+    monkeypatch.setattr(web_app, "BookChatBackend", boom)
+    app = create_app(Settings(workspace=tmp_path, data_dir=tmp_path / "data"))
+
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/api/chat/stream", json={"message": "Вопрос", "mode": "super"}
+        )
+
+    assert response.status_code == 200
+    event = json.loads(response.text.removeprefix("data: "))
+    assert event["type"] == "error"
+    assert event["status"] == 503
+    assert "not configured" in event["detail"]
