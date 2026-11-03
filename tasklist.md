@@ -351,6 +351,11 @@
 - Acceptance: 100-case eval не хуже plain; Qdrant points = chunks; rollback
   документирован.
 - Verify: reindex job, count/integrity, 100-case eval, full checks.
+- Повторная проверка 2026-11-03 на 10 книгах при k=20: `books_ctx_full`
+  даёт page@k .8551 против .8696 у `books`, citation precision .7415
+  против .7850, отказов 7 против 5 (MRR выше: .7202 против .6788),
+  retrieval p50 **556 мс против 104 мс** — коллекция ещё и в 5 раз медленнее.
+  Итог тот же: production `books`, contextual остаётся экспериментальной.
 
 ### T30 — Parser quality gate
 
@@ -836,3 +841,33 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   p50 10.3 с — сужение scope и глубина 8 grounding не ухудшили.
   Оговорка: page recall на одиночном 20-кейсовом прогоне колеблется
   (.65 против .80 на 40 кейсах), поэтому решения принимать по 40+ кейсам.
+
+### T56 — top_k 8 → 20 по диагностике промахов на 10 книгах
+
+- [x] Статус: `accepted` (2026-11-03; A/B на 5 и 10 книгах)
+- Scope: `config.py`, `.env.example`.
+- Acceptance: page recall растёт на обоих наборах, citation precision не
+  падает, latency остаётся в бюджете, контекст влезает в `num_ctx=8192`.
+- Verify: `stage-eval --scope candidates --relevance-filter --k 8/12/20`
+  на `combined-120` и `multi-book-40`; `pytest`, `mypy`, `pre-commit`.
+- Основание: на 10 книгах 6 промахов лежали в top-20, но ниже 8-го места
+  (ранги 9–17), 9 не попадали и в top-20; расширение k — самый дешёвый левер.
+- Результат: 10 книг — page@k **.7826 → .8696**, citation precision
+  **.7101 → .7850**, citation recall .7826 → .8551, отказы 6 → 5,
+  zero-precision 9 → 5, answer p50 без изменений (1.16 с); 5 книг —
+  page@k **.8667 → .9167**, citation precision **.5871 → .6186**,
+  отказы 8 → 7, p50 1.47 → 1.61 с, p95 2.45 → 3.29 с. Дефолт
+  `BOOK_EXPERT_TOP_K=20`; 20 фрагментов ≈ 4–5k токенов, влезает в 8192. Проверка generation на 120 кейсах при k=20: faithfulness **.9786**, claim-level support **.9938**, citation precision .6158, отказы 8, p50 1.70 с — не хуже k=8 (.9662 / .9865 / 1.47 с). Важно: `BOOK_EXPERT_TOP_K` в shell и `.env` перекрывает дефолт config — для прогона задавать `--k 20` или env явно; `.env` обновлён на 20.
+
+### T57 — Метаданные agent-eval: scope, refine и лимит цитат
+
+- [x] Статус: `accepted` (2026-11-03; отчёт фиксирует все влияющие настройки)
+- Scope: `eval/agent_eval.py`, `tests/test_agent_eval.py`,
+  `docs/evaluation.md`.
+- Acceptance: в `meta` отчёта `agent-eval` есть `advanced_query_limit`,
+  `super_scope_limit`, `super_refine_enabled` и `answer_max_citations`;
+  тест проверяет поля; docs описывают состав meta.
+- Основание: T54/T55 меняли глубину и scope, но в отчётах «Агента» этих
+  полей не было — прогоны нельзя было сравнить по конфигурации.
+- Результат: `meta` дополнен четырьмя полями, тест обновлён; поведение
+  пайплайна не менялось.
