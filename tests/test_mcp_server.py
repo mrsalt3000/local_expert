@@ -230,7 +230,7 @@ def test_ask_books(tmp_path: Path) -> None:
     assert result.is_error is False
     assert payload["answer"] == "Grounded answer [1]."
     assert payload["citations"][0]["chunk_id"] == "c1"
-    assert answerer.calls == [("What?", ["book-1"], 5)]
+    assert answerer.calls == [("What?", ["book-1"], 8)]
     assert answerer.filters == [True]
 
     result = _call(

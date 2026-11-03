@@ -104,7 +104,7 @@ class BookExpertMCP:
         def ask_books(
             question: str,
             book_ids: list[str] | None = None,
-            limit: int = 5,
+            limit: int = 8,
         ) -> dict[str, Any]:
             """Отвечает по книгам с проверяемыми citations (top-N источников)."""
             result_limit = max(1, min(limit, MAX_LIMIT))
