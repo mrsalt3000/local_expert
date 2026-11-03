@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 150
     strip_running_headers: bool = False
-    top_k: int = 8
+    top_k: int = 20
     router_confidence_threshold: float = 0.6
     router_use_llm: bool = False
     relevance_filter_min_ratio: float = 0.5
