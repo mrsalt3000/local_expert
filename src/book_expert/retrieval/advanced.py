@@ -16,6 +16,7 @@ from book_expert.retrieval.answer import (
     _citations,
     _hit_book_ids,
     _is_insufficient,
+    cap_citations,
     history_prompt,
     sources_prompt,
 )
@@ -236,10 +237,16 @@ class AdvancedAnswerer:
                 tuple(hits),
                 mode=mode,
             )
+        text, citations, sources = cap_citations(
+            text,
+            tuple(hits),
+            _citations(text, tuple(hits)),
+            self.settings.answer_max_citations,
+        )
         return self._record(
             Answer(
                 text=text,
-                citations=_citations(text, tuple(hits)),
+                citations=citations,
                 confidence=confidence,
                 book_ids=answer_books,
                 route_reason=route_reason,
@@ -248,7 +255,7 @@ class AdvancedAnswerer:
                 max_rounds=max_rounds,
             ),
             query,
-            tuple(hits),
+            sources,
             mode=mode,
         )
 

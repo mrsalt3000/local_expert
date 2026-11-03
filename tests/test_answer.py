@@ -21,6 +21,8 @@ from book_expert.providers import (
 from book_expert.retrieval.answer import (
     REFUSAL,
     GroundedAnswerer,
+    _citations,
+    cap_citations,
     filter_relevant_hits,
     sources_prompt,
 )
@@ -698,3 +700,34 @@ def test_history_is_included_in_answer_prompt(tmp_path: Path) -> None:
     assert "Предыдущий диалог" in prompt
     assert "Что такое поиск?" in prompt
     assert "А подробнее?" in prompt
+
+
+def test_cap_citations_drops_least_used_and_renumbers() -> None:
+    hits = _hits() + (
+        SearchHit(
+            chunk_id="c3",
+            book_id="book-3",
+            book_title="Book Three",
+            text="Gamma third passage.",
+            score=0.2,
+            pdf_page_index=7,
+        ),
+    )
+    text = "A [1]. B [2]. C [3][3]."
+    citations = _citations(text, hits)
+
+    new_text, limited, sources = cap_citations(text, hits, citations, 2)
+
+    assert new_text == "A [1]. B. C [2][2]."
+    assert [citation.number for citation in limited] == [1, 2]
+    assert [citation.chunk_id for citation in limited] == ["c1", "c3"]
+    assert [hit.chunk_id for hit in sources] == ["c1", "c3"]
+
+
+def test_cap_citations_noop_when_limit_is_off_or_not_exceeded() -> None:
+    hits = _hits()
+    text = "A [1]. B [2]."
+    citations = _citations(text, hits)
+
+    assert cap_citations(text, hits, citations, 0) == (text, citations, hits)
+    assert cap_citations(text, hits, citations, 5) == (text, citations, hits)

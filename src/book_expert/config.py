@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     router_use_llm: bool = False
     relevance_filter_min_ratio: float = 0.5
     answer_relevance_filter: bool = True
+    answer_max_citations: int = 5
     advanced_query_limit: int = 4
     super_max_rounds: int = 5
     rrf_dense_weight: float = 1.0
@@ -118,6 +119,13 @@ class Settings(BaseSettings):
     def _check_positive(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("value must be positive")
+        return value
+
+    @field_validator("answer_max_citations")
+    @classmethod
+    def _check_citations_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("value must be non-negative")
         return value
 
     @field_validator("chunk_overlap")

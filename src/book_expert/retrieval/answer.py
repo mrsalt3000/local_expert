@@ -404,6 +404,45 @@ def _citations(text: str, hits: tuple[SearchHit, ...]) -> tuple[Citation, ...]:
     return tuple(citations)
 
 
+def cap_citations(
+    text: str,
+    hits: tuple[SearchHit, ...],
+    citations: tuple[Citation, ...],
+    limit: int,
+) -> tuple[str, tuple[Citation, ...], tuple[SearchHit, ...]]:
+    """Оставляет не больше ``limit`` источников и перенумеровывает маркеры.
+
+    Частота упоминания в тексте важнее порядка выдачи: модель повторяет
+    маркер там, где источник действительно нужен. При равной частоте
+    сохраняется исходный порядок.
+    """
+    if limit <= 0 or len(citations) <= limit:
+        return text, citations, hits
+    counts: dict[int, int] = {}
+    for match in _CITATION_RE.finditer(text):
+        number = int(match.group(1))
+        counts[number] = counts.get(number, 0) + 1
+    ranked = sorted(
+        citations,
+        key=lambda citation: (-counts.get(citation.number, 0), citation.number),
+    )[:limit]
+    ranked.sort(key=lambda citation: citation.number)
+    mapping = {citation.number: new for new, citation in enumerate(ranked, start=1)}
+
+    def replace_marker(match: re.Match[str]) -> str:
+        number = int(match.group(1))
+        return f"[{mapping[number]}]" if number in mapping else ""
+
+    cleaned = _CITATION_RE.sub(replace_marker, text)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([.,;:!?])", r"\1", cleaned)
+    limited = tuple(
+        replace(citation, number=mapping[citation.number]) for citation in ranked
+    )
+    sources = tuple(hits[citation.number - 1] for citation in ranked)
+    return cleaned.strip(), limited, sources
+
+
 def _hit_book_ids(hits: tuple[SearchHit, ...]) -> tuple[str, ...]:
     seen: list[str] = []
     for hit in hits:
