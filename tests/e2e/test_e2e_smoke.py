@@ -147,7 +147,7 @@ def test_end_to_end_synthetic_book(tmp_path: Path) -> None:
 
     found = searcher.search("retrieval", book_ids=[book.id])
     assert found.hits
-    assert found.sources == ("dense", "lexical")
+    assert found.sources == ("dense", "lexical", "lexical_or")
     assert all(hit.book_id == book.id for hit in found.hits)
 
     answer = answerer.ask("How does retrieval work?")
