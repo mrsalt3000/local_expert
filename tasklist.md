@@ -1248,3 +1248,18 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   support **.4167**, faithfulness **0.0**, 3/3 judged, ошибок 0. Это
   жёсткий аудит-режим, а не дефолт: бинарный судья даёт более мягкие числа.
   442 теста.
+
+### T82 — Миграция на qwen3-embedding:0.6b (3C)
+
+- [ ] Статус: `in_progress` (2026-11-03; пилот положительный, полный reindex идёт)
+- Scope: embeddings/коллекция; прод-дефолты пока **не** переключены.
+- Пилот: 10 книг / 6001 чанк в `books_qwen3emb`, те же 69 кейсов.
+  - bge-m3: page recall@5 **.7826**, @k **.8696**, MRR **.7296**;
+  - qwen3: page recall@5 **.8696**, @k **.8696**, MRR **.7802**;
+  - candidate book coverage .913 в обоих.
+  То есть +8.7 п.п. recall@5 и +5.1 п.п. MRR без потери @k.
+- Полный reindex: коллекция `books_qwen3emb_full`, **549 тыс. чанков**,
+  batch 32 (~24.8 chunks/s), ETA **6–7 ч**, резюмируется по `book_id`.
+- Дальше: дождаться reindex, прогнать 69 и 120 кейсов, пересобрать
+  `BookProfileStore` на qwen3 (иначе profile-fallback в другом пространстве),
+  затем переключить `BOOK_EXPERT_EMBEDDING_MODEL` и `QDRANT_COLLECTION`.
