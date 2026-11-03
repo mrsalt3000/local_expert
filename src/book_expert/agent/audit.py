@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -38,8 +41,6 @@ class AuditLogger:
     ) -> None:
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
-            "seq": self._seq,
-            "prev_hash": self._prev_hash,
             "tool": tool,
             "args": _redact(args),
             "ok": ok,
@@ -47,12 +48,31 @@ class AuditLogger:
             "duration_ms": round(duration_ms, 1) if duration_ms is not None else None,
             "error": error[:ARG_LIMIT] if error else None,
         }
-        digest = _digest(record)
-        record["hash"] = digest
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
-        self._prev_hash = digest
-        self._seq += 1
+        with _file_lock(self.path):
+            # Другой процесс мог дописать хвост: под локом берём актуальное
+            # состояние с диска, иначе seq/prev_hash разъедутся.
+            self._prev_hash, self._seq = _tail_state(self.path)
+            record["seq"] = self._seq
+            record["prev_hash"] = self._prev_hash
+            digest = _digest(record)
+            record["hash"] = digest
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+            self._prev_hash = digest
+            self._seq += 1
+
+
+@contextmanager
+def _file_lock(path: Path) -> Iterator[None]:
+    """Межпроцессный лок рядом с аудитом: сериализует чтение хвоста и append."""
+    lock_path = path.with_name(path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def verify_audit_chain(path: Path) -> tuple[bool, int]:
@@ -62,7 +82,7 @@ def verify_audit_chain(path: Path) -> tuple[bool, int]:
     count = 0
     started = False
     saw_content = False
-    with path.open(encoding="utf-8") as handle:
+    with _file_lock(path), path.open(encoding="utf-8") as handle:
         for line in handle:
             if not line.strip():
                 continue
