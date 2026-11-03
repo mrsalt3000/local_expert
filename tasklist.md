@@ -1070,3 +1070,31 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   верные страницы. В прод не включать; если возвращаться — только
   контролируемое расширение (термины из заголовков/секций книги), не
   свободная генерация.
+
+### T68 — Book-aware page-метрики в прод-eval
+
+- [x] Статус: `accepted` (2026-11-03; числа не изменились, коллизии закрыты)
+- Scope: `eval/stage_eval.py`, `eval/agent_eval.py`,
+  `tests/test_stage_eval.py`, `tests/test_agent_eval.py`, `docs/evaluation.md`.
+- Основание: независимый аудит v2 (7.8/10), H1 — страницы сравнивались без
+  `book_id`, номер страницы повторяется в разных книгах.
+- Результат: `expected_pages`/`retrieved_pages`/`cited_pages` — пары
+  `(book_id, pdf_page_index)`; добавлен тест, что страница 10 в другой книге
+  не засчитывается. Book-aware пересчёт: multi-book .7826/.8696/.6752,
+  combined-120 .8333/.9083/.6868 — совпадает с прежними page-only числами,
+  то есть в агрегате инфляции не было, но метрика теперь корректна.
+  `meta.git_dirty` фиксирует прогон из грязного дерева. 438 тестов.
+
+### T69 — Audit follow-up: воспроизводимость и локальный MCP
+
+- [x] Статус: `accepted` (2026-11-03; находки v2 закрыты или заведены)
+- Scope: `scripts/retrieval_ab.py`, `docs/experiments/2026-11-03-retrieval.md`,
+  `docs/audit-2026-11-03-v2.md`, `.qwen/settings.json`,
+  `tests/test_hybrid.py`.
+- Результат: добавлен воспроизводимый harness для T65–T67 (`or|scope|expand`),
+  записаны числа и команды; эталон судьи расширен per-claim вердиктами
+  (`data/artifacts/t61-reference.local.json`), кросс-модельный отчёт сохранён
+  локально (`t61-cross-judge.local.json`); MCP больше не форсит deepseek —
+  env-блок удалён, провайдер локальный; добавлен no-op тест для
+  `lexical_or_weight=0.0`. Открытыми остались только low: лимит 64 КБ в
+  `_tail_state` и защита `process.start()` в `agent/worker.py`.

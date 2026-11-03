@@ -336,3 +336,21 @@ def test_search_adds_or_lexical_when_weight_set(
     assert "or_prefix5" in calls
     assert "lexical_or" in outcome.sources
     assert outcome.hits
+
+
+def test_search_does_not_add_or_channel_by_default(
+    searcher: HybridSearcher, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str | None] = []
+    original = Catalog.search_lexical
+
+    def spy(self: Catalog, query: str, **kwargs: Any) -> list[SearchHit]:
+        calls.append(kwargs.get("query_mode"))
+        return original(self, query, **kwargs)
+
+    monkeypatch.setattr(Catalog, "search_lexical", spy)
+
+    outcome = searcher.search("retrieval")
+
+    assert calls == ["and"]
+    assert "lexical_or" not in outcome.sources
