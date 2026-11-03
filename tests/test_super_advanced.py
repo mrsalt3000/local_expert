@@ -86,7 +86,22 @@ def _hit(chunk_id: str) -> SearchHit:
 
 
 def _answerer(tmp_path: Path, provider, searcher, **overrides: object):
-    return SuperAdvancedAnswerer(_settings(tmp_path, **overrides), provider, searcher)  # type: ignore[arg-type]
+    options = {"super_refine_enabled": True, **overrides}
+    return SuperAdvancedAnswerer(_settings(tmp_path, **options), provider, searcher)  # type: ignore[arg-type]
+
+
+def test_refinement_is_off_by_default(tmp_path: Path) -> None:
+    provider = FakeProvider(
+        ['{"queries": ["q1"]}', '{"done": false, "queries": ["q2"]}', "Ответ [1]."]
+    )
+    searcher = FakeSearcher({"вопрос": (_hit("c1"),), "q1": (_hit("c2"),)})
+
+    answer = SuperAdvancedAnswerer(_settings(tmp_path), provider, searcher).ask(
+        "вопрос", book_ids=["book-1"]
+    )
+
+    assert answer.rounds == 0
+    assert searcher.calls == ["вопрос", "q1"]
 
 
 def test_refines_once_then_answers(tmp_path: Path) -> None:

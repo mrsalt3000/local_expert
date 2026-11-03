@@ -66,7 +66,11 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
         )
         rounds = 0
         max_rounds = self.settings.super_max_rounds
-        while rounds < max_rounds and len(hits) < SUPER_MAX_HITS:
+        while (
+            self.settings.super_refine_enabled
+            and rounds < max_rounds
+            and len(hits) < SUPER_MAX_HITS
+        ):
             done, proposed = self._refine(query, plan, hits, history)
             if self.trace is not None:
                 self.trace.write(

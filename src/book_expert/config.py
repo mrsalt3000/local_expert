@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     answer_max_citations: int = 5
     advanced_query_limit: int = 4
     super_max_rounds: int = 5
+    super_refine_enabled: bool = False
     rrf_dense_weight: float = 1.0
     rrf_lexical_weight: float = 0.1
     lexical_query_mode: LexicalQueryMode = "and"
