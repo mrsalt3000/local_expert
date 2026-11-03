@@ -125,3 +125,12 @@ uv run python scripts/judge_hard_negatives.py data/artifacts/t72-cross-judge-40.
 ```bash
 uv run python scripts/judge_hard_negatives.py data/artifacts/t72-cross-judge-40.local.json --pairs 60 --scope same-book
 ```
+
+## T77 — частичная поддержка
+
+Из источника удалено предложение с максимальным пересечением с утверждением,
+остальной текст оставлен. Судья принял **14/32 (43.8%)** таких утверждений.
+Это верхняя граница лояльности: оставшиеся предложения иногда действительно
+поддерживают claim, но точной цитаты судья не требует. Для жёсткого гейта
+нужна проверка конкретного фрагмента или ручная выборка.
+Артефакт — `data/artifacts/t77-partial.local.json`.
