@@ -161,7 +161,10 @@ def searcher(tmp_path: Path) -> HybridSearcher:
     client.close()
 
 
-def test_dense_and_lexical_are_fused(searcher: HybridSearcher) -> None:
+def test_dense_and_lexical_are_fused(
+    searcher: HybridSearcher, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(searcher.settings, "lexical_or_weight", 0.0)
     outcome = searcher.search("retrieval")
 
     assert outcome.sources == ("dense", "lexical")
@@ -338,7 +341,7 @@ def test_search_adds_or_lexical_when_weight_set(
     assert outcome.hits
 
 
-def test_search_does_not_add_or_channel_by_default(
+def test_search_adds_or_channel_by_default(
     searcher: HybridSearcher, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[str | None] = []
@@ -349,6 +352,25 @@ def test_search_does_not_add_or_channel_by_default(
         return original(self, query, **kwargs)
 
     monkeypatch.setattr(Catalog, "search_lexical", spy)
+
+    outcome = searcher.search("retrieval")
+
+    assert calls == ["and", "or_prefix5"]
+    assert "lexical_or" in outcome.sources
+
+
+def test_search_or_channel_can_be_disabled(
+    searcher: HybridSearcher, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str | None] = []
+    original = Catalog.search_lexical
+
+    def spy(self: Catalog, query: str, **kwargs: Any) -> list[SearchHit]:
+        calls.append(kwargs.get("query_mode"))
+        return original(self, query, **kwargs)
+
+    monkeypatch.setattr(Catalog, "search_lexical", spy)
+    monkeypatch.setattr(searcher.settings, "lexical_or_weight", 0.0)
 
     outcome = searcher.search("retrieval")
 

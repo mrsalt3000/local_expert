@@ -112,6 +112,7 @@ class HybridSearcher:
         active_mode = lexical_query_mode or self.settings.lexical_query_mode
         if (
             lexical
+            and dense_hits
             and self.settings.lexical_or_weight > 0
             and active_mode != "or_prefix5"
         ):

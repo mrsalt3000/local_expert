@@ -21,8 +21,9 @@ Oracle-запрос по словам самой страницы находит
 | OR weight 0.05 | .7826 | .8696 | .7111 |
 | OR weight 0.10 | .7826 | .8696 | .7296 |
 
-Recall не меняется, MRR растёт; канал шумный, поэтому в проде выключен
-(`BOOK_EXPERT_LEXICAL_OR_WEIGHT=0.0`).
+Recall не меняется, MRR растёт; с 2026-11-03 решением 4B вес **0.1**
+включён по умолчанию (`BOOK_EXPERT_LEXICAL_OR_WEIGHT=0.1`), 0.0 выключает
+канал.
 
 ```bash
 uv run python scripts/retrieval_ab.py data/eval/multi-book-40.local.json --variant or

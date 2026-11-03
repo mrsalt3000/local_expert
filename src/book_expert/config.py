@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     super_scope_limit: int = 3
     rrf_dense_weight: float = 1.0
     rrf_lexical_weight: float = 0.1
-    lexical_or_weight: float = 0.0
+    lexical_or_weight: float = 0.1
     lexical_query_mode: LexicalQueryMode = "and"
     lexical_use_lemmas: bool = True
     page_context_enabled: bool = False
