@@ -31,7 +31,9 @@ def jaccard(left: set[str], right: set[str]) -> float:
     return len(left & right) / len(union) if union else 0.0
 
 
-def build_pairs(rows: list[dict], limit: int) -> tuple[list[dict], list[dict]]:
+def build_pairs(
+    rows: list[dict], limit: int, scope: str
+) -> tuple[list[dict], list[dict]]:
     items: list[dict[str, str]] = []
     claims: list[dict[str, str]] = []
     for row in rows:
@@ -43,6 +45,7 @@ def build_pairs(rows: list[dict], limit: int) -> tuple[list[dict], list[dict]]:
             if item["n"] in books:
                 items.append(
                     {
+                        "answer": str(row["index"]),
                         "claim": "",
                         "source": item["text"],
                         "book": books[item["n"]],
@@ -62,6 +65,7 @@ def build_pairs(rows: list[dict], limit: int) -> tuple[list[dict], list[dict]]:
             continue
         claims.append(
             {
+                "answer": str(row["index"]),
                 "question": row["question"],
                 "claim": re.sub(r"\[\d+\]", "", cited[0]).strip(),
                 "source": sources[number],
@@ -74,7 +78,12 @@ def build_pairs(rows: list[dict], limit: int) -> tuple[list[dict], list[dict]]:
         claim_tokens = tokens(claim["claim"])
         best: tuple[float, dict[str, str]] | None = None
         for candidate in items:
-            if candidate["book"] == claim["book"]:
+            if scope == "other-book" and candidate["book"] == claim["book"]:
+                continue
+            if scope == "same-book" and (
+                candidate["book"] != claim["book"]
+                or candidate["answer"] == claim["answer"]
+            ):
                 continue
             score = jaccard(claim_tokens, tokens(candidate["source"]))
             if best is None or score < best[0]:
@@ -95,11 +104,17 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=Path)
     parser.add_argument("--pairs", type=int, default=60)
+    parser.add_argument(
+        "--scope",
+        choices=("other-book", "same-book"),
+        default="other-book",
+        help="Откуда брать неверную цитату: из другой книги или из той же.",
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
     rows = json.loads(args.input.read_text(encoding="utf-8"))
-    positives, negatives = build_pairs(rows, args.pairs)
+    positives, negatives = build_pairs(rows, args.pairs, args.scope)
     settings = Settings(provider="deepseek")
     provider = get_provider(settings)
     judge = FaithfulnessJudge(provider)
@@ -127,6 +142,7 @@ def main() -> None:
     total_pos = sum(1 for value in pos_results if value is not None)
     total_neg = sum(1 for value in neg_results if value is not None)
     report = {
+        "scope": args.scope,
         "positives": total_pos,
         "positive_supported": pos_ok,
         "positive_rate": round(pos_ok / total_pos, 4) if total_pos else None,

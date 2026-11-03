@@ -108,3 +108,20 @@ uv run python scripts/retrieval_ab.py data/eval/multi-book-40.local.json --varia
 ```bash
 uv run python scripts/judge_hard_negatives.py data/artifacts/t72-cross-judge-40.local.json --pairs 60
 ```
+
+## T75 — неверные цитаты внутри той же книги
+
+Тот же тест, но неверная цитата берётся из той же книги (другой ответ) —
+судья должен проверять точный фрагмент, а не тему.
+
+| набор | результат |
+| --- | --- |
+| positives | 33/36 поддержаны (FN 8.3%) |
+| negatives same-book | 36/36 отвергнуты (FP 0%) |
+
+Вывод тот же: судья консервативен и не путает книгу с цитатой.
+Артефакт — `data/artifacts/t75-same-book.local.json`.
+
+```bash
+uv run python scripts/judge_hard_negatives.py data/artifacts/t72-cross-judge-40.local.json --pairs 60 --scope same-book
+```

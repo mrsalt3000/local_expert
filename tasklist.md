@@ -1161,3 +1161,28 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   метке не двигать. Артефакт: `data/artifacts/t74-hard-negatives.local.json`.
 - Воспроизведение: `uv run python scripts/judge_hard_negatives.py
   data/artifacts/t72-cross-judge-40.local.json --pairs 60`.
+
+### T75 — Неверные цитаты внутри той же книги
+
+- [x] Статус: `accepted` (2026-11-03; 36/36 своих отвергнуты, FN 8.3%)
+- Scope: `scripts/judge_hard_negatives.py --scope same-book`, 40 ответов.
+- Метод: своя цитата (positive) и наименее лексически похожая цитата из
+  **той же книги** (negative), то есть судья должен проверять точный
+  фрагмент, а не тему.
+- Результат: positives **33/36** (FN **8.3%**), negatives **36/36**
+  отвергнуты (FP **0%**). Судья не путает «та же книга» с «та же цитата»;
+  ошибки — только консервативные ложные «не поддержано».
+  Артефакт: `data/artifacts/t75-same-book.local.json`.
+- Воспроизведение: `uv run python scripts/judge_hard_negatives.py
+  data/artifacts/t72-cross-judge-40.local.json --pairs 60 --scope same-book`.
+
+### T76 — Паритет eval с прод и полнота метаданных
+
+- [x] Статус: `accepted` (2026-11-03; паритет есть, metadata ограничена данными)
+- Eval: `stage_eval` берёт `result_k = settings.top_k`, то есть **20**, как
+  прод; прежнее наблюдение про `limit=5` устарело. Отдельного расхождения
+  «eval меряет не тот путь» больше нет.
+- Metadata: из **1160** ready-книг `author` заполнен у **1069 (91.3%)**,
+  `description` — **0**. Поэтому title/metadata-fallback в routing ограничен
+  данными: резерв слотов (T71) не мог сработать. Для роста coverage нужны
+  описания книг или смена модели эмбеддингов, а не правка весов.
