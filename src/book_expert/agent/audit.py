@@ -115,19 +115,28 @@ def verify_audit_chain(path: Path) -> tuple[bool, int]:
 def _tail_state(path: Path) -> tuple[str, int]:
     if not path.exists() or path.stat().st_size == 0:
         return GENESIS_HASH, 1
-    with path.open("rb") as handle:
-        handle.seek(max(0, path.stat().st_size - 65536))
-        lines = handle.read().decode("utf-8", errors="replace").splitlines()
-    for line in reversed(lines):
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        digest = record.get("hash")
-        seq = record.get("seq")
-        if isinstance(digest, str) and isinstance(seq, int):
-            return digest, seq + 1
-    return GENESIS_HASH, 1
+    size = path.stat().st_size
+    window = 65536
+    while True:
+        start = max(0, size - window)
+        with path.open("rb") as handle:
+            handle.seek(start)
+            chunk = handle.read()
+        if start > 0:
+            newline = chunk.find(b"\n")
+            chunk = chunk[newline + 1 :] if newline >= 0 else b""
+        for line in reversed(chunk.decode("utf-8", errors="replace").splitlines()):
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            digest = record.get("hash")
+            seq = record.get("seq")
+            if isinstance(digest, str) and isinstance(seq, int):
+                return digest, seq + 1
+        if start == 0:
+            return GENESIS_HASH, 1
+        window *= 2
 
 
 def _digest(record: Mapping[str, Any]) -> str:

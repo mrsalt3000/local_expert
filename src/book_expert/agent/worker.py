@@ -38,7 +38,12 @@ def run_in_process(
     ctx: Any = mp.get_context(context)
     parent, child = ctx.Pipe(duplex=False)
     process = ctx.Process(target=target, args=(*args, child), daemon=True)
-    process.start()
+    try:
+        process.start()
+    except Exception:
+        parent.close()
+        child.close()
+        raise
     child.close()
     payload: dict[str, Any] | None = None
     try:

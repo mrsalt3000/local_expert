@@ -6,7 +6,12 @@ import json
 import multiprocessing as mp
 from pathlib import Path
 
-from book_expert.agent.audit import AuditLogger, GENESIS_HASH, verify_audit_chain
+from book_expert.agent.audit import (
+    AuditLogger,
+    GENESIS_HASH,
+    _tail_state,
+    verify_audit_chain,
+)
 
 
 def _write_many(path: Path, count: int, tag: str) -> None:
@@ -84,3 +89,11 @@ def test_audit_chain_survives_concurrent_processes(tmp_path: Path) -> None:
     assert [worker.exitcode for worker in workers] == [0, 0]
     assert verify_audit_chain(path) == (True, 80)
     assert [record["seq"] for record in _records(path)] == list(range(1, 81))
+
+
+def test_tail_state_reads_record_larger_than_window(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    record = {"seq": 7, "hash": "deadbeef", "pad": "x" * 70000}
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    assert _tail_state(path) == ("deadbeef", 8)
