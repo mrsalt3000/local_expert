@@ -106,7 +106,7 @@ def test_plans_then_searches_sequentially_and_synthesizes(tmp_path: Path) -> Non
 
     assert answer.plan == ("вопрос", "q1", "q2")
     assert [call[0] for call in searcher.calls] == ["вопрос", "q1", "q2"]
-    assert [call[2] for call in searcher.calls] == [4, 4, 4]
+    assert [call[2] for call in searcher.calls] == [8, 8, 8]
     assert [citation.chunk_id for citation in answer.citations] == ["c1", "c2"]
     assert [citation.number for citation in answer.citations] == [1, 2]
     assert "Развернутый ответ" in answer.text

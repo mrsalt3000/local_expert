@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     answer_relevance_filter: bool = True
     answer_max_citations: int = 5
     candidate_limit: int = 24
-    advanced_query_limit: int = 4
+    advanced_query_limit: int = 8
     super_max_rounds: int = 5
     super_refine_enabled: bool = False
     rrf_dense_weight: float = 1.0
