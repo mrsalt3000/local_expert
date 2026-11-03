@@ -790,3 +790,44 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   citation precision .710 → .703, отказов 7 → 6, latency без изменений;
   5 книг — page@5 без изменений .833, @k .867 → .883, citation .587 → .599,
   отказов 8 → 7. Дефолт `BOOK_EXPERT_CANDIDATE_LIMIT=24`.
+
+### T54 — Глубина запросов «Агента»: advanced_query_limit 4 → 8
+
+- [x] Статус: `accepted` (2026-11-03; A/B на двух срезах)
+- Scope: `config.py`, `.env.example`, `tests/test_advanced.py`.
+- Acceptance: дефолт выбирается по A/B; page recall растёт, latency
+  остаётся в разумном бюджете; тесты и проверки зелёные.
+- Verify: `agent-eval --limit 20` и `--offset 100 --limit 20` при
+  `BOOK_EXPERT_ADVANCED_QUERY_LIMIT=4/6/8`; `pytest`, `mypy`, `pre-commit`.
+- Основание: super набирал ровно 16 хитов (4 запроса × limit 4), а RAG на
+  том же индексе брал 8 из одного запроса и давал recall .84 против .70.
+- Результат: срез 0–20 — depth 4: recall .70 / precision .1617 / p50 8.14 s /
+  1 отказ; depth 6: **.80** / **.1992** / 10.27 s / 0; depth 8: **.80** /
+  .1883 / 10.50 s / 0. Срез 100–120 — depth 4: .80 / .2517 / 4.90 s / 3;
+  depth 8: .80 / **.2867** / 4.65 s / 4. Итог по 40 кейсам: recall
+  **.75 → .80**, precision выше, +2.3 s только на первом срезе. Дефолт
+  `BOOK_EXPERT_ADVANCED_QUERY_LIMIT=8`, тест на глубину обновлён.
+
+### T55 — Дрейф цитат «Агента»: relevance-фильтр vs сужение scope
+
+- [x] Статус: `accepted` (2026-11-03; IDF-фильтр отклонён, scope 3 принят)
+- Scope: `retrieval/advanced.py`, `retrieval/super_advanced.py`, `config.py`,
+  `.env.example`, `eval/agent_eval.py`, `tests/test_super_advanced.py`.
+- Acceptance: уменьшить долю цитат из посторонних книг
+  (`citation_book_precision`) без потери page recall и роста отказов.
+- Verify: `agent-eval` 40 кейсов (offset 0) и 20 кейсов (offset 100) с
+  фильтром вкл/выкл и `super_scope_limit` 0/3; живой `mode=super`.
+- Основание: на «Что такое двойной спуск?» 2 из 5 цитат пришли из
+  «Искусство учиться» и «Руководство ультрамарафонца»; супер искал по 24
+  кандидатам без фильтра.
+- Отрицательный результат (IDF-фильтр на накопленных хитах, 40 кейсов):
+  recall .775 против .75, citation precision .245 против .179, **но**
+  book precision **.80 против .87** и отказов 4 против 1 — дрейф не лечится,
+  фильтр откатан.
+- Положительный результат (`BOOK_EXPERT_SUPER_SCOPE_LIMIT=3`, 60 кейсов):
+  recall **.75 → .783**, book precision **.783 → .823**, citation precision
+  .197 → .208, отказов 5 → 6, latency без изменений. На срезе 100–120
+  book precision .61 → .70 при том же recall .75.
+- Добавлена метрика `citation_book_precision` (доля цитат из ожидаемой
+  книги); дефолт `BOOK_EXPERT_SUPER_SCOPE_LIMIT=3`. Живой прогон: 4 из 5
+  цитат из целевой книги, ответ корректный за 6.8 с, 414 тестов.
