@@ -35,6 +35,12 @@ JUDGE_PROMPT = (
     '"supported_by_context": true}]}'
 )
 
+STRICT_SUFFIX = (
+    "\n\nСТРОГО: supported_by_cited=true только если в источнике есть явное "
+    "предложение, утверждающее тот же факт. Частичное совпадение темы, общие "
+    "знания и выводы по смыслу — false. supported_by_context — так же строго."
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimJudgement:
@@ -101,9 +107,12 @@ def split_claims(
 class FaithfulnessJudge:
     """Один chat-вызов на ответ: дешёвая reference-free проверка."""
 
-    def __init__(self, provider: Provider, *, max_tokens: int = 700) -> None:
+    def __init__(
+        self, provider: Provider, *, max_tokens: int = 700, strict: bool = False
+    ) -> None:
         self.provider = provider
         self.max_tokens = max_tokens
+        self.prompt = JUDGE_PROMPT + STRICT_SUFFIX if strict else JUDGE_PROMPT
 
     def evaluate(
         self,
@@ -146,7 +155,7 @@ class FaithfulnessJudge:
                 batch = claims[start : start + JUDGE_BATCH_SIZE]
                 response = self.provider.chat(
                     [
-                        ChatMessage(role="system", content=JUDGE_PROMPT),
+                        ChatMessage(role="system", content=self.prompt),
                         ChatMessage(
                             role="user", content=build_prompt(question, batch, sources)
                         ),

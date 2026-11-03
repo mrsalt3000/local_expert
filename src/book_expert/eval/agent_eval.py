@@ -30,6 +30,7 @@ def run_agent_eval(
     offset: int = 0,
     faithfulness: bool = False,
     judge_provider: str | None = None,
+    strict_judge: bool = False,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     cases = cases[offset : offset + limit] if limit else cases[offset:]
@@ -45,7 +46,11 @@ def run_agent_eval(
         if faithfulness and judge_provider
         else None
     )
-    judge = FaithfulnessJudge(judge_client or provider) if faithfulness else None
+    judge = (
+        FaithfulnessJudge(judge_client or provider, strict=strict_judge)
+        if faithfulness
+        else None
+    )
     pages = {
         chunk.id: (chunk.book_id, chunk.pdf_page_index)
         for chunk in catalog.iter_chunks()
@@ -156,6 +161,7 @@ def run_agent_eval(
     if judge is not None:
         report["meta"]["judge_provider"] = getattr(judge.provider, "name", None)
         report["meta"]["judge_chat_model"] = getattr(judge.provider, "chat_model", None)
+        report["meta"]["judge_strict"] = strict_judge
     report["mode"] = "super"
     return report
 

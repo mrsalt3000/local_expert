@@ -677,6 +677,11 @@ def stage_eval(
         "--judge-provider",
         help="Провайдер LLM-судьи (ollama|openai|deepseek); по умолчанию — как у ответов.",
     ),
+    strict_judge: bool = typer.Option(
+        False,
+        "--strict-judge",
+        help="Строгий судья: частичное совпадение темы не считается поддержкой.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/stage-eval.local.json"),
         "--output",
@@ -693,6 +698,7 @@ def stage_eval(
         faithfulness=faithfulness,
         k=k,
         judge_provider=judge_provider,
+        strict_judge=strict_judge,
     )
     write_report(report, output)
     typer.echo(
@@ -731,6 +737,11 @@ def agent_evaluate(
         "--judge-provider",
         help="Провайдер LLM-судьи (ollama|openai|deepseek); по умолчанию — как у ответов.",
     ),
+    strict_judge: bool = typer.Option(
+        False,
+        "--strict-judge",
+        help="Строгий судья: частичное совпадение темы не считается поддержкой.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/agent-eval.local.json"),
         "--output",
@@ -746,6 +757,7 @@ def agent_evaluate(
         offset=offset,
         faithfulness=faithfulness,
         judge_provider=judge_provider,
+        strict_judge=strict_judge,
     )
     write_report(report, output)
     typer.echo(

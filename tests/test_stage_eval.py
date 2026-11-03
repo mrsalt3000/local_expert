@@ -344,7 +344,7 @@ def test_write_report(tmp_path: Path) -> None:
 
 
 class FakeJudge:
-    def __init__(self, provider: Any) -> None:
+    def __init__(self, provider: Any, **_: Any) -> None:
         self.provider = provider
         self.calls: list[tuple[str, tuple[str, ...]]] = []
 
@@ -374,7 +374,7 @@ def test_stage_eval_judges_faithfulness(monkeypatch: pytest.MonkeyPatch) -> None
         ),
         chunk_pages={"c1": 10, "c4": 40},
     )
-    monkeypatch.setattr(stage_eval, "FaithfulnessJudge", lambda provider: judge)
+    monkeypatch.setattr(stage_eval, "FaithfulnessJudge", lambda provider, **_: judge)
 
     report = stage_eval.run_stage_eval(
         Settings(query_rewrite_enabled=False),

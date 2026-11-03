@@ -50,6 +50,7 @@ def run_stage_eval(
     faithfulness: bool = False,
     k: int | None = None,
     judge_provider: str | None = None,
+    strict_judge: bool = False,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     if limit:
@@ -69,7 +70,11 @@ def run_stage_eval(
         if faithfulness and judge_provider
         else None
     )
-    judge = FaithfulnessJudge(judge_client or provider) if faithfulness else None
+    judge = (
+        FaithfulnessJudge(judge_client or provider, strict=strict_judge)
+        if faithfulness
+        else None
+    )
     pages = {
         chunk.id: (chunk.book_id, chunk.pdf_page_index)
         for chunk in catalog.iter_chunks()
@@ -220,6 +225,7 @@ def run_stage_eval(
     if judge is not None:
         report["meta"]["judge_provider"] = getattr(judge.provider, "name", None)
         report["meta"]["judge_chat_model"] = getattr(judge.provider, "chat_model", None)
+        report["meta"]["judge_strict"] = strict_judge
     return report
 
 

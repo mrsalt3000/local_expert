@@ -233,6 +233,23 @@ def test_judge_marks_short_answers_as_not_truncated() -> None:
     assert report.claims_total == 1
 
 
+def test_judge_strict_prompt_is_opt_in() -> None:
+    payload = (
+        '{"claims": [{"id": 1, "supported_by_cited": true, '
+        '"supported_by_context": true}]}'
+    )
+    default = FakeJudgeProvider(payload)
+    strict = FakeJudgeProvider(payload)
+
+    FaithfulnessJudge(default).evaluate("Вопрос", "Утверждение [1].", ("Фрагмент.",))
+    FaithfulnessJudge(strict, strict=True).evaluate(
+        "Вопрос", "Утверждение [1].", ("Фрагмент.",)
+    )
+
+    assert "СТРОГО" not in default.messages[0].content
+    assert "СТРОГО" in strict.messages[0].content
+
+
 class BatchEchoProvider(FakeJudgeProvider):
     """Отвечает валидным JSON на каждый батч — проверяет склейку вердиктов."""
 

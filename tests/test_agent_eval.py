@@ -117,7 +117,7 @@ def test_agent_eval_aggregates_citations_and_plan(
 
 
 class FakeJudge:
-    def __init__(self, provider: object) -> None:
+    def __init__(self, provider: object, **_: object) -> None:
         self.provider = provider
         self.calls = 0
 
@@ -154,7 +154,7 @@ def test_agent_eval_judges_faithfulness(
     monkeypatch.setattr(agent_eval, "HybridSearcher", lambda *a, **k: FakeSearcher())
     monkeypatch.setattr(agent_eval, "BookRouter", lambda *a, **k: FakeRouter())
     monkeypatch.setattr(agent_eval, "SuperAdvancedAnswerer", lambda *a, **k: answerer)
-    monkeypatch.setattr(agent_eval, "FaithfulnessJudge", lambda provider: judge)
+    monkeypatch.setattr(agent_eval, "FaithfulnessJudge", lambda provider, **_: judge)
     monkeypatch.setattr(
         agent_eval,
         "load_cases",
