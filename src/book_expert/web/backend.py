@@ -8,6 +8,7 @@ from typing import Any
 
 from book_expert.agent.audit import AuditLogger
 from book_expert.agent.graph import AgentRunner
+from book_expert.agent.worker import run_agent_in_process
 from book_expert.agent.tools.coding import build_coding_tools
 from book_expert.agent.tools.rag import build_rag_tools
 from book_expert.agent.trace import TraceRecorder
@@ -113,6 +114,14 @@ class BookChatBackend:
         book_ids: Sequence[str] | None = None,
         history: Sequence[tuple[str, str]] | None = None,
     ) -> str:
+        if self.settings.agent_hard_timeout:
+            result = run_agent_in_process(
+                self.settings,
+                message,
+                book_ids=book_ids or None,
+                history=history,
+            )
+            return str(result["text"])
         return (
             self._agent_runner()
             .run(

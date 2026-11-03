@@ -143,6 +143,15 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
         )
     from langchain_openai import ChatOpenAI
 
+    if settings.provider == "deepseek":
+        if settings.deepseek_api_key is None:
+            raise ProviderUnavailableError("DEEPSEEK_API_KEY is not configured")
+        return ChatOpenAI(
+            model=settings.deepseek_chat_model,
+            base_url=settings.deepseek_base_url,
+            api_key=SecretStr(settings.deepseek_api_key.get_secret_value()),
+            temperature=0.0,
+        )
     if settings.openai_api_key is None:
         raise ProviderUnavailableError("OPENAI_API_KEY is not configured")
     return ChatOpenAI(

@@ -314,3 +314,18 @@ def test_agent_accepts_conversation_history(tmp_path: Path) -> None:
     ]
     assert result.messages[0].content == "Что такое поиск?"
     assert result.messages[2].content == "А подробнее?"
+
+
+def test_build_chat_model_supports_deepseek(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        workspace=tmp_path,
+        data_dir=tmp_path / "data",
+        provider="deepseek",
+        deepseek_api_key="secret",
+        deepseek_chat_model="deepseek-chat",
+    )
+
+    model = build_chat_model(settings)
+
+    assert model.model_name == "deepseek-chat"

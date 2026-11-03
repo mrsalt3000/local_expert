@@ -38,7 +38,10 @@
    файла/вывода. Таймаут агента — caller-side: `ThreadPoolExecutor` не умеет
    прерывать уже выполняющийся граф, поэтому поток может продолжить работу;
    side effects ограничены `agent_max_steps`, таймаутами инструментов,
-   песочницей и audit. Для жёсткой остановки нужен отдельный процесс-раннер.
+   песочницей и audit. Для жёсткой остановки веб-агент выполняется в отдельном
+   процессе (`agent/worker.py`, `BOOK_EXPERT_AGENT_HARD_TIMEOUT`), который
+   убивается по `BOOK_EXPERT_AGENT_TIMEOUT_S`; CLI-агент остаётся на мягком
+   caller-side таймауте.
 6. **Audit.** Каждый tool-call (RAG и coding) пишется в append-only JSONL
    (`data/artifacts/audit/`) с timestamp, tool, аргументами (redacted), кодом
    возврата и длительностью. Текст книги в audit не попадает.

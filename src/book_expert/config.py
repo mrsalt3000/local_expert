@@ -77,6 +77,7 @@ class Settings(BaseSettings):
 
     agent_max_steps: int = 12
     agent_timeout_s: int = 120
+    agent_hard_timeout: bool = True
     command_timeout_s: int = 30
     max_output_bytes: int = 100_000
     autonomy: bool = True
