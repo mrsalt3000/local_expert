@@ -52,6 +52,7 @@ class FakeSearcher:
     def __init__(self, hits: dict[str, tuple[SearchHit, ...]]) -> None:
         self.hits = hits
         self.calls: list[str] = []
+        self.book_ids_seen: list[tuple[str, ...]] = []
 
     def search(
         self,
@@ -62,6 +63,7 @@ class FakeSearcher:
         dense: bool = True,
     ) -> SearchOutcome:
         self.calls.append(query)
+        self.book_ids_seen.append(tuple(book_ids or ()))
         return SearchOutcome(hits=self.hits.get(query, ()))
 
 
@@ -88,6 +90,17 @@ def _hit(chunk_id: str) -> SearchHit:
 def _answerer(tmp_path: Path, provider, searcher, **overrides: object):
     options = {"super_refine_enabled": True, **overrides}
     return SuperAdvancedAnswerer(_settings(tmp_path, **options), provider, searcher)  # type: ignore[arg-type]
+
+
+def test_scope_limit_truncates_routed_books(tmp_path: Path) -> None:
+    provider = FakeProvider(['{"queries": ["q1"]}', "Ответ [1]."])
+    searcher = FakeSearcher({"вопрос": (_hit("c1"),), "q1": (_hit("c2"),)})
+
+    SuperAdvancedAnswerer(
+        _settings(tmp_path, super_scope_limit=2), provider, searcher
+    ).ask("вопрос", book_ids=None, auto_route=True)
+
+    assert all(len(ids) <= 2 for ids in searcher.book_ids_seen)
 
 
 def test_refinement_is_off_by_default(tmp_path: Path) -> None:

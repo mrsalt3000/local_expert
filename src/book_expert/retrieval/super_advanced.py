@@ -42,6 +42,8 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
         history: Sequence[tuple[str, str]] | None = None,
     ):
         selected, route = self._route(query, book_ids, auto_route)
+        if self.settings.super_scope_limit > 0 and selected:
+            selected = selected[: self.settings.super_scope_limit]
         plan = list(self._plan(query, history))
         if self.trace is not None:
             self.trace.write("advanced_plan", query=query, queries=list(plan))

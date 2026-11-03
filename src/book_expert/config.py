@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     advanced_query_limit: int = 8
     super_max_rounds: int = 5
     super_refine_enabled: bool = False
+    super_scope_limit: int = 3
     rrf_dense_weight: float = 1.0
     rrf_lexical_weight: float = 0.1
     lexical_query_mode: LexicalQueryMode = "and"
@@ -121,6 +122,13 @@ class Settings(BaseSettings):
     def _check_positive(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("value must be positive")
+        return value
+
+    @field_validator("super_scope_limit")
+    @classmethod
+    def _check_super_scope_limit(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("value must be non-negative")
         return value
 
     @field_validator("candidate_limit")

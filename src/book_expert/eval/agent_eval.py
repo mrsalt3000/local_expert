@@ -52,7 +52,11 @@ def run_agent_eval(
             started = time.perf_counter()
             answer = answerer.ask(case.question, book_ids=None, auto_route=True)
             elapsed_ms = (time.perf_counter() - started) * 1000
+            expected_book = next(iter(case.expected_book_ids), None)
             cited_pages = {citation.pdf_page_index for citation in answer.citations}
+            citation_book_hits = sum(
+                1 for citation in answer.citations if citation.book_id == expected_book
+            )
             source_pages = {hit.pdf_page_index for hit in answer.sources}
             page_hits = len(cited_pages & expected_pages)
             source_hits = len(source_pages & expected_pages)
@@ -83,6 +87,10 @@ def run_agent_eval(
                     else 0.0,
                     "citation_precision": page_hits / len(cited_pages)
                     if cited_pages
+                    else 0.0,
+                    "citation_book_precision": citation_book_hits
+                    / len(answer.citations)
+                    if answer.citations
                     else 0.0,
                     "source_page_recall": source_hits / len(expected_pages)
                     if expected_pages
@@ -132,6 +140,7 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "page_recall": _mean(rows, "page_recall"),
             "source_page_recall": _mean(rows, "source_page_recall"),
             "citation_precision": _mean(rows, "citation_precision"),
+            "citation_book_precision": _mean(rows, "citation_book_precision"),
         },
         "answers": {
             "refused": sum(1 for row in rows if row["refused"]),
