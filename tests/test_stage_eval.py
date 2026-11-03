@@ -354,6 +354,47 @@ def test_stage_eval_judges_faithfulness(monkeypatch: pytest.MonkeyPatch) -> None
     assert report["details"][1]["faithfulness"] is None
 
 
+def test_stage_eval_uses_separate_judge_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested: list[str] = []
+
+    def fake_provider(settings: Settings) -> SimpleNamespace:
+        requested.append(settings.provider)
+        return SimpleNamespace(
+            name=f"{settings.provider}-provider",
+            chat_model=f"{settings.provider}-chat",
+            embedding_model="fake-embed",
+            close=lambda: None,
+        )
+
+    _install(
+        monkeypatch,
+        searcher=FakeSearcher({"q1": [_hit("c1", 10)], "q2": []}),
+        router=FakeRouter({}),
+        answerer=FakeAnswerer(
+            {
+                "q1": ([_citation("c1", 10)], False),
+                "q2": ([], True),
+            }
+        ),
+        chunk_pages={"c1": 10, "c4": 40},
+    )
+    monkeypatch.setattr(stage_eval, "get_provider", fake_provider)
+    monkeypatch.setattr(stage_eval, "FaithfulnessJudge", FakeJudge)
+
+    report = stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False, provider="deepseek"),
+        Path("cases.json"),
+        faithfulness=True,
+        judge_provider="ollama",
+    )
+
+    assert requested == ["deepseek", "ollama"]
+    assert report["meta"]["judge_provider"] == "ollama-provider"
+    assert report["meta"]["judge_chat_model"] == "ollama-chat"
+
+
 def test_stage_eval_uses_top_k_and_records_meta(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

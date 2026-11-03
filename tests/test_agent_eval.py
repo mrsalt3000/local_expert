@@ -251,3 +251,45 @@ def test_agent_eval_counts_context_pages_not_citations(
 
     assert report["retrieval"]["page_recall"] == 0.0
     assert report["retrieval"]["source_page_recall"] == 1.0
+
+
+def test_agent_eval_uses_separate_judge_provider(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    requested: list[str] = []
+
+    def fake_provider(settings: Settings) -> SimpleNamespace:
+        requested.append(settings.provider)
+        return SimpleNamespace(
+            name=f"{settings.provider}-provider",
+            chat_model=f"{settings.provider}-chat",
+            embedding_model="fake-embed",
+            close=lambda: None,
+        )
+
+    chunks = [SimpleNamespace(id="c1", pdf_page_index=10)]
+    answerer = FakeAgentAnswerer(
+        {"q1": Answer(text="Ответ [1].", citations=(_citation(10),))}
+    )
+    monkeypatch.setattr(agent_eval, "Catalog", lambda path: FakeCatalog(chunks))
+    monkeypatch.setattr(agent_eval, "get_provider", fake_provider)
+    monkeypatch.setattr(agent_eval, "HybridSearcher", lambda *a, **k: FakeSearcher())
+    monkeypatch.setattr(agent_eval, "BookRouter", lambda *a, **k: FakeRouter())
+    monkeypatch.setattr(agent_eval, "SuperAdvancedAnswerer", lambda *a, **k: answerer)
+    monkeypatch.setattr(agent_eval, "FaithfulnessJudge", FakeJudge)
+    monkeypatch.setattr(
+        agent_eval,
+        "load_cases",
+        lambda path: (EvalCase("q1", ("c1",), ("book-1",)),),
+    )
+
+    report = agent_eval.run_agent_eval(
+        Settings(provider="deepseek"),
+        tmp_path / "cases.json",
+        faithfulness=True,
+        judge_provider="ollama",
+    )
+
+    assert requested == ["deepseek", "ollama"]
+    assert report["meta"]["judge_provider"] == "ollama-provider"
+    assert report["meta"]["judge_chat_model"] == "ollama-chat"

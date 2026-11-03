@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from book_expert.providers import ChatMessage, Provider, ProviderError
 
-MAX_CLAIMS = 24
+MAX_CLAIMS = 48
+JUDGE_BATCH_SIZE = 12
 MAX_SOURCE_CHARS = 1200
 _SENTENCE_RE = re.compile(r"(?<=[.!?…])\s+|\n+")
 _CITATION_RE = re.compile(r"\[(\d+)\]")
@@ -52,6 +53,8 @@ class FaithfulnessReport:
     citation_coverage: float
     unsupported: tuple[str, ...] = ()
     error: str | None = None
+    claims_total: int = 0
+    truncated: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -59,13 +62,17 @@ class FaithfulnessReport:
             "citation_support_precision": self.citation_support_precision,
             "citation_coverage": self.citation_coverage,
             "claims": len(self.claims),
+            "claims_total": self.claims_total or len(self.claims),
+            "truncated": self.truncated,
             "cited_claims": sum(1 for claim in self.claims if claim.cited),
             "unsupported": list(self.unsupported),
             "error": self.error,
         }
 
 
-def split_claims(text: str) -> tuple[tuple[str, tuple[int, ...]], ...]:
+def split_claims(
+    text: str, *, limit: int | None = MAX_CLAIMS
+) -> tuple[tuple[str, tuple[int, ...]], ...]:
     """Режет ответ на утверждения и вытаскивает маркеры цитат из каждого."""
     claims: list[tuple[str, tuple[int, ...]]] = []
     seen: set[str] = set()
@@ -86,7 +93,7 @@ def split_claims(text: str) -> tuple[tuple[str, tuple[int, ...]], ...]:
             continue
         seen.add(key)
         claims.append((cleaned, cited))
-        if len(claims) >= MAX_CLAIMS:
+        if limit is not None and len(claims) >= limit:
             break
     return tuple(claims)
 
@@ -107,6 +114,8 @@ class FaithfulnessJudge:
         marker_map: dict[int, int] | None = None,
     ) -> FaithfulnessReport:
         claims = split_claims(answer_text)
+        claims_total = len(split_claims(answer_text, limit=None))
+        truncated = claims_total > len(claims)
         if marker_map:
             claims = tuple(
                 (
@@ -128,18 +137,24 @@ class FaithfulnessJudge:
                 0.0,
                 0.0,
                 unsupported=tuple(text for text, _ in claims),
+                claims_total=claims_total,
+                truncated=truncated,
             )
-        prompt = build_prompt(question, claims, sources)
+        verdicts: list[dict[str, bool]] = []
         try:
-            response = self.provider.chat(
-                [
-                    ChatMessage(role="system", content=JUDGE_PROMPT),
-                    ChatMessage(role="user", content=prompt),
-                ],
-                temperature=0.0,
-                max_tokens=self.max_tokens,
-            )
-            verdicts = parse_verdicts(response.text, len(claims))
+            for start in range(0, len(claims), JUDGE_BATCH_SIZE):
+                batch = claims[start : start + JUDGE_BATCH_SIZE]
+                response = self.provider.chat(
+                    [
+                        ChatMessage(role="system", content=JUDGE_PROMPT),
+                        ChatMessage(
+                            role="user", content=build_prompt(question, batch, sources)
+                        ),
+                    ],
+                    temperature=0.0,
+                    max_tokens=max(self.max_tokens, min(4000, 32 * len(batch))),
+                )
+                verdicts.extend(parse_verdicts(response.text, len(batch)))
         except (ProviderError, ValueError, TypeError) as exc:
             return FaithfulnessReport(
                 tuple(
@@ -150,6 +165,8 @@ class FaithfulnessJudge:
                 0.0,
                 0.0,
                 error=str(exc)[:300],
+                claims_total=claims_total,
+                truncated=truncated,
             )
         judgements = tuple(
             ClaimJudgement(
@@ -160,7 +177,11 @@ class FaithfulnessJudge:
             )
             for index, (text, cited) in enumerate(claims)
         )
-        return _aggregate(judgements)
+        return replace(
+            _aggregate(judgements),
+            claims_total=claims_total,
+            truncated=truncated,
+        )
 
 
 def build_prompt(

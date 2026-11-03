@@ -29,6 +29,7 @@ def run_agent_eval(
     limit: int | None = None,
     offset: int = 0,
     faithfulness: bool = False,
+    judge_provider: str | None = None,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     cases = cases[offset : offset + limit] if limit else cases[offset:]
@@ -39,7 +40,12 @@ def run_agent_eval(
     searcher = HybridSearcher(settings, provider, catalog)
     router = BookRouter(settings, provider, catalog)
     answerer = SuperAdvancedAnswerer(settings, provider, searcher, router)
-    judge = FaithfulnessJudge(provider) if faithfulness else None
+    judge_client = (
+        get_provider(settings.model_copy(update={"provider": judge_provider}))
+        if faithfulness and judge_provider
+        else None
+    )
+    judge = FaithfulnessJudge(judge_client or provider) if faithfulness else None
     pages = {chunk.id: chunk.pdf_page_index for chunk in catalog.iter_chunks()}
     rows: list[dict[str, Any]] = []
     try:
@@ -104,6 +110,7 @@ def run_agent_eval(
                         judgement.citation_support_precision if judgement else None
                     ),
                     "judged_claims": len(judgement.claims) if judgement else 0,
+                    "claims_truncated": bool(judgement and judgement.truncated),
                     "faithfulness_error": (
                         judgement.error if judgement is not None else None
                     ),
@@ -114,6 +121,10 @@ def run_agent_eval(
                 print(f"{index}/{len(cases)}", flush=True)
     finally:
         searcher.close()
+        if judge_client is not None:
+            close_judge = getattr(judge_client, "close", None)
+            if callable(close_judge):
+                close_judge()
         close = getattr(provider, "close", None)
         if callable(close):
             close()
@@ -136,6 +147,9 @@ def run_agent_eval(
             "answer_max_citations": settings.answer_max_citations,
         }
     )
+    if judge is not None:
+        report["meta"]["judge_provider"] = getattr(judge.provider, "name", None)
+        report["meta"]["judge_chat_model"] = getattr(judge.provider, "chat_model", None)
     report["mode"] = "super"
     return report
 
@@ -164,6 +178,7 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 rows, "citation_support_precision"
             ),
             "judged_cases": sum(1 for row in rows if row["faithfulness"] is not None),
+            "claims_truncated": sum(1 for row in rows if row["claims_truncated"]),
             "faithfulness_errors": sum(1 for row in rows if row["faithfulness_error"]),
         },
         "plan": {

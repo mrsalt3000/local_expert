@@ -672,6 +672,11 @@ def stage_eval(
         max=20,
         help="Сколько хитов брать в ответ; по умолчанию BOOK_EXPERT_TOP_K.",
     ),
+    judge_provider: str | None = typer.Option(
+        None,
+        "--judge-provider",
+        help="Провайдер LLM-судьи (ollama|openai|deepseek); по умолчанию — как у ответов.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/stage-eval.local.json"),
         "--output",
@@ -687,6 +692,7 @@ def stage_eval(
         relevance_filter=relevance_filter,
         faithfulness=faithfulness,
         k=k,
+        judge_provider=judge_provider,
     )
     write_report(report, output)
     typer.echo(
@@ -720,6 +726,11 @@ def agent_evaluate(
         "--faithfulness",
         help="LLM-судья: поддержка утверждений ответа цитируемыми фрагментами.",
     ),
+    judge_provider: str | None = typer.Option(
+        None,
+        "--judge-provider",
+        help="Провайдер LLM-судьи (ollama|openai|deepseek); по умолчанию — как у ответов.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/agent-eval.local.json"),
         "--output",
@@ -729,7 +740,12 @@ def agent_evaluate(
     from book_expert.eval.agent_eval import run_agent_eval
 
     report = run_agent_eval(
-        Settings(), cases, limit=limit, offset=offset, faithfulness=faithfulness
+        Settings(),
+        cases,
+        limit=limit,
+        offset=offset,
+        faithfulness=faithfulness,
+        judge_provider=judge_provider,
     )
     write_report(report, output)
     typer.echo(

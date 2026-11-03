@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Sequence
 
 import pytest
 
 from book_expert.eval.faithfulness import (
+    JUDGE_BATCH_SIZE,
+    MAX_CLAIMS,
     FaithfulnessJudge,
     build_prompt,
     parse_verdicts,
@@ -29,6 +33,7 @@ class FakeJudgeProvider:
         self.text = text
         self.error = error
         self.messages: list[ChatMessage] = []
+        self.max_tokens: int | None = None
 
     def chat(
         self,
@@ -38,6 +43,7 @@ class FakeJudgeProvider:
         max_tokens: int | None = None,
     ) -> ChatResult:
         self.messages = list(messages)
+        self.max_tokens = max_tokens
         if self.error is not None:
             raise self.error
         return ChatResult(text=self.text, model="fake-chat")
@@ -183,3 +189,91 @@ def test_judge_handles_refused_and_empty_answers() -> None:
 
     assert report.claims == ()
     assert report.to_dict()["claims"] == 0
+
+
+def test_split_claims_respects_explicit_limit() -> None:
+    text = " ".join(f"Утверждение {index} [1]." for index in range(5))
+
+    assert len(split_claims(text, limit=2)) == 2
+    assert len(split_claims(text, limit=None)) == 5
+
+
+def test_judge_reports_truncated_long_answers() -> None:
+    answer = " ".join(
+        f"Утверждение номер {index} [1]." for index in range(MAX_CLAIMS + 7)
+    )
+    provider = FakeJudgeProvider(
+        '{"claims": [{"id": 1, "supported_by_cited": true, '
+        '"supported_by_context": true}]}'
+    )
+
+    report = FaithfulnessJudge(provider).evaluate("Вопрос", answer, ("Фрагмент.",))
+
+    assert len(report.claims) == MAX_CLAIMS
+    assert report.claims_total == MAX_CLAIMS + 7
+    assert report.truncated is True
+    assert provider.max_tokens is not None
+    assert provider.max_tokens >= 32 * JUDGE_BATCH_SIZE
+    payload = report.to_dict()
+    assert payload["truncated"] is True
+    assert payload["claims_total"] == MAX_CLAIMS + 7
+
+
+def test_judge_marks_short_answers_as_not_truncated() -> None:
+    provider = FakeJudgeProvider(
+        '{"claims": [{"id": 1, "supported_by_cited": true, '
+        '"supported_by_context": true}]}'
+    )
+
+    report = FaithfulnessJudge(provider).evaluate(
+        "Вопрос", "Утверждение [1].", ("Фрагмент.",)
+    )
+
+    assert report.truncated is False
+    assert report.claims_total == 1
+
+
+class BatchEchoProvider(FakeJudgeProvider):
+    """Отвечает валидным JSON на каждый батч — проверяет склейку вердиктов."""
+
+    def __init__(self) -> None:
+        super().__init__("")
+        self.calls = 0
+        self.batch_sizes: list[int] = []
+
+    def chat(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> ChatResult:
+        self.calls += 1
+        prompt = messages[-1].content
+        count = len(re.findall(r"(?m)^\d+\. \[", prompt))
+        self.batch_sizes.append(count)
+        payload = {
+            "claims": [
+                {
+                    "id": index,
+                    "supported_by_cited": True,
+                    "supported_by_context": True,
+                }
+                for index in range(1, count + 1)
+            ]
+        }
+        return ChatResult(text=json.dumps(payload), model="fake-chat")
+
+
+def test_judge_merges_verdicts_from_batches() -> None:
+    answer = " ".join(f"Утверждение номер {index} [1]." for index in range(30))
+    provider = BatchEchoProvider()
+
+    report = FaithfulnessJudge(provider).evaluate("Вопрос", answer, ("Фрагмент.",))
+
+    assert provider.calls == 3
+    assert provider.batch_sizes == [JUDGE_BATCH_SIZE, JUDGE_BATCH_SIZE, 6]
+    assert len(report.claims) == 30
+    assert report.faithfulness == 1.0
+    assert report.citation_support_precision == 1.0
+    assert report.truncated is False
