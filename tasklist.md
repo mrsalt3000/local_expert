@@ -317,7 +317,7 @@
 
 ### T26 — Chunk-size A/B 500 / 1000 / 1500
 
-- [ ] Статус: `review` (2026-11-02; 500: page@10 +1.7pp, но refusals 13 vs 7, citation recall −1.7pp; default 1000 оставлен)
+- [x] Статус: `accepted` (2026-11-02; negative: 500 не лучше 1000 — page@10 +1.7 п.п., но отказов 13 против 7 и citation recall −1.7 п.п.; default 1000 оставлен)
 - Scope: reindex одной книги в отдельные коллекции с chunk_size/overlap
   вариантами; 100-case eval; не менять default без выигрыша.
 - Acceptance: выбран лучший вариант по chunk/page recall@5 и citation
@@ -335,7 +335,7 @@
 
 ### T28 — Per-stage eval и retrieval gate
 
-- [ ] Статус: `review` (2026-11-02; 100 кейсов × 2 провайдера: retrieval page@5 .91, page MRR@5 .786, chunk@5 .69; deepseek citation .604/.88, refusals 5, empty 7; ollama .576/.86, refusals 1, empty 13; oracle-gate 9/100, 0 false refusals; signal-gate 0. Routing: non-fallback top1 .606 deepseek / .309 ollama, fallback 67 / 19)
+- [x] Статус: `accepted` (2026-11-02; per-stage eval и gate внедрены; 100 кейсов × 2 провайдера: retrieval page@5 .91, page MRR@5 .786, chunk@5 .69; deepseek citation .604/.88, refusals 5, empty 7; ollama .576/.86, refusals 1, empty 13; oracle-gate 9/100, 0 false refusals; signal-gate 0; non-fallback top1 .606 deepseek / .309 ollama, fallback 67 / 19)
 - Scope: отдельные отчёты routing / retrieval / citation / latency; gate:
   не генерировать ответ при низком retrieval recall; CLI/JSON.
 - Acceptance: 100-case отчёт с per-stage метриками; gate не увеличивает
@@ -344,7 +344,7 @@
 
 ### T29 — Полный contextual reindex production
 
-- [ ] Статус: `review` (2026-11-02; reindex 1151/548999 ok; eval: chunk +1.9pp, page −1.0pp, empty citations 9; production switch не одобрен)
+- [x] Статус: `accepted` (2026-11-02; negative: production остаётся `books`; коллекция `books_ctx_full` удалена 2026-11-03)
 - Scope: переиндексировать все 1150 книг с contextual embeddings в новую
   коллекцию, проверить размер/время, переключить `BOOK_EXPERT_QDRANT_COLLECTION`
   только после A/B, сохранить rollback.
@@ -368,7 +368,7 @@
 
 ### T31 — Reranker только при доказанном latency-бюджете
 
-- [ ] Статус: `review` (2026-11-02; negative: малые cross-encoder'ы дают p50 1.1–1.5 s и снижают page@5 с .80 до .65–.70; default остаётся off)
+- [x] Статус: `accepted` (2026-11-02; negative: малые cross-encoder'ы дают p50 1.1–1.5 s и снижают page@5 с .80 до .65–.70; default остаётся off)
 - Scope: вернуться к T23 только с smaller model/offline batch; замерить
   top-20 rerank latency на 100 кейсах; default off без выигрыша.
 - Acceptance: page recall@5/citation precision растут, p95 latency в бюджете;
@@ -390,14 +390,14 @@
 
 ### T32 — Structure-aware chunking по разделам
 
-- [ ] Статус: `review` (2026-11-02; 5 книг/120 кейсов: page@5 .9083 vs .925, @10 .9333 vs .95, MRR .7538 vs .781; negative)
+- [x] Статус: `accepted` (2026-11-02; negative: 5 книг/120 кейсов — page@5 .9083 против .925, @10 .9333 против .95, MRR .7538 против .781)
 - Scope: 5 книг (ML Systems, Effective Leader, Emotional Intelligence, JavaScript, Crypto); section boundaries + merge мелких до 300–500 и split крупных >1200–1500; A/B current fixed vs pure section vs hybrid on 100 existing + 20 новых вопросов для двух книг; store section_path/page range.
 - Acceptance: chunk recall@5 и citation precision растут или не падают; доля chunks <100 резко снижена; секции >4000 не превращаются в один chunk; citations проверяемы.
 - Verify: section-size report, A/B 120 cases, targeted tests, full checks.
 
 ### T33 — Citation gate: ответ без сопоставленных цитат не отдаётся как валидный
 
-- [ ] Статус: `review` (2026-11-02; gate добавлен, на 100 кейсах не сработал ни разу: refusals 5→5, precision .6042/recall .88 без изменений; путь retry→refusal покрыт тестами)
+- [x] Статус: `accepted` (2026-11-02; gate добавлен, на 100 кейсах не сработал ни разу: refusals 5→5, precision .6042/recall .88 без изменений; путь retry→refusal покрыт тестами)
 - Scope: `retrieval/answer.py`, `eval/stage_eval.py`; если маркеры `[n]`
   не сопоставились ни с одним фрагментом (все вне диапазона), повторить
   запрос с явным требованием цитат, при повторе — `INSUFFICIENT_CONTEXT`.
@@ -416,7 +416,7 @@
 
 ### T34 — Калибровка routing fallback для deepseek
 
-- [ ] Статус: `review` (2026-11-02; negative: порог и retry — не рычаг, fallback на 12 кандидатов покрывает книгу лучше уверенного одиночного выбора; в router_eval добавлен `scope_coverage`)
+- [x] Статус: `accepted` (2026-11-02; negative: порог и retry — не рычаг, fallback на 12 кандидатов покрывает книгу лучше уверенного одиночного выбора; в router_eval добавлен `scope_coverage`)
 - Scope: `retrieval/router.py`; deepseek уходит в fallback на 67/100 кейсов
   против 19/100 у локальной 4B, из-за чего общий top-1 падает до 0.20, хотя
   на не-fallback кейсах top-1 0.606 против 0.309. Проверить шкалу
@@ -705,7 +705,7 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
 
 ### T49 — Гигиена рабочего дерева
 
-- [ ] Статус: `blocked` (2026-11-02; AGENTS.md запрещает commit/push без прямой просьбы)
+- [x] Статус: `accepted` (2026-11-03; прод-код чист, эксперименты откатаны, untracked только handoff/learning/progress)
 - Scope: `src/book_expert/ingestion/indexer.py`,
   `src/book_expert/ingestion/section_chunking.py`, `tests/test_section_chunking.py`,
   `scripts/chunk_size_ab.py`, `scripts/reindex_contextual.py`,
@@ -928,12 +928,13 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   5 вызовов deepseek повторены после сетевых таймаутов.
 - Слепая разметка 20 ответов независимым агентом (без вердиктов судьи):
   сырое совпадение **88/100**, но kappa ≈ 0 (низкая база .95 и ошибки не
-  пересекаются). Ручной разбор всех 12 спорных утверждений: судья ошибся на
-  1.5 и 14.9 (ложные «не поддержано»), разметчик — на 2.4, 4.1, 6.3, 8.5,
-  8.6, 16.9 (пропустил поддержку). По итоговой ручной разметке support
-  **.96** против судейских **.955** — агрегат сходится, поштучные метки шумят.
-  Абсолютную калибровку судьи считать приблизительной, порог по одной метке
-  не двигать.
+  пересекаются). Ручной разбор всех 12 спорных утверждений по полным текстам
+  чанков: судья ошибся на 1.5 и 14.9 (ложные «не поддержано»), разметчик —
+  на 2.4, 4.1, 6.3, 8.5, 8.6, 16.9 (пропустил поддержку). Эталон
+  (согласие двух разметчиков + разбор всех споров): support **.97**,
+  у судьи precision **.50**, recall **.67**, F1 **.57**, accuracy **.97**;
+  эталон — `data/artifacts/t61-reference.local.json`. Агрегат судьи (.955)
+  близок к эталону, поштучные метки — нет; порог по одной метке не двигать.
 
 ### T58 — Жёсткий таймаут агента через worker-процесс
 
@@ -997,3 +998,25 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   `tools-<дата>.jsonl.lock`; под локом хвост перечитывается с диска, поэтому
   `seq/prev_hash` не расходятся. Тест `fork`-процессами: 2 × 40 событий,
   `verify_audit_chain == (True, 80)`, seq строго `1..80`.
+
+### T64 — Контентный сигнал для страниц вне top-20
+
+- [x] Статус: `accepted` (2026-11-03; negative для пропусков, MRR +5.4 п.п.)
+- Scope: диагностика на `data/eval/multi-book-40.local.json` (69 кейсов,
+  10 книг), `retrieval/hybrid.py` — только эксперимент, прод-код не менялся.
+- Acceptance: понять, возвращает ли OR-prefix5/расширение запроса страницы,
+  которые не попали в top-20, и не теряется ли качество на остальных.
+- Verify: диагностика промахов + A/B по `(book_id, page)`, а не по номеру
+  страницы (номера повторяются в разных книгах).
+- Результат: **9 промахов из 69**, и все — не лексика. У **6 из 9** ожидаемой
+  книги нет в 24 кандидатах (и в 40 тоже); у 3 книга в кандидатах, но
+  страница ниже 20-го места. OR-prefix5 не возвращает **ни одну** из 9
+  страниц (0/9); глобально находятся 5/9 (dense 2, OR-лексика 3).
+  Добавление OR-лексики в RRF при `w_or=0.1` не меняет recall@5/@20
+  (.7826/.8696), но поднимает MRR@20 **.6752 → .7296**; при `w_or=0.05` —
+  .7111. Вывод: контентный сигнал — рычаг ранжирования, а не покрытия;
+  пропущенные страницы лечатся scope/роутингом, не BM25.
+- Артефакты (ignored): `data/artifacts/t64-miss-diagnostic.local.json`,
+  `data/artifacts/t64-miss-levers.local.json`.
+- Ловушка диагностики: сравнивать `(book_id, page)`; сравнение только по
+  `pdf_page_index` даёт ложные попадания из других книг.
