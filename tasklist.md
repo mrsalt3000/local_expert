@@ -1260,6 +1260,10 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   То есть +8.7 п.п. recall@5 и +5.1 п.п. MRR без потери @k.
 - Полный reindex: коллекция `books_qwen3emb_full`, **549 тыс. чанков**,
   batch 32 (~24.8 chunks/s), ETA **6–7 ч**, резюмируется по `book_id`.
+  Запущен как `systemd --user` unit `book-expert-reindex-qwen3.service`
+  (скрипт `scripts/reindex_embeddings.py`), лог —
+  `data/artifacts/qwen3-reindex.log`; после обрыва —
+  `systemctl --user restart book-expert-reindex-qwen3`.
 - Дальше: дождаться reindex, прогнать 69 и 120 кейсов, пересобрать
   `BookProfileStore` на qwen3 (иначе profile-fallback в другом пространстве),
   затем переключить `BOOK_EXPERT_EMBEDDING_MODEL` и `QDRANT_COLLECTION`.
