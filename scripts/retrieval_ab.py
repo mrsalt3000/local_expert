@@ -101,7 +101,9 @@ def _measure(hits, expected: set[tuple[str, int]]) -> tuple[bool, bool, int | No
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("dataset", type=Path)
-    parser.add_argument("--variant", choices=("or", "scope", "expand"), required=True)
+    parser.add_argument(
+        "--variant", choices=("or", "scope", "expand", "candidates"), required=True
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
@@ -150,6 +152,22 @@ def main() -> None:
                 )
                 base_hits = searcher.search(query, book_ids=ids, limit=20).hits
                 var_hits = searcher.search(query, book_ids=wide, limit=20).hits
+            elif args.variant == "candidates":
+                wide_candidates = _candidate_books(
+                    query,
+                    apply_metadata_filter(ready, query),
+                    catalog,
+                    profiles=router.profiles,
+                    provider=provider,
+                    use_lemmas=settings.lexical_use_lemmas,
+                    limit=40,
+                )
+                base_hits = searcher.search(query, book_ids=ids, limit=20).hits
+                var_hits = searcher.search(
+                    query,
+                    book_ids=[book.id for book in wide_candidates],
+                    limit=20,
+                ).hits
             else:
                 expanded = _expand(provider, case.question)
                 wide_candidates = _candidate_books(

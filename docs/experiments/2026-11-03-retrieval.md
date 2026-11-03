@@ -76,3 +76,35 @@ uv run python scripts/retrieval_ab.py data/eval/multi-book-40.local.json --varia
 
 Вывод: контролируемое расширение по заголовкам не лечит промахи. Нужен
 другой сигнал — полные метаданные книг или смена модели эмбеддингов.
+
+## T73 — candidate_limit 24 / 32 / 40 / 50
+
+| limit | recall@5 | recall@20 | MRR@20 |
+| --- | --- | --- | --- |
+| **24** | **.7826** | **.8696** | **.6752** |
+| 32 | .7681 | .8406 | .6501 |
+| 40 | .7681 | .8406 | .6465 |
+| 50 | .7536 | .8406 | .6368 |
+
+Negative: расширение candidate scope добавляет шум. Дефолт 24 не меняется.
+
+```bash
+uv run python scripts/retrieval_ab.py data/eval/multi-book-40.local.json --variant candidates
+```
+
+## T74 — hard-negative калибровка судьи
+
+На 40 deepseek-ответах: 38 положительных пар (своя цитата) и 38
+отрицательных (наименее лексически похожая цитата из другой книги).
+
+| набор | результат |
+| --- | --- |
+| positives | 35/38 поддержаны (FN 7.9%) |
+| negatives | 38/38 отвергнуты (FP 0%) |
+
+Судья консервативен: явно чужие цитаты не пропускает, но иногда режет
+верные. Артефакт — `data/artifacts/t74-hard-negatives.local.json`.
+
+```bash
+uv run python scripts/judge_hard_negatives.py data/artifacts/t72-cross-judge-40.local.json --pairs 60
+```

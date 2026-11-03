@@ -1137,3 +1137,27 @@ page recall при боевом k (@5 .833, @8 .867, @10 .883). Книга-ис�
   заявлений нужен более трудный набор с противоречивыми цитатами.
 - Артефакты (ignored): `data/artifacts/t61-reference.local.json` (254),
   `data/artifacts/t72-cross-judge-40.local.json`.
+
+### T73 — Candidate limit 24 / 32 / 40 / 50
+
+- [x] Статус: `accepted` (2026-11-03; negative: 24 остаётся лучшим)
+- Scope: `scripts/retrieval_ab.py --variant candidates`, 69 кейсов/10 книг,
+  метрика `(book_id, page)`.
+- Результат: **24** — .7826/.8696, MRR .6752; **32** — .7681/.8406, .6501;
+  **40** — .7681/.8406, .6465; **50** — .7536/.8406, .6368. Расширение
+  scope добавляет шум и вытесняет верные страницы; дефолт 24 не менять.
+- Воспроизведение: `uv run python scripts/retrieval_ab.py
+  data/eval/multi-book-40.local.json --variant candidates`.
+
+### T74 — Hard-negative калибровка судьи
+
+- [x] Статус: `accepted` (2026-11-03; 38/38 чужих отвергнуты, FN 7.9%)
+- Scope: `scripts/judge_hard_negatives.py`, 40 deepseek-ответов.
+- Метод: на каждый ответ — своя цитата (positive) и наименее лексически
+  похожая цитата из другой книги (negative); судья deepseek.
+- Результат: positives **35/38** поддержаны (3 ложных «не поддержано»,
+  FN **7.9%**), negatives **38/38** отвергнуты (FP **0%**). Судья
+  консервативен на явно чужих цитатах и иногда режет верные; порог по одной
+  метке не двигать. Артефакт: `data/artifacts/t74-hard-negatives.local.json`.
+- Воспроизведение: `uv run python scripts/judge_hard_negatives.py
+  data/artifacts/t72-cross-judge-40.local.json --pairs 60`.
