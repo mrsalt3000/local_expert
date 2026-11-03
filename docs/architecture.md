@@ -49,7 +49,7 @@
 | Catalog | `catalog.py` | SQLite: книги, hash, статус, метаданные, оглавление, FTS5 |
 | Ingestion | `ingestion/extract.py`, `epub.py`, `fb2.py`, `djvu.py`, `chunking.py`, `indexer.py` | PDF/EPUB/FB2/DJVU → страницы/секции → chunks → embeddings → Qdrant |
 | Providers | `providers/` | Ollama и OpenAI-compatible chat/embeddings |
-| Retrieval | `retrieval/hybrid.py`, `router.py`, `answer.py` | dense + lexical + RRF, router, grounded answer |
+| Retrieval | `retrieval/hybrid.py`, `router.py`, `answer.py` | dense + lexical (AND + OR-prefix5) + RRF, router, grounded answer |
 | Agent | `agent/graph.py`, `agent/tools/`, `agent/policy.py` | LangGraph react-цикл, RAG/shell/fs/git, audit |
 | Eval | `eval/metrics.py`, `eval/stage_eval.py`, `eval/parser_assessment.py` | recall/MRR/citations, per-stage eval + gate, parser assessment |
 | Ops | `doctor.py`, `docker-compose.yml`, `scripts/` | проверки окружения, Qdrant, оценка |
