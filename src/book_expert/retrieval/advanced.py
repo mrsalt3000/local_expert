@@ -20,6 +20,7 @@ from book_expert.retrieval.answer import (
     history_prompt,
     sources_prompt,
 )
+from book_expert.retrieval.citation_verify import unsupported_claims
 from book_expert.retrieval.hybrid import HybridSearcher
 from book_expert.retrieval.router import BookRouter
 
@@ -243,10 +244,23 @@ class AdvancedAnswerer:
             _citations(text, tuple(hits)),
             self.settings.answer_max_citations,
         )
+        unsupported: tuple[str, ...] = ()
+        if self.settings.answer_verify_citations and citations:
+            unsupported = unsupported_claims(
+                self.provider, query, text, citations, sources
+            )
+            if self.trace is not None:
+                self.trace.write(
+                    "citation_verify",
+                    unsupported=len(unsupported),
+                    citations=len(citations),
+                )
         return self._record(
             Answer(
                 text=text,
                 citations=citations,
+                uncited=not citations,
+                unsupported_claims=unsupported,
                 confidence=confidence,
                 book_ids=answer_books,
                 route_reason=route_reason,

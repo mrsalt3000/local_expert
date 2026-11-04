@@ -119,12 +119,13 @@ class FakeRouter:
         return self.route_value
 
 
-def _settings(tmp_path: Path) -> Settings:
+def _settings(tmp_path: Path, **overrides: Any) -> Settings:
     return Settings(
         _env_file=None,
         workspace=tmp_path,
         data_dir=tmp_path / "data",
         top_k=4,
+        **overrides,
     )
 
 
@@ -536,13 +537,38 @@ def test_citations_follow_markers(tmp_path: Path) -> None:
     assert [citation.chunk_id for citation in answer.citations] == ["c1", "c2"]
 
 
-def test_missing_markers_fall_back_to_all_hits(tmp_path: Path) -> None:
-    provider = FakeProvider("Answer without numeric markers.")
+def test_missing_markers_retry_then_return_uncited(tmp_path: Path) -> None:
+    provider = SequenceProvider(
+        ["Answer without numeric markers.", "Still without markers."]
+    )
     answerer = _answerer(tmp_path, provider, FakeSearcher(_hits()))
 
     answer = answerer.ask("question", book_ids=["book-1"])
 
-    assert [citation.chunk_id for citation in answer.citations] == ["c1", "c2"]
+    assert answer.uncited is True
+    assert answer.refused is False
+    assert answer.citations == ()
+    assert provider.calls == 2
+
+
+def test_missing_markers_can_refuse_when_configured(tmp_path: Path) -> None:
+    provider = SequenceProvider(
+        ["Answer without numeric markers.", "Still without markers."]
+    )
+    answerer = GroundedAnswerer(
+        _settings(tmp_path, answer_markerless_policy="refuse"),
+        provider,
+        FakeSearcher(_hits()),
+    )
+
+    answer = answerer.ask("question", book_ids=["book-1"])
+
+    assert answer.refused is True
+    assert answer.citations == ()
+
+
+def test_citations_require_valid_markers() -> None:
+    assert _citations("Answer without markers.", _hits()) == ()
 
 
 def test_out_of_range_markers_retry_with_strict_prompt(tmp_path: Path) -> None:
@@ -731,3 +757,23 @@ def test_cap_citations_noop_when_limit_is_off_or_not_exceeded() -> None:
 
     assert cap_citations(text, hits, citations, 0) == (text, citations, hits)
     assert cap_citations(text, hits, citations, 5) == (text, citations, hits)
+
+
+def test_runtime_citation_verification_flags_unsupported(tmp_path: Path) -> None:
+    provider = SequenceProvider(
+        [
+            "Answer [1].",
+            '{"claims": [{"id": 1, "supported_by_cited": false, '
+            '"supported_by_context": false}]}',
+        ]
+    )
+    answerer = GroundedAnswerer(
+        _settings(tmp_path, answer_verify_citations=True, query_rewrite_enabled=False),
+        provider,
+        FakeSearcher(_hits()),
+    )
+
+    answer = answerer.ask("question", book_ids=["book-1"])
+
+    assert answer.unsupported_claims == ("Answer.",)
+    assert provider.calls == 2

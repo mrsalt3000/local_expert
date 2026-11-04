@@ -210,6 +210,8 @@ def run_stage_eval(
                 "retrieval_ms": round(retrieval_ms, 1),
                 "answer_ms": round(answer_ms, 1),
                 "answer_refused": answer.refused,
+                "uncited": answer.uncited,
+                "unsupported_claims": len(answer.unsupported_claims),
                 "citations": len(answer.citations),
                 "citation_precision": citation_hits / len(cited_pages)
                 if cited_pages
@@ -399,6 +401,8 @@ def _aggregate(
             "no_citations": sum(
                 row["citations"] == 0 and not row["answer_refused"] for row in rows
             ),
+            "uncited": sum(1 for row in rows if row["uncited"]),
+            "unsupported_claims": sum(row["unsupported_claims"] for row in rows),
             "zero_precision": sum(
                 row["citation_precision"] == 0.0 and not row["answer_refused"]
                 for row in rows

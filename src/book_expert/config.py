@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     relevance_filter_min_ratio: float = 0.5
     answer_relevance_filter: bool = True
     answer_max_citations: int = 5
+    answer_markerless_policy: Literal["refuse", "uncited"] = "uncited"
+    answer_verify_citations: bool = False
     answer_timeout_s: int = 180
     answer_hard_timeout: bool = True
     candidate_limit: int = 24

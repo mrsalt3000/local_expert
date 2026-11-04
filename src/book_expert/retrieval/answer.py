@@ -11,6 +11,7 @@ from book_expert.agent.trace import TraceRecorder
 from book_expert.config import Settings
 from book_expert.models import Answer, Citation, SearchHit
 from book_expert.providers import ChatMessage, Provider
+from book_expert.retrieval.citation_verify import unsupported_claims
 from book_expert.retrieval.hybrid import HybridSearcher
 from book_expert.retrieval.rewrite import rewrite_query
 from book_expert.retrieval.router import BookRouter
@@ -154,7 +155,7 @@ class GroundedAnswerer:
                 self.trace.write("citation_gate", reason="no_valid_markers")
             text = self._complete(query, hits, history, strict_citations=True)
             citations = _citations(text, hits) if text else ()
-            if not text or _is_insufficient(text) or not citations:
+            if not text or _is_insufficient(text):
                 if self.trace is not None:
                     self.trace.write("citation_gate", reason="retry_failed")
                 return self._record(
@@ -168,6 +169,50 @@ class GroundedAnswerer:
                     query,
                     hits,
                 )
+            if not citations:
+                invalid_markers = bool(_CITATION_RE.search(text))
+                if (
+                    invalid_markers
+                    or self.settings.answer_markerless_policy == "refuse"
+                ):
+                    if self.trace is not None:
+                        self.trace.write("citation_gate", reason="retry_failed")
+                    return self._record(
+                        Answer(
+                            text=REFUSAL,
+                            refused=True,
+                            confidence=confidence,
+                            book_ids=answer_books,
+                            route_reason=route_reason,
+                        ),
+                        query,
+                        hits,
+                    )
+                if self.trace is not None:
+                    self.trace.write("citation_gate", reason="uncited")
+                return self._record(
+                    Answer(
+                        text=text,
+                        citations=(),
+                        uncited=True,
+                        confidence=confidence,
+                        book_ids=answer_books,
+                        route_reason=route_reason,
+                    ),
+                    query,
+                    hits,
+                )
+        unsupported: tuple[str, ...] = ()
+        if self.settings.answer_verify_citations and citations:
+            unsupported = unsupported_claims(
+                self.provider, query, text, citations, hits
+            )
+            if self.trace is not None:
+                self.trace.write(
+                    "citation_verify",
+                    unsupported=len(unsupported),
+                    citations=len(citations),
+                )
         return self._record(
             Answer(
                 text=text,
@@ -175,6 +220,7 @@ class GroundedAnswerer:
                 confidence=confidence,
                 book_ids=answer_books,
                 route_reason=route_reason,
+                unsupported_claims=unsupported,
             ),
             query,
             hits,
@@ -267,6 +313,7 @@ class GroundedAnswerer:
                 "answer",
                 query=query,
                 refused=answer.refused,
+                uncited=answer.uncited,
                 confidence=answer.confidence,
                 hit_ids=[hit.chunk_id for hit in hits],
                 scores=[round(hit.score, 6) for hit in hits],
@@ -378,9 +425,9 @@ def history_prompt(
 def _citations(text: str, hits: tuple[SearchHit, ...]) -> tuple[Citation, ...]:
     raw = {int(match.group(1)) for match in _CITATION_RE.finditer(text)}
     valid = {index for index in raw if 1 <= index <= len(hits)}
-    if raw and not valid:
+    if not valid:
         return ()
-    indices = sorted(valid) if valid else list(range(1, len(hits) + 1))
+    indices = sorted(valid)
     citations: list[Citation] = []
     seen: set[str] = set()
     for index in indices:

@@ -104,3 +104,5 @@ class Answer:
     max_rounds: int = 0
     sources: tuple[SearchHit, ...] = ()
     context: tuple[SearchHit, ...] = ()
+    uncited: bool = False
+    unsupported_claims: tuple[str, ...] = ()

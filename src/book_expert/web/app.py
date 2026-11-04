@@ -133,6 +133,8 @@ class ChatResponse(BaseModel):
     mode: Literal["rag", "advanced", "super", "agent"]
     answer: str
     refused: bool = False
+    uncited: bool = False
+    unsupported_claims: list[str] = Field(default_factory=list)
     citations: list[CitationOut] = Field(default_factory=list)
     confidence: float | None = None
     route_reason: str | None = None
@@ -735,6 +737,8 @@ def _rag_response(
         mode=mode,
         answer=answer.text,
         refused=answer.refused,
+        uncited=answer.uncited,
+        unsupported_claims=list(answer.unsupported_claims),
         citations=[
             CitationOut(
                 book_id=citation.book_id,
