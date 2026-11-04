@@ -33,11 +33,13 @@ from book_expert.eval.calibration import (
 INSTRUCTIONS = """\
 # Слепая разметка claim-level
 
-Заполните колонку `label` в `labels.csv`: `true` или `false`.
+В `labels.csv` уже проставлен `false` для строк без цитат (57 из 114):
+это негативный контроль, размечать их вручную не нужно. Заполните `label`
+только в 57 строках, где `cited` не пустой: `true` или `false`.
 
 Правило: `true` только если хотя бы один из cited excerpts **прямо**
 подтверждает утверждение. Если excerpt лишь по теме, частичный или добавляет
-детали, которых в нём нет — `false`. Если цитат нет — `false`.
+детали, которых в нём нет — `false`.
 
 Не открывайте `judges.json`, `agreement.json` и файлы с вердиктами судьи:
 разметка должна быть независимой. Смотрите только `question`, `claim` и
@@ -62,15 +64,7 @@ def main() -> None:
     if args.labels:
         packet = json.loads(args.packet.read_text(encoding="utf-8"))
         human = _load_csv_labels(args.labels)
-        result: dict[str, Any] = {
-            "human_claims": len(human),
-            "agent": None,
-            "judges": {},
-        }
-        if args.agent_labels:
-            agent = load_labels(args.agent_labels)
-            pairs = [(agent[key], human[key]) for key in human.keys() & agent.keys()]
-            result["agent"] = binary_metrics(pairs)
+        agent = load_labels(args.agent_labels) if args.agent_labels else None
         judge_payloads = {}
         for directory in args.judges:
             path = directory / "judges.json"
@@ -78,10 +72,14 @@ def main() -> None:
                 judge_payloads[str(directory)] = json.loads(
                     path.read_text(encoding="utf-8")
                 )
-        result["judges"] = {
-            name: agreement(packet, payload, human)["judges"]
-            for name, payload in judge_payloads.items()
-        }
+        result = _report(packet, human, agent, judge_payloads)
+        cited_ids = {claim["id"] for claim in packet["claims"] if claim.get("cited")}
+        result["cited_only"] = _report(
+            packet,
+            {key: value for key, value in human.items() if key in cited_ids},
+            agent,
+            judge_payloads,
+        )
         args.output.mkdir(parents=True, exist_ok=True)
         path = args.output / "agreement.json"
         path.write_text(
@@ -100,6 +98,27 @@ def main() -> None:
         json.dumps({"labels": {}}, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"packet: {args.output} ({len(claims)} claims)")
+
+
+def _report(
+    packet: dict[str, Any],
+    human: dict[str, bool],
+    agent: dict[str, bool] | None,
+    judge_payloads: dict[str, Any],
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "human_claims": len(human),
+        "agent": None,
+        "judges": {},
+    }
+    if agent:
+        pairs = [(agent[key], human[key]) for key in human.keys() & agent.keys()]
+        result["agent"] = binary_metrics(pairs)
+    result["judges"] = {
+        name: agreement(packet, payload, human)["judges"]
+        for name, payload in judge_payloads.items()
+    }
+    return result
 
 
 def _load_csv_labels(path: Path) -> dict[str, bool]:
@@ -137,7 +156,7 @@ def _write_csv(path: Path, claims: list[dict[str, Any]]) -> None:
             writer.writerow(
                 {
                     "id": claim["id"],
-                    "label": "",
+                    "label": "false" if not claim["cited"] else "",
                     "question": claim["question"],
                     "claim": claim["text"],
                     "cited": " ".join(str(number) for number in claim["cited"]),
