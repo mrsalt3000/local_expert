@@ -1649,3 +1649,15 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   **1178 ready / 5 failed**; 5 остатков — сканы без текста, нужен OCR.
 - Verify: `pytest` 500 passed, `ruff`, `mypy`, pre-commit; живой retry дал
   55 807 chunks.
+
+### T94 — Повторный eval на каталоге 1178 книг
+
+- [x] Статус: `accepted`
+- Документ: `docs/experiments/2026-11-04-eval-1178.md`
+- Основание: T93 восстановил 18 книг (+55 807 chunks), baseline T88 снят на
+  1160 книгах.
+- Результат: routing top1 **.6667** без изменений, page recall@5 **.7750**,
+  chunk recall .5667→**.5750**, citation precision .6639→**.6722**, отказы
+  17→**16**, p50 1.77→**1.71 s**. Регрессии нет.
+- Verify: 120 кейсов, deepseek, candidate scope, k=5; артефакт
+  `/tmp/t94-stage-eval-1178.json`.
