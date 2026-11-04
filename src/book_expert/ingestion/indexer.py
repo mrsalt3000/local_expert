@@ -271,7 +271,7 @@ def _qdrant_client(settings: Settings) -> QdrantClient:
         if settings.qdrant_api_key is not None
         else None
     )
-    return QdrantClient(url=settings.qdrant_url, api_key=api_key)
+    return QdrantClient(url=settings.qdrant_url, api_key=api_key, timeout=30)
 
 
 def _book_filter(book_id: str) -> models.Filter:
