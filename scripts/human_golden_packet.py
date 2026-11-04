@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -121,6 +122,16 @@ def _report(
     return result
 
 
+def _display_id(claim_id: str) -> str:
+    case, claim = claim_id.split(":", 1)
+    return f"c{case}_{claim}"
+
+
+def _packet_id(value: str) -> str:
+    match = re.fullmatch(r"c(\d+)_(\d+)", value.strip())
+    return f"{match.group(1)}:{match.group(2)}" if match else value
+
+
 def _load_csv_labels(path: Path) -> dict[str, bool]:
     labels: dict[str, bool] = {}
     with path.open(encoding="utf-8-sig", newline="") as handle:
@@ -133,9 +144,9 @@ def _load_csv_labels(path: Path) -> dict[str, bool]:
         for row in csv.DictReader(handle, dialect=dialect):
             raw = (row.get("label") or "").strip().lower()
             if raw in {"true", "1", "yes", "да"}:
-                labels[str(row["id"])] = True
+                labels[_packet_id(str(row["id"]))] = True
             elif raw in {"false", "0", "no", "нет"}:
-                labels[str(row["id"])] = False
+                labels[_packet_id(str(row["id"]))] = False
     return labels
 
 
@@ -155,7 +166,7 @@ def _write_csv(path: Path, claims: list[dict[str, Any]]) -> None:
             )
             writer.writerow(
                 {
-                    "id": claim["id"],
+                    "id": _display_id(claim["id"]),
                     "label": "false" if not claim["cited"] else "",
                     "question": claim["question"],
                     "claim": claim["text"],

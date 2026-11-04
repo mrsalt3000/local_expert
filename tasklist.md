@@ -1664,7 +1664,7 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T95 — Human-golden set для судьи
 
-- [ ] Статус: `review` (ждёт человеческой разметки)
+- [x] Статус: `accepted`
 - Документ: `docs/experiments/2026-11-04-human-golden-packet.md`
 - Scope: `scripts/human_golden_packet.py`, локальный `/tmp/t86-human`,
   `docs/experiments`; текст книг в git не попадает.
@@ -1676,4 +1676,7 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   2. Скрипт выдаёт agreement.json с n, accuracy, precision, recall, kappa
      для DeepSeek binary, 4B binary и quote-режима.
   3. По результату фиксируется judge-профиль для дальнейших прогонов.
-- Verify: заполненный CSV, `agreement.json`, обновлённый T86-вывод.
+- Результат: 114/114 размечено (44 true / 70 false); `all` kappa DeepSeek .609,
+  `cited_only` kappa **−.034** (tp43/fp13/tn0/fn1); 4B .323 на 21 утверждении;
+  quote −.2 на 9. Ни один judge-профиль не прошёл калибровку на cited-only.
+- Verify: `agreement.json`, `docs/experiments/2026-11-04-human-golden-packet.md`.
