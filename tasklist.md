@@ -1437,3 +1437,189 @@ LLM-роутера и UI, но при `candidate_limit=24` и включённо
   `citation_support_rate` и `citation_recall`, page-overlap — sanity-check.
 - Ограничение: 20 кейсов, один прогон; метрика не проверяет, что цитата
   подтверждает именно тот факт, ради которого стоит маркер.
+
+## Задачи по итогам аудита 2026-11-04 (7.9/10)
+
+Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `stage-eval`
+69 кейсов — page recall@5 .7826, MRR .7295, routing top1 .6377; `agent-eval`
+20 кейсов — faithfulness .863, citation support precision .9038,
+`citation_support_rate` .7625, 4 отказа (все на промахах retrieval).
+Главный разрыв — LLM-судья без ручной калибровки; runtime не проверяет,
+подтверждает ли цитата конкретное утверждение. Книга-источник —
+«Hands-On RAG for Production», стр. 188–190, 201, 206–213, 335.
+
+### T86 — Ручная калибровка судьи faithfulness по human-verified эталону
+
+- [ ] Статус: `todo`
+- Scope: `data/eval/*.local.json` (local-only), скрипт слепой разметки,
+  `eval/faithfulness.py` только при необходимости калибровки,
+  `docs/experiments`; прод-дефолты не менять.
+- Основание (аудит 2026-11-04): судья по умолчанию — `deepseek-chat`, тот же
+  провайдер, что и ответы; ручной разметки 20 ответов «Агента» нет с
+  T61/T72. Документированный T85 с локальным 4B дал support rate .9368,
+  live-прогон аудита с DeepSeek — .7625 (наборы оценённых ответов разные,
+  это не A/B), то есть вердикт зависит от судьи.
+- Основание (книга): стр. 188–190 — LLM-судья подвержен self-referential
+  bias и verbosity trap; его нужно калибровать на human-verified golden set.
+- Acceptance:
+  1. 20–30 ответов «Агента» размечены вслепую человеком или независимым
+     агентом на claim-level: `supported` / `unsupported`, без просмотра
+     вердиктов судьи.
+  2. Для бинарного и `--quote-judge` режимов, минимум для двух судей
+     (DeepSeek и `qwen3.5:4b`), посчитаны agreement, precision, recall и
+     Cohen's kappa относительно ручного эталона.
+  3. Зафиксирован вывод: какой судья/режим использовать для решений и
+     какой разброс считать шумом; числа — в `docs/experiments`.
+  4. Прод-дефолты и промпты не меняются без отдельного согласования.
+- Verify: JSON-артефакт с разметкой в `data/artifacts` (ignored), скрипт
+  воспроизводит agreement/kappa, 20+ размеченных ответов, отчёт с таблицей.
+- Ожидаемый эффект: понять, какие eval-числа сопоставимы между прогонами;
+  +0.3–0.5 к строгости eval.
+
+### T87 — Claim→citation entailment в runtime и политика ответов без маркеров
+
+- [ ] Статус: `todo`
+- Scope: `retrieval/answer.py` (`_citations`, citation gate),
+  `retrieval/advanced.py` (`_synthesize`), `eval/faithfulness.py`,
+  `tests/`; изменение поведения — opt-in до подтверждения A/B.
+- Основание (аудит 2026-11-04): citation gate (`answer.py:151-170`)
+  проверяет только наличие и диапазон маркеров; `_citations`
+  (`answer.py:378-383`) при полном отсутствии маркеров подставляет в
+  citations все найденные хиты. Support проверяется только офлайн.
+- Основание (книга): стр. 201 — citation accuracy означает, что
+  процитированный источник подтверждает именно то утверждение, ради
+  которого стоит маркер.
+- Acceptance:
+  1. Для каждого утверждения с маркером `[n]` проверяется поддержка
+     фрагментом `n` (LLM-судья или quote-проверка); неподдержанные
+     утверждения попадают в отчёт/флаг ответа.
+  2. Ответ без маркеров больше не получает все hits как citations:
+     retry, отказ или пустые citations с явным признаком — поведение
+     выбрать по A/B, не молчаливая подстановка.
+  3. Режим не ухудшает p50 latency более чем в 1.5 раза; при дорогом
+     варианте — opt-in флаг и запись в `meta`.
+  4. A/B на 20–69 кейсах: `citation_support_rate`, число unsupported
+     утверждений, false refusals, latency.
+- Verify: unit-тесты на markerless/unsupported/частичную поддержку, live
+  `agent-eval` 20 кейсов, отчёт в `docs/experiments`.
+- Ожидаемый эффект: закрыть последний неинструментированный слой;
+  +0.3 к grounded answers/citations.
+
+### T88 — Репрезентативный eval по каталогу и недостающие метрики
+
+- [ ] Статус: `todo`
+- Scope: `data/eval/*.local.json`, `eval/metrics.py`, `eval/stage_eval.py`,
+  `eval/agent_eval.py`, `scripts/`, `docs/evaluation.md`;
+  прод-дефолты не менять.
+- Основание (аудит 2026-11-04): 69 кейсов на 10 книгах — 0.85% каталога
+  (1183 книги); 20-кейсовый срез дал page recall .70 против .7826 на 69;
+  в eval нет `answer_relevance`, `context_relevance/recall` и
+  `response_consistency`; 6/69 кейсов — нужной книги нет среди 24
+  кандидатов.
+- Основание (книга): стр. 206–213 — оценивать retrieval и generation
+  раздельно, включая context relevance, answer relevance и consistency;
+  golden set должен быть репрезентативным.
+- Acceptance:
+  1. Набрано ≥30 ready-книг и ≥120 reviewed-кейсов, стратифицированных по
+     жанру, языку и размеру книги; разметка без текста книги в git.
+  2. Замерены page recall@5/@k, MRR, routing top1/recall@3 и candidate
+     coverage; числа сопоставлены с наборами 69 и 120.
+  3. Добавлены хотя бы `answer_relevance` и `context_relevance/recall`
+     с зафиксированными рубриками и `meta`-полями.
+  4. Разобраны кейсы, где ожидаемой книги нет в кандидатах: список причин
+     и проверенный фикс или явный вывод «не лечится на этом сигнале».
+- Verify: `meta` с sha256 датасета, отчёт в `docs/experiments`, повтор на
+  69/120 для сверки, unit-тесты новых метрик.
+- Ожидаемый эффект: измерить генерализацию за пределами 10 книг;
+  +0.2–0.3 к retrieval и строгости eval.
+
+### T89 — Гигиена ingestion: зависшие `indexing`, retry failed, byte-aware batching
+
+- [ ] Статус: `todo`
+- Scope: `ingestion/indexer.py`, `web/library.py`, `catalog.py`, `cli.py`,
+  `tests/`; локальный каталог и его статусы.
+- Основание (аудит 2026-11-04): по каталогу 1183 книги — 1160 ready,
+  22 failed, 1 `indexing`; «Свобода учиться» висит в `indexing` с
+  2026-11-01 05:40. Из 22 failed: 17 — `400 ... JSON payload larger than
+  allowed (limit: 33554432 bytes)`, 5 — `no extractable text`. Батчинг
+  (`indexer.py:224-240`) идёт по 32 чанка без учёта байт; reconciliation
+  осиротевших задач и retry нет.
+- Основание (книга): стр. 335 — ingestion at scale требует целостности
+  данных и управляемых ошибок, а не молчаливых дыр.
+- Acceptance:
+  1. Stale `indexing` старше порога (например, 30 минут) переводится в
+     `failed` с причиной `stale indexing` или переставляется в очередь —
+     без тихой потери книги.
+  2. Есть идемпотентный retry failed (CLI и UI); 17 payload-книг проходят
+     после byte-aware batching (целевой размер запроса заметно ниже
+     лимита) либо остаются failed с actionable-сообщением.
+  3. Ошибка в UI/CLI не показывает сырой обрезанный JSON; есть короткая
+     причина и подсказка.
+  4. Тесты: stale reconciliation, разбиение по байтам, идемпотентный retry.
+- Verify: на локальном каталоге 0 stale `indexing`; число failed
+  уменьшилось или причина понятна; `catalog-audit` до/после; `pytest`.
+- Ожидаемый эффект: вернуть в поиск до 1.9% каталога; +0.2 к эксплуатации.
+
+### T90 — Наблюдаемость и стоимость: персистентные метрики, token/cost, SLO, feedback correlation
+
+- [ ] Статус: `todo`
+- Scope: `web/metrics.py`, `web/app.py`, `docs/`, локальные артефакты;
+  без внешних зависимостей и облачных сервисов.
+- Основание (аудит 2026-11-04): `RequestMetrics` живёт в памяти и
+  обнуляется при рестарте; нет token/cost accounting, SLO и алертов;
+  `/api/feedback` пишет JSONL, но корреляционного анализа с метриками нет.
+  Live latency «Агента»: p50 6.5 s, p95 11.4 s.
+- Основание (книга): стр. 208 — сверять автоматические метрики с
+  удовлетворённостью пользователя; стр. 127/335 — учитывать latency и TCO.
+- Acceptance:
+  1. Метрики переживают рестарт (JSONL/rollup) и отдают p50/p95, отказы,
+     ошибки и разбивку по режимам за окно.
+  2. Учёт токенов и стоимости по провайдеру/режиму доступен через
+     `/api/health` или отдельный endpoint; секреты не логируются.
+  3. Зафиксированы SLO для RAG и «Агента» (p50/p95, доля отказов/ошибок)
+     и задокументированы в `docs/`.
+  4. Есть скрипт корреляции feedback ↔ faithfulness/citation support на
+     локальном прогоне (минимум — выгрузка пар и коэффициент).
+- Verify: unit-тесты метрик, live `/api/health`, отчёт с SLO и корреляцией;
+  `docs/` обновлены.
+- Ожидаемый эффект: эксплуатация перестаёт быть «по ощущениям»;
+  +0.2 к operations.
+
+### T91 — Герметичность тестов к экспортированным `BOOK_EXPERT_*`
+
+- [ ] Статус: `todo`
+- Scope: `tests/conftest.py`, `tests/test_config.py`, `tests/test_doctor.py`,
+  `tests/test_providers.py`, `tests/test_agent.py`.
+- Основание (аудит 2026-11-04): в shell с `BOOK_EXPERT_PROVIDER=deepseek`
+  и другими экспортированными переменными `uv run pytest -q` даёт
+  **6 failed** (`test_config`, `test_doctor`, `test_providers`, `test_agent`);
+  после `unset BOOK_EXPERT_*` — **471 passed**. README описывает приоритет
+  env, но тесты не изолированы.
+- Acceptance:
+  1. Autouse-fixture очищает или фиксирует `BOOK_EXPERT_*` на время тестов;
+     тесты, которым нужен env, задают его явно.
+  2. `uv run pytest -q` зелёный и с экспортированным
+     `BOOK_EXPERT_PROVIDER=deepseek`, и без него.
+  3. Добавлен regression-тест на приоритет env над `.env` в `Settings`.
+- Verify: два прогона (с env и без) — 471 passed; CI.
+- Ожидаемый эффект: локальная и аудиторская воспроизводимость; low.
+
+### T92 — Обновить audit/progress документацию до `5fbab95`
+
+- [ ] Статус: `todo`
+- Scope: `docs/audit-2026-11-03-v3.md` или новый
+  `docs/audit-2026-11-04.md`, `progress.md`, ссылки в README/docs;
+  код не трогать.
+- Основание (аудит 2026-11-04): v3 говорит «7.7 / 443 теста» и не включает
+  T84/T85; `progress.md` — «214 passed» и снимок 31 октября; README,
+  architecture и evaluation актуальны.
+- Acceptance:
+  1. Новый audit-документ (или раздел v3) фиксирует `5fbab95`, 471 тест,
+     coverage 84%, live-числа 2026-11-04 и находки T86–T91.
+  2. `progress.md` либо обновлён до текущего состояния, либо явно помечен
+     как исторический снимок.
+  3. Ссылки из README/architecture/evaluation не битые.
+- Verify: review markdown, `git diff` только docs/progress, код и тесты не
+  изменены.
+- Ожидаемый эффект: числа в документации не расходятся с кодом; +0.1 к
+  документации.
