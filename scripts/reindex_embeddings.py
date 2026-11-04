@@ -20,6 +20,30 @@ from book_expert.ingestion.indexer import PAYLOAD_INDEXES
 from book_expert.providers import get_provider
 
 
+def _upsert_with_retries(
+    client: QdrantClient,
+    collection: str,
+    points: list[models.PointStruct],
+    *,
+    attempts: int = 4,
+) -> None:
+    """Upsert с повтором: Qdrant может отдать таймаут на оптимизации сегментов."""
+    for attempt in range(1, attempts + 1):
+        try:
+            client.upsert(collection_name=collection, points=points, wait=True)
+            return
+        except Exception as exc:
+            if attempt == attempts:
+                raise
+            delay = 2**attempt
+            print(
+                f"upsert retry {attempt}/{attempts - 1} after {exc!r}; "
+                f"sleeping {delay}s",
+                flush=True,
+            )
+            time.sleep(delay)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="qwen3-embedding:0.6b")
@@ -42,7 +66,7 @@ def main() -> None:
         if settings.qdrant_api_key is not None
         else None
     )
-    client = QdrantClient(url=settings.qdrant_url, api_key=api_key)
+    client = QdrantClient(url=settings.qdrant_url, api_key=api_key, timeout=120)
     db = sqlite3.connect(args.catalog)
 
     if not client.collection_exists(args.collection):
@@ -67,6 +91,7 @@ def main() -> None:
     total_chunks = sum(row[3] for row in books)
     started = time.perf_counter()
     done_chunks = 0
+    skipped_chunks = 0
     try:
         for position, (book_id, title, book_format, chunk_count) in enumerate(books, 1):
             book_filter = models.Filter(
@@ -83,6 +108,7 @@ def main() -> None:
             ).count
             if count >= chunk_count:
                 done_chunks += chunk_count
+                skipped_chunks += chunk_count
                 continue
             client.delete(
                 collection_name=args.collection,
@@ -124,10 +150,11 @@ def main() -> None:
                         batch, vectors, strict=True
                     )
                 ]
-                client.upsert(collection_name=args.collection, points=points, wait=True)
+                _upsert_with_retries(client, args.collection, points)
                 done_chunks += len(points)
             elapsed = time.perf_counter() - started
-            rate = done_chunks / elapsed if elapsed else 0
+            embedded = done_chunks - skipped_chunks
+            rate = embedded / elapsed if elapsed else 0
             remaining = (total_chunks - done_chunks) / rate if rate else 0
             print(
                 f"{position}/{len(books)} {title[:35]}: "
