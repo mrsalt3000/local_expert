@@ -104,8 +104,14 @@ def main() -> None:
 
 def _load_csv_labels(path: Path) -> dict[str, bool]:
     labels: dict[str, bool] = {}
-    with path.open(encoding="utf-8", newline="") as handle:
-        for row in csv.DictReader(handle):
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        sample = handle.read(4096)
+        handle.seek(0)
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=";,\t")
+        except csv.Error:
+            dialect = csv.excel
+        for row in csv.DictReader(handle, dialect=dialect):
             raw = (row.get("label") or "").strip().lower()
             if raw in {"true", "1", "yes", "да"}:
                 labels[str(row["id"])] = True
@@ -115,10 +121,12 @@ def _load_csv_labels(path: Path) -> dict[str, bool]:
 
 
 def _write_csv(path: Path, claims: list[dict[str, Any]]) -> None:
-    with path.open("w", encoding="utf-8", newline="") as handle:
+    # Excel корректно открывает UTF-8 с BOM и разделителем ;.
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(
             handle,
             fieldnames=["id", "label", "question", "claim", "cited", "excerpts"],
+            delimiter=";",
         )
         writer.writeheader()
         for claim in claims:
