@@ -1661,3 +1661,19 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   17→**16**, p50 1.77→**1.71 s**. Регрессии нет.
 - Verify: 120 кейсов, deepseek, candidate scope, k=5; артефакт
   `/tmp/t94-stage-eval-1178.json`.
+
+### T95 — Human-golden set для судьи
+
+- [ ] Статус: `review` (ждёт человеческой разметки)
+- Документ: `docs/experiments/2026-11-04-human-golden-packet.md`
+- Scope: `scripts/human_golden_packet.py`, локальный `/tmp/t86-human`,
+  `docs/experiments`; текст книг в git не попадает.
+- Сделано: слепой пакет **114 утверждений / 19 ответов** (6 на ответ),
+  CSV + Markdown + README; скрипт считает human↔agent и human↔judge
+  accuracy/precision/recall/kappa.
+- Acceptance:
+  1. Человек заполняет `label=true/false` в `/tmp/t86-human/labels.csv`.
+  2. Скрипт выдаёт agreement.json с n, accuracy, precision, recall, kappa
+     для DeepSeek binary, 4B binary и quote-режима.
+  3. По результату фиксируется judge-профиль для дальнейших прогонов.
+- Verify: заполненный CSV, `agreement.json`, обновлённый T86-вывод.
