@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -114,6 +115,54 @@ def test_agent_eval_aggregates_citations_and_plan(
     assert report["meta"]["answer_max_citations"] == 5
     assert report["details"][0]["citation_precision"] == 1.0
     assert answerer.questions == ["q1", "q2"]
+
+
+def test_agent_eval_multigold_counts_admissible_pages(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    chunks = [
+        SimpleNamespace(id="c1", pdf_page_index=10, book_id="book-1"),
+        SimpleNamespace(id="c2", pdf_page_index=20, book_id="book-1"),
+    ]
+    answerer = FakeAgentAnswerer(
+        {
+            "q1": Answer(
+                text="Ответ [1].",
+                citations=(_citation(20),),
+                plan=("q1",),
+                rounds=1,
+                max_rounds=5,
+            )
+        }
+    )
+    monkeypatch.setattr(agent_eval, "Catalog", lambda path: FakeCatalog(chunks))
+    monkeypatch.setattr(agent_eval, "get_provider", lambda settings: FakeProvider())
+    monkeypatch.setattr(agent_eval, "HybridSearcher", lambda *a, **k: FakeSearcher())
+    monkeypatch.setattr(agent_eval, "BookRouter", lambda *a, **k: FakeRouter())
+    monkeypatch.setattr(agent_eval, "SuperAdvancedAnswerer", lambda *a, **k: answerer)
+    monkeypatch.setattr(
+        agent_eval,
+        "load_cases",
+        lambda path: (EvalCase("q1", ("c1",), ("book-1",)),),
+    )
+    multigold = tmp_path / "multigold.json"
+    multigold.write_text(
+        json.dumps(
+            {"cases": [{"index": 0, "question": "q1", "grades": {"c1": 2, "c2": 1}}]}
+        ),
+        encoding="utf-8",
+    )
+
+    report = agent_eval.run_agent_eval(
+        Settings(), tmp_path / "cases.json", multigold=multigold
+    )
+
+    assert report["retrieval"]["page_recall"] == 0.0
+    assert report["retrieval"]["multigold"]["citation_precision"] == 1.0
+    assert report["retrieval"]["multigold"]["page_hit"] == 1.0
+    # Из двух допустимых страниц процитирована одна.
+    assert report["details"][0]["multigold"]["page_recall"] == 0.5
+    assert report["meta"]["multigold"]["cases"] == 1
 
 
 class FakeJudge:

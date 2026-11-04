@@ -687,6 +687,14 @@ def stage_eval(
         "--quote-judge",
         help="Судья требует дословную цитату из источника и проверяет её подстрокой.",
     ),
+    multigold: Path | None = typer.Option(
+        None,
+        "--multigold",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Multi-gold разметка: добавить hit/MAP/nDCG рядом с single-gold.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/stage-eval.local.json"),
         "--output",
@@ -705,6 +713,7 @@ def stage_eval(
         judge_provider=judge_provider,
         strict_judge=strict_judge,
         quote_judge=quote_judge,
+        multigold=multigold,
     )
     write_report(report, output)
     typer.echo(
@@ -719,6 +728,7 @@ def stage_eval(
                 "gate": report["gate"],
                 "routing": report["routing"],
                 "retrieval": report["retrieval"],
+                "retrieval_multigold": report.get("retrieval_multigold"),
                 "answers": report["answers"],
                 "latency_ms": report["latency_ms"],
             },
@@ -753,6 +763,14 @@ def agent_evaluate(
         "--quote-judge",
         help="Судья требует дословную цитату из источника и проверяет её подстрокой.",
     ),
+    multigold: Path | None = typer.Option(
+        None,
+        "--multigold",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Multi-gold разметка: добавить метрики по допустимым страницам.",
+    ),
     output: Path = typer.Option(
         Path("data/artifacts/agent-eval.local.json"),
         "--output",
@@ -770,6 +788,7 @@ def agent_evaluate(
         judge_provider=judge_provider,
         strict_judge=strict_judge,
         quote_judge=quote_judge,
+        multigold=multigold,
     )
     write_report(report, output)
     typer.echo(

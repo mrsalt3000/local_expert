@@ -30,7 +30,18 @@ from typing import Any, Literal
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.eval.faithfulness import FaithfulnessJudge
-from book_expert.eval.metrics import load_cases
+from book_expert.eval.metrics import (
+    hit_at_k,
+    load_cases,
+    map_at_k,
+    ndcg_at_k,
+    recall_at_k,
+)
+from book_expert.eval.multigold import (
+    GRADE_ADMISSIBLE,
+    MultiGoldCase,
+    load_annotations,
+)
 from book_expert.providers import get_provider
 from book_expert.retrieval.answer import GroundedAnswerer
 from book_expert.retrieval.hybrid import HybridSearcher
@@ -53,10 +64,19 @@ def run_stage_eval(
     judge_provider: str | None = None,
     strict_judge: bool = False,
     quote_judge: bool = False,
+    multigold: str | Path | None = None,
 ) -> dict[str, Any]:
     cases = load_cases(cases_path)
     if limit:
         cases = cases[:limit]
+    annotations: tuple[MultiGoldCase, ...] | None = None
+    if multigold is not None:
+        annotations = load_annotations(multigold)[: len(cases)]
+        if len(annotations) != len(cases):
+            raise ValueError(
+                "multigold annotations must cover all evaluated cases "
+                f"({len(annotations)} < {len(cases)})"
+            )
     result_k = settings.top_k if k is None else k
     if result_k <= 0:
         raise ValueError("k must be positive")
@@ -126,6 +146,18 @@ def run_stage_eval(
                 (hit.book_id, hit.pdf_page_index) for hit in outcome.hits
             ]
             top5_pages = retrieved_pages[:5]
+            retrieved_ids = [hit.chunk_id for hit in outcome.hits]
+            multigold_metrics = (
+                _multigold_metrics(
+                    annotations[index - 1],
+                    retrieved_ids,
+                    list(dict.fromkeys(retrieved_pages)),
+                    pages,
+                    result_k,
+                )
+                if annotations is not None
+                else None
+            )
             page_hits = len(expected_pages & set(top5_pages))
             page_hits_k = len(expected_pages & set(retrieved_pages))
             chunk_hits = len(
@@ -196,6 +228,7 @@ def run_stage_eval(
                 "faithfulness_error": (
                     judgement.error if judgement is not None else None
                 ),
+                "multigold": multigold_metrics,
                 "gate_signal": not outcome.hits,
                 "gate_oracle": bool(expected_pages) and page_hits == 0,
             }
@@ -218,6 +251,7 @@ def run_stage_eval(
         scope=scope,
         relevance_filter=relevance_filter,
         faithfulness=faithfulness,
+        annotations=annotations,
     )
     report["k"] = result_k
     report["meta"] = _report_meta(
@@ -237,6 +271,18 @@ def run_stage_eval(
         report["meta"]["judge_mode"] = (
             "quote" if quote_judge else "strict" if strict_judge else "binary"
         )
+    if annotations is not None:
+        report["meta"]["multigold"] = {
+            "path": str(multigold),
+            "cases": len(annotations),
+            "cases_with_alternatives": sum(
+                1
+                for annotation in annotations
+                if any(
+                    grade == GRADE_ADMISSIBLE for grade in annotation.grades.values()
+                )
+            ),
+        }
     return report
 
 
@@ -288,9 +334,10 @@ def _aggregate(
     scope: ScopeMode,
     relevance_filter: bool,
     faithfulness: bool = False,
+    annotations: Sequence[MultiGoldCase] | None = None,
 ) -> dict[str, Any]:
     routed = [row for row in rows if not row["route_fallback"]]
-    return {
+    report: dict[str, Any] = {
         "cases": len(rows),
         "scope": scope,
         "relevance_filter": relevance_filter,
@@ -350,6 +397,73 @@ def _aggregate(
             "answer_p95": _percentile([row["answer_ms"] for row in rows], 95),
         },
         "details": rows,
+    }
+    if annotations is not None:
+        report["retrieval_multigold"] = _multigold_summary(rows, annotations)
+    return report
+
+
+def _multigold_metrics(
+    annotation: MultiGoldCase,
+    retrieved_chunks: Sequence[str],
+    retrieved_pages: Sequence[tuple[str, int]],
+    pages: dict[str, tuple[str, int]],
+    k: int,
+) -> dict[str, float]:
+    page_grades = annotation.pages(pages)
+    chunk_grades = dict(annotation.grades)
+    return {
+        "chunk_hit@5": hit_at_k(retrieved_chunks, chunk_grades, 5),
+        "chunk_hit@k": hit_at_k(retrieved_chunks, chunk_grades, k),
+        "chunk_recall@5": recall_at_k(retrieved_chunks, chunk_grades, 5),
+        "chunk_recall@k": recall_at_k(retrieved_chunks, chunk_grades, k),
+        "chunk_map@k": map_at_k(retrieved_chunks, chunk_grades, k),
+        "chunk_ndcg@k": ndcg_at_k(retrieved_chunks, chunk_grades, k),
+        "page_hit@5": hit_at_k(retrieved_pages, page_grades, 5),
+        "page_hit@k": hit_at_k(retrieved_pages, page_grades, k),
+        "page_recall@5": recall_at_k(retrieved_pages, page_grades, 5),
+        "page_recall@k": recall_at_k(retrieved_pages, page_grades, k),
+        "page_map@k": map_at_k(retrieved_pages, page_grades, k),
+        "page_ndcg@k": ndcg_at_k(retrieved_pages, page_grades, k),
+    }
+
+
+def _multigold_summary(
+    rows: list[dict[str, Any]], annotations: Sequence[MultiGoldCase]
+) -> dict[str, Any]:
+    def mean(key: str) -> float:
+        values = [
+            row["multigold"][key]
+            for row in rows
+            if isinstance(row.get("multigold"), dict)
+        ]
+        return round(sum(values) / len(values), 4) if values else 0.0
+
+    sizes = [len(annotation.grades) for annotation in annotations]
+    return {
+        "cases": len(rows),
+        "chunks_per_case": {
+            "min": min(sizes),
+            "max": max(sizes),
+            "mean": round(sum(sizes) / len(sizes), 2),
+        },
+        "cases_with_alternatives": sum(
+            1
+            for annotation in annotations
+            if any(grade == GRADE_ADMISSIBLE for grade in annotation.grades.values())
+        ),
+        "chunk_hit_at_5": mean("chunk_hit@5"),
+        "chunk_hit_at_k": mean("chunk_hit@k"),
+        "chunk_recall_at_5": mean("chunk_recall@5"),
+        "chunk_recall_at_k": mean("chunk_recall@k"),
+        "chunk_map_at_k": mean("chunk_map@k"),
+        "chunk_ndcg_at_k": mean("chunk_ndcg@k"),
+        "page_hit_at_5": mean("page_hit@5"),
+        "page_hit_at_k": mean("page_hit@k"),
+        "page_recall_at_5": mean("page_recall@5"),
+        "page_recall_at_k": mean("page_recall@k"),
+        "page_map_at_k": mean("page_map@k"),
+        "page_ndcg_at_k": mean("page_ndcg@k"),
     }
 
 

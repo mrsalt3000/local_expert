@@ -217,6 +217,46 @@ def test_stage_eval_citation_metrics_use_pages(monkeypatch: pytest.MonkeyPatch) 
     assert row["citation_precision"] == 1.0
 
 
+def test_stage_eval_multigold_counts_admissible_chunks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    searcher = FakeSearcher({"q1": [_hit("c2", 10)], "q2": []})
+    answerer = FakeAnswerer({"q1": ([], True), "q2": ([], True)})
+    _install(
+        monkeypatch,
+        searcher=searcher,
+        router=FakeRouter({}),
+        answerer=answerer,
+        chunk_pages={"c1": 10, "c2": 10, "c4": 40},
+    )
+    multigold = tmp_path / "multigold.json"
+    multigold.write_text(
+        json.dumps(
+            {
+                "cases": [
+                    {"index": 0, "question": "q1", "grades": {"c1": 2, "c2": 1}},
+                    {"index": 1, "question": "q2", "grades": {"c4": 2}},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = stage_eval.run_stage_eval(
+        Settings(query_rewrite_enabled=False),
+        Path("cases.json"),
+        multigold=multigold,
+    )
+
+    row = report["details"][0]
+    assert row["chunk_recall@5"] == 0.0
+    assert row["multigold"]["chunk_hit@5"] == 1.0
+    assert row["multigold"]["chunk_ndcg@k"] > 0.0
+    assert report["retrieval_multigold"]["chunk_hit_at_5"] == pytest.approx(0.5)
+    assert report["retrieval_multigold"]["cases_with_alternatives"] == 1
+    assert report["meta"]["multigold"]["cases"] == 2
+
+
 def test_page_metrics_ignore_same_page_in_another_book(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

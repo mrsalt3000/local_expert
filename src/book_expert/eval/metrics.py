@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+import math
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -187,13 +188,107 @@ def _mean(values: Iterable[float]) -> float:
     return sum(items) / len(items) if items else 0.0
 
 
+def hit_at_k(
+    retrieved: Sequence[str],
+    grades: Mapping[str, int],
+    k: int,
+    *,
+    min_grade: int = 1,
+) -> float:
+    """1.0, если в top-k есть хотя бы один допустимый фрагмент.
+
+    Для multi-gold разметки это метрика уровня кейса: неважно, какой именно
+    из допустимых фрагментов найден, важно, что найден любой.
+    """
+    if k <= 0:
+        raise ValueError("k must be positive")
+    return float(
+        any(grades.get(chunk_id, 0) >= min_grade for chunk_id in retrieved[:k])
+    )
+
+
+def recall_at_k(
+    retrieved: Sequence[str],
+    grades: Mapping[str, int],
+    k: int,
+    *,
+    min_grade: int = 1,
+) -> float:
+    """Доля найденных допустимых фрагментов от всех размеченных."""
+    if k <= 0:
+        raise ValueError("k must be positive")
+    relevant = {
+        chunk_id
+        for chunk_id, grade in grades.items()
+        if grade >= min_grade and grade > 0
+    }
+    if not relevant:
+        return 0.0
+    found = {chunk_id for chunk_id in retrieved[:k] if chunk_id in relevant}
+    return len(found) / len(relevant)
+
+
+def map_at_k(
+    retrieved: Sequence[str],
+    grades: Mapping[str, int],
+    k: int,
+    *,
+    min_grade: int = 1,
+) -> float:
+    """MAP@k по бинарной релевантности (grade >= min_grade).
+
+    Знаменатель — ``min(число допустимых, k)``: если допустимых фрагментов
+    меньше k, находить «все k» невозможно.
+    """
+    if k <= 0:
+        raise ValueError("k must be positive")
+    relevant = {
+        chunk_id
+        for chunk_id, grade in grades.items()
+        if grade >= min_grade and grade > 0
+    }
+    if not relevant:
+        return 0.0
+    hits = 0
+    precision_sum = 0.0
+    for rank, chunk_id in enumerate(retrieved[:k], start=1):
+        if chunk_id in relevant:
+            hits += 1
+            precision_sum += hits / rank
+    return precision_sum / min(len(relevant), k)
+
+
+def ndcg_at_k(
+    retrieved: Sequence[str],
+    grades: Mapping[str, int],
+    k: int,
+) -> float:
+    """nDCG@k с graded relevance: gain = 2**grade - 1."""
+    if k <= 0:
+        raise ValueError("k must be positive")
+    dcg = sum(
+        (2 ** grades.get(chunk_id, 0) - 1) / math.log2(rank + 1)
+        for rank, chunk_id in enumerate(retrieved[:k], start=1)
+    )
+    ideal = sorted((grade for grade in grades.values() if grade > 0), reverse=True)
+    idcg = sum(
+        (2**grade - 1) / math.log2(rank + 1)
+        for rank, grade in enumerate(ideal[:k], start=1)
+    )
+    return dcg / idcg if idcg else 0.0
+
+
 __all__ = [
     "AnswerCaseResult",
     "AnswerReport",
     "EvalCase",
     "RetrievalCaseResult",
     "RetrievalReport",
+    "hit_at_k",
     "load_cases",
+    "map_at_k",
+    "ndcg_at_k",
+    "recall_at_k",
     "run_answer_eval",
     "run_retrieval_eval",
 ]
