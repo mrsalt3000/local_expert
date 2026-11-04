@@ -16,6 +16,7 @@ from book_expert.catalog import Catalog, utcnow
 from book_expert.config import Settings
 from book_expert.ingestion.chunking import chunk_document
 from book_expert.ingestion.extract import extract_document
+from book_expert.ingestion.metadata import extract_description
 from book_expert.models import Book, BookStatus, Chunk
 from book_expert.providers import EmbeddingResult, Provider
 
@@ -127,6 +128,7 @@ class BookIndexer:
             page_count=document.page_count,
             status=BookStatus.indexing,
             format=document.format,
+            description=extract_description(document.path, document.format),
             metadata={
                 "source": document.metadata or {},
                 "format": document.format,
