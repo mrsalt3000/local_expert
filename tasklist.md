@@ -1510,6 +1510,7 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 ### T88 — Репрезентативный eval по каталогу и недостающие метрики
 
 - [x] Статус: `accepted`
+- Коммит: `9704b03`
 - Документ: `docs/experiments/2026-11-04-catalog-30books-eval.md`
 - Scope: `data/eval/*.local.json`, `eval/metrics.py`, `eval/stage_eval.py`,
   `eval/agent_eval.py`, `scripts/`, `docs/evaluation.md`;
