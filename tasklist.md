@@ -1568,6 +1568,7 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 ### T90 — Наблюдаемость и стоимость: персистентные метрики, token/cost, SLO, feedback correlation
 
 - [x] Статус: `accepted`
+- Коммит: `23942c3`
 - Документ: `docs/observability.md`
 - Scope: `web/metrics.py`, `web/app.py`, `docs/`, локальные артефакты;
   без внешних зависимостей и облачных сервисов.
