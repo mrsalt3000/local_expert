@@ -37,6 +37,7 @@ def run_agent_eval(
     faithfulness: bool = False,
     judge_provider: str | None = None,
     strict_judge: bool = False,
+    strict_judge_v2: bool = False,
     quote_judge: bool = False,
     multigold: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -66,6 +67,7 @@ def run_agent_eval(
         FaithfulnessJudge(
             judge_client or provider,
             strict=strict_judge,
+            strict_v2=strict_judge_v2,
             quote_mode=quote_judge,
         )
         if faithfulness
@@ -218,8 +220,15 @@ def run_agent_eval(
         report["meta"]["judge_provider"] = getattr(judge.provider, "name", None)
         report["meta"]["judge_chat_model"] = getattr(judge.provider, "chat_model", None)
         report["meta"]["judge_strict"] = strict_judge
+        report["meta"]["judge_strict_v2"] = strict_judge_v2
         report["meta"]["judge_mode"] = (
-            "quote" if quote_judge else "strict" if strict_judge else "binary"
+            "quote"
+            if quote_judge
+            else "strict_v2"
+            if strict_judge_v2
+            else "strict"
+            if strict_judge
+            else "binary"
         )
     report["mode"] = "super"
     return report

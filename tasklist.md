@@ -1680,3 +1680,19 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   `cited_only` kappa **−.034** (tp43/fp13/tn0/fn1); 4B .323 на 21 утверждении;
   quote −.2 на 9. Ни один judge-профиль не прошёл калибровку на cited-only.
 - Verify: `agreement.json`, `docs/experiments/2026-11-04-human-golden-packet.md`.
+
+### T96 — Строгий судья strict_v2 и калибровка на cited-only
+
+- [ ] Статус: `review`
+- Документ: `docs/experiments/2026-11-04-strict-judge-t96.md`
+- Scope: `eval/faithfulness.py`, `stage_eval.py`, `agent_eval.py`, `cli.py`,
+  `tests/test_faithfulness.py`.
+- Сделано: opt-in `strict_v2` с verdict `full|partial|none` и обязательной
+  дословной цитатой; флаг `--strict-judge-v2`, `meta.judge_mode=strict_v2`.
+- Результат на 57 human-cited: accuracy .667, precision **.838**, recall .705,
+  kappa **.204** против default −.034 и strict T79 .136. Precision лучше, но
+  recall падает; до kappa .6 не дотягивает.
+- Verify: 22 теста faithfulness, живой `stage-eval --limit 3
+  --strict-judge-v2`; отчёт `data/artifacts/t96-smoke.local.json`.
+- Ограничение: калибровка in-sample на тех же 57, один прогон DeepSeek;
+  4B/quote в strict_v2 не прогонялись. Это аудит-режим, не жёсткий гейт.

@@ -364,3 +364,60 @@ def test_citation_gauge_handles_missing_sources_and_unjudged_claims() -> None:
     assert report.citation_usage == 0.0
     assert report.citation_support_rate == 0.0
     assert report.to_dict()["citation_support_rate"] == 0.0
+
+
+def test_strict_v2_requires_full_verdict_and_verbatim_evidence() -> None:
+    source = "Метод X снижает задержку на 20% по сравнению с baseline."
+    verdict = {
+        "claims": [
+            {
+                "id": 1,
+                "verdict": "full",
+                "evidence": "Метод X снижает задержку на 20%",
+            }
+        ]
+    }
+    judge = FaithfulnessJudge(FakeJudgeProvider(json.dumps(verdict)), strict_v2=True)
+
+    report = judge.evaluate(
+        "Насколько метод X снижает задержку?",
+        "Метод X снижает задержку на 20%. [1]",
+        (source,),
+    )
+
+    assert report.citation_support_precision == 1.0
+    assert "full|partial|none" in judge.prompt
+
+
+def test_strict_v2_partial_is_not_support() -> None:
+    verdict = {
+        "claims": [{"id": 1, "verdict": "partial", "evidence": "Метод X ускоряет"}]
+    }
+    judge = FaithfulnessJudge(FakeJudgeProvider(json.dumps(verdict)), strict_v2=True)
+
+    report = judge.evaluate(
+        "Вопрос",
+        "Метод X снижает задержку на 20%. [1]",
+        ("Метод X ускоряет обработку.",),
+    )
+
+    assert report.citation_support_precision == 0.0
+
+
+def test_strict_v2_rejects_evidence_not_in_cited_source() -> None:
+    verdict = {
+        "claims": [
+            {
+                "id": 1,
+                "verdict": "full",
+                "evidence": "Такого предложения нет в источнике.",
+            }
+        ]
+    }
+    judge = FaithfulnessJudge(FakeJudgeProvider(json.dumps(verdict)), strict_v2=True)
+
+    report = judge.evaluate(
+        "Вопрос", "Утверждение про метод. [1]", ("Совсем другой текст.",)
+    )
+
+    assert report.citation_support_precision == 0.0

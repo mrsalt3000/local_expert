@@ -773,6 +773,11 @@ def stage_eval(
         "--strict-judge",
         help="Строгий судья: частичное совпадение темы не считается поддержкой.",
     ),
+    strict_judge_v2: bool = typer.Option(
+        False,
+        "--strict-judge-v2",
+        help="Строгий аудитор: full/partial/none + обязательная дословная цитата.",
+    ),
     quote_judge: bool = typer.Option(
         False,
         "--quote-judge",
@@ -803,6 +808,7 @@ def stage_eval(
         k=k,
         judge_provider=judge_provider,
         strict_judge=strict_judge,
+        strict_judge_v2=strict_judge_v2,
         quote_judge=quote_judge,
         multigold=multigold,
     )
@@ -849,6 +855,11 @@ def agent_evaluate(
         "--strict-judge",
         help="Строгий судья: частичное совпадение темы не считается поддержкой.",
     ),
+    strict_judge_v2: bool = typer.Option(
+        False,
+        "--strict-judge-v2",
+        help="Строгий аудитор: full/partial/none + обязательная дословная цитата.",
+    ),
     quote_judge: bool = typer.Option(
         False,
         "--quote-judge",
@@ -878,6 +889,7 @@ def agent_evaluate(
         faithfulness=faithfulness,
         judge_provider=judge_provider,
         strict_judge=strict_judge,
+        strict_judge_v2=strict_judge_v2,
         quote_judge=quote_judge,
         multigold=multigold,
     )

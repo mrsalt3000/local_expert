@@ -54,6 +54,26 @@ QUOTE_PROMPT = (
     '"context_quote": "..."}]}'
 )
 
+STRICT_V2_PROMPT = (
+    "Ты — строгий аудитор цитат RAG-системы. Тебе дан вопрос, утверждения "
+    "ответа и пронумерованные фрагменты. Проверяй КАЖДОЕ утверждение только "
+    "по фрагментам, на которые оно ссылается маркерами [n]; другие фрагменты "
+    "игнорируй. Верни verdict:\n"
+    "- full — один из cited-фрагментов содержит предложение, которое полностью "
+    "и без добавлений утверждает тот же факт;\n"
+    "- partial — фрагмент подтверждает только часть, тему или следствие, но не "
+    "всю формулировку;\n"
+    "- none — прямого подтверждения нет.\n"
+    "Правила: заголовок, обрывок фразы или мета-описание без полного "
+    "утверждения — none. Любое число, пример, причина, следствие, оговорка "
+    "или квалификатор в утверждении должны быть в том же фрагменте; если "
+    "чего-то нет — partial или none. Нельзя использовать внешние знания, "
+    "другие фрагменты или выводы «по смыслу». Evidence — дословная "
+    "непрерывная цитата из cited-фрагмента для full; иначе пустая строка. "
+    'Ответ строго JSON: {"claims": [{"id": 1, "verdict": "full|partial|none", '
+    '"evidence": "..."}]}'
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimJudgement:
@@ -137,12 +157,16 @@ class FaithfulnessJudge:
         max_tokens: int = 700,
         strict: bool = False,
         quote_mode: bool = False,
+        strict_v2: bool = False,
     ) -> None:
         self.provider = provider
         self.max_tokens = max_tokens
         self.quote_mode = quote_mode
+        self.strict_v2 = strict_v2
         if quote_mode:
             self.prompt = QUOTE_PROMPT
+        elif strict_v2:
+            self.prompt = STRICT_V2_PROMPT
         elif strict:
             self.prompt = JUDGE_PROMPT + STRICT_SUFFIX
         else:
@@ -189,7 +213,9 @@ class FaithfulnessJudge:
             for start in range(0, len(claims), JUDGE_BATCH_SIZE):
                 batch = claims[start : start + JUDGE_BATCH_SIZE]
                 max_tokens = (
-                    min(4000, 120 * len(batch))
+                    min(4000, 160 * len(batch))
+                    if self.strict_v2
+                    else min(4000, 120 * len(batch))
                     if self.quote_mode
                     else min(4000, 32 * len(batch))
                 )
@@ -217,6 +243,23 @@ class FaithfulnessJudge:
                                 "supported_by_cited": cited_ok,
                                 "supported_by_context": cited_ok
                                 or _quote_found(quote["context_quote"], sources),
+                            }
+                        )
+                elif self.strict_v2:
+                    strict_verdicts = parse_strict_verdicts(response.text, len(batch))
+                    for (_, cited), item in zip(batch, strict_verdicts):
+                        cited_sources = [
+                            sources[number - 1]
+                            for number in cited
+                            if 1 <= number <= len(sources)
+                        ]
+                        ok = item["verdict"] == "full" and _quote_found(
+                            item["evidence"], cited_sources
+                        )
+                        verdicts.append(
+                            {
+                                "supported_by_cited": ok,
+                                "supported_by_context": ok,
                             }
                         )
                 else:
@@ -303,6 +346,37 @@ def parse_verdicts(text: str, count: int) -> list[dict[str, bool]]:
             index,
             {"supported_by_cited": False, "supported_by_context": False},
         )
+        for index in range(1, count + 1)
+    ]
+
+
+def parse_strict_verdicts(text: str, count: int) -> list[dict[str, str]]:
+    payload = _extract_json(text)
+    raw = payload.get("claims")
+    if not isinstance(raw, list):
+        raise ValueError("claims must be a list")
+    verdicts: dict[int, dict[str, str]] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        raw_id = item.get("id")
+        if not isinstance(raw_id, (int, str)) or isinstance(raw_id, bool):
+            continue
+        try:
+            index = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if not 1 <= index <= count:
+            continue
+        verdict = str(item.get("verdict", "none")).casefold()
+        verdicts[index] = {
+            "verdict": verdict if verdict in {"full", "partial", "none"} else "none",
+            "evidence": str(item.get("evidence", "")),
+        }
+    if not verdicts:
+        raise ValueError("judge returned no verdicts")
+    return [
+        verdicts.get(index, {"verdict": "none", "evidence": ""})
         for index in range(1, count + 1)
     ]
 
@@ -413,6 +487,7 @@ __all__ = [
     "FaithfulnessJudge",
     "FaithfulnessReport",
     "build_prompt",
+    "parse_strict_verdicts",
     "parse_verdicts",
     "split_claims",
 ]
