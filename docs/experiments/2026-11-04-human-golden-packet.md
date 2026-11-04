@@ -4,14 +4,14 @@
 
 Слепой пакет для человеческой разметки claim-level поддержки:
 
-- `/tmp/t86-human/labels.csv` — **114 утверждений** из 19 ответов «Агента»,
+- `data/artifacts/t86-human/labels.csv` — **114 утверждений** из 19 ответов «Агента»,
   по 6 на ответ; колонка `label` пустая.
-- `/tmp/t86-human/packet.md` — те же утверждения в читаемом виде.
-- `/tmp/t86-human/README.md` — правило разметки.
-- `/tmp/t86-human/labels.template.json` — пустой шаблон.
+- `data/artifacts/t86-human/packet.md` — те же утверждения в читаемом виде.
+- `data/artifacts/t86-human/README.md` — правило разметки.
+- `data/artifacts/t86-human/labels.template.json` — пустой шаблон.
 
 В пакете **нет** вердиктов LLM-судьи и файлов `judges.json`; разметка должна
-быть независимой. Полный текст книг и ответов остаётся только в `/tmp` и в git
+быть независимой. Полный текст книг и ответов лежит только в gitignored `data/artifacts/` и в git
 не попадает.
 
 ## Правило
@@ -28,15 +28,15 @@
 
 ```bash
 uv run python scripts/human_golden_packet.py \
-  --packet /tmp/t86-calibration/packet.json \
-  --output /tmp/t86-human \
-  --labels /tmp/t86-human/labels.csv \
-  --agent-labels /tmp/t86-calibration/labels.json \
-  --judges /tmp/t86-deepseek /tmp/t86-ollama-full /tmp/t86-quote-full
+  --packet data/artifacts/t86-calibration/packet.json \
+  --output data/artifacts/t86-human \
+  --labels data/artifacts/t86-human/labels.csv \
+  --agent-labels data/artifacts/t86-calibration/labels.json \
+  --judges data/artifacts/t86-calibration/deepseek data/artifacts/t86-calibration/ollama data/artifacts/t86-calibration/quote
 ```
 
 Скрипт посчитает human↔agent agreement и human↔judge accuracy/precision/recall/
-Cohen's kappa; результат — `/tmp/t86-human/agreement.json`.
+Cohen's kappa; результат — `data/artifacts/t86-human/agreement.json`.
 
 ## Ограничения
 
@@ -50,6 +50,6 @@ Cohen's kappa; результат — `/tmp/t86-human/agreement.json`.
 
 ```bash
 uv run python scripts/human_golden_packet.py \
-  --packet /tmp/t86-calibration/packet.json \
-  --output /tmp/t86-human --per-case 6
+  --packet data/artifacts/t86-calibration/packet.json \
+  --output data/artifacts/t86-human --per-case 6
 ```

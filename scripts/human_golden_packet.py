@@ -1,18 +1,18 @@
 """Слепой human-golden пакет для калибровки судьи (T95).
 
-Пакет и разметка лежат только в ``--output`` (по умолчанию ``/tmp``): в них
+Пакет и разметка лежат только в ``--output`` (по умолчанию проектная папка ``data/artifacts``): в них
 есть фрагменты ответов и книг, поэтому в git они не попадают.
 
     uv run python scripts/human_golden_packet.py \
-      --packet /tmp/t86-calibration/packet.json \
-      --output /tmp/t86-human --per-case 6
+      --packet data/artifacts/t86-calibration/packet.json \
+      --output data/artifacts/t86-human --per-case 6
 
 Заполните ``labels.csv`` (колонка ``label``: true/false) и запустите:
 
     uv run python scripts/human_golden_packet.py \
-      --labels /tmp/t86-human/labels.csv \
-      --agent-labels /tmp/t86-calibration/labels.json \
-      --judges /tmp/t86-deepseek /tmp/t86-ollama-full /tmp/t86-quote-full
+      --labels data/artifacts/t86-human/labels.csv \
+      --agent-labels data/artifacts/t86-calibration/labels.json \
+      --judges data/artifacts/t86-calibration/deepseek data/artifacts/t86-calibration/ollama data/artifacts/t86-calibration/quote
 """
 
 from __future__ import annotations
@@ -48,9 +48,11 @@ INSTRUCTIONS = """\
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--packet", type=Path, default=Path("/tmp/t86-calibration/packet.json")
+        "--packet",
+        type=Path,
+        default=Path("data/artifacts/t86-calibration/packet.json"),
     )
-    parser.add_argument("--output", type=Path, default=Path("/tmp/t86-human"))
+    parser.add_argument("--output", type=Path, default=Path("data/artifacts/t86-human"))
     parser.add_argument("--per-case", type=int, default=6)
     parser.add_argument("--labels", type=Path)
     parser.add_argument("--agent-labels", type=Path)
