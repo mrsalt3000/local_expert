@@ -7,7 +7,7 @@ import re
 import sqlite3
 from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -388,6 +388,25 @@ class Catalog:
                 """,
                 (book_id, topics_to_json(topics), _iso(utcnow())),
             )
+
+    def reconcile_stale_indexing(self, *, older_than_minutes: int = 120) -> int:
+        """Переводит осиротевшие ``indexing`` в ``failed`` после падения воркера."""
+        cutoff = _iso(utcnow() - timedelta(minutes=older_than_minutes))
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE books
+                SET status = ?, description = ?, updated_at = ?
+                WHERE status = 'indexing' AND updated_at < ?
+                """,
+                (
+                    str(BookStatus.failed),
+                    "stale indexing: worker did not finish; reindex is required",
+                    _iso(utcnow()),
+                    cutoff,
+                ),
+            )
+        return cursor.rowcount
 
     def get_topics(self, book_id: str) -> tuple[str, ...]:
         with self._connect() as connection:

@@ -13,9 +13,11 @@ from qdrant_client import QdrantClient, models
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.ingestion.indexer import (
+    EMBED_MAX_BYTES,
     BookIndexer,
     CollectionDimensionError,
     IndexingError,
+    _batched_texts,
 )
 from book_expert.models import BookStatus
 from book_expert.providers import (
@@ -286,3 +288,26 @@ def test_failed_reindex_hides_old_chunks(
     )
     assert searcher.search("oldtoken", book_ids=[book.id], dense=False).hits == ()
     assert searcher.search("oldtoken", book_ids=[book.id]).hits == ()
+
+
+def test_batched_texts_limits_count_and_bytes() -> None:
+    batches = list(_batched_texts(["a" * 10, "b" * 10, "c" * 10], 2, 25))
+
+    assert [[len(text) for text in batch] for batch in batches] == [[10, 10], [10]]
+
+
+def test_batched_texts_splits_on_byte_budget() -> None:
+    batches = list(_batched_texts(["a" * 10, "b" * 10], 10, 15))
+
+    assert [len(batch) for batch in batches] == [1, 1]
+
+
+def test_batched_texts_rejects_oversized_single_chunk() -> None:
+    with pytest.raises(IndexingError, match="chunk is too large"):
+        list(_batched_texts(["a" * (EMBED_MAX_BYTES + 1)], 2, EMBED_MAX_BYTES))
+
+
+def test_batched_texts_counts_utf8_bytes_not_characters() -> None:
+    batches = list(_batched_texts(["я" * 10, "я" * 10], 10, 25))
+
+    assert [len(batch) for batch in batches] == [1, 1]

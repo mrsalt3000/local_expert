@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -286,3 +288,24 @@ def test_set_status(tmp_path: Path) -> None:
     assert book is not None
     assert book.status is BookStatus.ready
     assert book.description == "indexed"
+
+
+def test_reconcile_stale_indexing(tmp_path: Path) -> None:
+    catalog = _catalog(tmp_path)
+    old = datetime(2020, 1, 1, tzinfo=UTC)
+    stale = _book(
+        tmp_path, book_id="stale", content_hash="h-stale", status=BookStatus.indexing
+    )
+    fresh = _book(
+        tmp_path, book_id="fresh", content_hash="h-fresh", status=BookStatus.indexing
+    )
+    catalog.upsert_book(stale)
+    catalog.upsert_book(fresh)
+    catalog.upsert_book(replace(stale, updated_at=old))
+
+    changed = catalog.reconcile_stale_indexing(older_than_minutes=120)
+
+    assert changed == 1
+    assert catalog.get_book("stale").status is BookStatus.failed
+    assert "stale indexing" in (catalog.get_book("stale").description or "")
+    assert catalog.get_book("fresh").status is BookStatus.indexing

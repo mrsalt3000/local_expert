@@ -130,6 +130,7 @@ class LibraryService:
         self.books_dir.mkdir(parents=True, exist_ok=True)
         self.catalog = catalog or Catalog(settings.catalog_path)
         self.catalog.initialize()
+        self.catalog.reconcile_stale_indexing()
         self._indexer = indexer
         self._provider = None if indexer is not None else get_provider(settings)
         self._lock = RLock()

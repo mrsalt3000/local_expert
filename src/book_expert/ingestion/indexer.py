@@ -27,6 +27,7 @@ PAYLOAD_INDEXES: tuple[tuple[str, models.PayloadSchemaType], ...] = (
     ("printed_page_label", models.PayloadSchemaType.KEYWORD),
     ("section_path", models.PayloadSchemaType.KEYWORD),
 )
+EMBED_MAX_BYTES = 8 * 1024 * 1024
 
 
 class IndexingError(RuntimeError):
@@ -227,10 +228,9 @@ class BookIndexer:
         book_title: str,
     ) -> list[tuple[float, ...]]:
         vectors: list[tuple[float, ...]] = []
-        for batch in _batched(chunks, self.batch_size):
-            result: EmbeddingResult = self.provider.embed(
-                [_contextual_text(book_title, chunk) for chunk in batch]
-            )
+        texts = [_contextual_text(book_title, chunk) for chunk in chunks]
+        for batch in _batched_texts(texts, self.batch_size, EMBED_MAX_BYTES):
+            result: EmbeddingResult = self.provider.embed(batch)
             if result.dim != self.settings.embedding_dim:
                 raise IndexingError(
                     f"embedding dim {result.dim} != configured "
@@ -289,6 +289,24 @@ def _book_id(path: Path) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, str(path.resolve())))
 
 
-def _batched(items: Sequence[Chunk], size: int) -> Iterator[Sequence[Chunk]]:
-    for start in range(0, len(items), size):
-        yield items[start : start + size]
+def _batched_texts(
+    texts: Sequence[str], size: int, max_bytes: int
+) -> Iterator[list[str]]:
+    """Режет тексты и по числу, и по байтам: Ollama отклоняет большие payload'ы."""
+    batch: list[str] = []
+    total = 0
+    for text in texts:
+        text_bytes = len(text.encode("utf-8"))
+        if text_bytes > max_bytes:
+            raise IndexingError(
+                f"chunk is too large for embeddings: {text_bytes} bytes "
+                f"> {max_bytes}; lower chunk_size"
+            )
+        if batch and (len(batch) >= size or total + text_bytes > max_bytes):
+            yield batch
+            batch = []
+            total = 0
+        batch.append(text)
+        total += text_bytes
+    if batch:
+        yield batch
