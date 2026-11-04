@@ -1450,7 +1450,8 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T86 — Ручная калибровка судьи faithfulness по human-verified эталону
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted`
+- Коммит: `add1b4b`
 - Scope: `data/eval/*.local.json` (local-only), скрипт слепой разметки,
   `eval/faithfulness.py` только при необходимости калибровки,
   `docs/experiments`; прод-дефолты не менять.
@@ -1478,7 +1479,8 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T87 — Claim→citation entailment в runtime и политика ответов без маркеров
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted`
+- Коммит: `2f18477`
 - Scope: `retrieval/answer.py` (`_citations`, citation gate),
   `retrieval/advanced.py` (`_synthesize`), `eval/faithfulness.py`,
   `tests/`; изменение поведения — opt-in до подтверждения A/B.
@@ -1535,7 +1537,8 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T89 — Гигиена ingestion: зависшие `indexing`, retry failed, byte-aware batching
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted`
+- Коммит: `8e3d6f3`
 - Scope: `ingestion/indexer.py`, `web/library.py`, `catalog.py`, `cli.py`,
   `tests/`; локальный каталог и его статусы.
 - Основание (аудит 2026-11-04): по каталогу 1183 книги — 1160 ready,
@@ -1587,7 +1590,8 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T91 — Герметичность тестов к экспортированным `BOOK_EXPERT_*`
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted`
+- Коммит: `969398a`
 - Scope: `tests/conftest.py`, `tests/test_config.py`, `tests/test_doctor.py`,
   `tests/test_providers.py`, `tests/test_agent.py`.
 - Основание (аудит 2026-11-04): в shell с `BOOK_EXPERT_PROVIDER=deepseek`
@@ -1606,7 +1610,8 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T92 — Обновить audit/progress документацию до `5fbab95`
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted`
+- Документ: `docs/audit-2026-11-04-queue.md`
 - Scope: `docs/audit-2026-11-03-v3.md` или новый
   `docs/audit-2026-11-04.md`, `progress.md`, ссылки в README/docs;
   код не трогать.
