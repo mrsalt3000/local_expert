@@ -262,15 +262,38 @@
   .chat-delete { padding: 2px 6px; border: 0; background: transparent; color: var(--muted); font-size: 15px; cursor: pointer; }
   .chat-delete:hover { color: var(--error); }
   .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-  .library { width: min(980px, 100%); margin: 0 auto; padding: 24px 20px; overflow-y: auto; }
+  .library { width: min(1080px, 100%); margin: 0 auto; padding: 0 20px; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+  .lib-header { flex: none; position: sticky; top: 0; z-index: 4; padding: 16px 0 12px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .lib-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 0 24px; }
   .lib-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-  .import-box { margin-bottom: 14px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  .import-box { margin-bottom: 12px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  .import-box summary { cursor: pointer; font-weight: 600; }
+  .import-box[open] summary { margin-bottom: 8px; }
   .import-box .lib-title { margin-bottom: 8px; }
   .import-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 14px; }
   #import-path { flex: 1; min-width: 260px; padding: 7px 10px; background: var(--bg); }
   .import-row button { padding: 7px 12px; background: var(--bg); cursor: pointer; }
   .import-row button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
   .import-row button:disabled { opacity: 0.5; cursor: default; }
+  .lib-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .lib-search { position: relative; flex: 1 1 230px; min-width: 190px; }
+  .lib-search input { width: 100%; padding: 8px 32px 8px 10px; }
+  .lib-search-clear { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); padding: 2px 7px; border: 0; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; cursor: pointer; }
+  .lib-search-clear:hover { color: var(--text); }
+  .topic-filter { position: relative; }
+  .topic-filter summary { list-style: none; padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); cursor: pointer; font-size: 14px; white-space: nowrap; }
+  .topic-filter summary::-webkit-details-marker { display: none; }
+  .topic-filter[open] summary { border-color: var(--accent); }
+  .topic-options { position: absolute; z-index: 12; top: calc(100% + 4px); left: 0; width: min(360px, calc(100vw - 40px)); max-height: 320px; overflow-y: auto; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+  .topic-option { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; line-height: 1.3; cursor: pointer; }
+  .topic-option input { margin-top: 2px; }
+  .lib-filters select, .lib-filters input[type=number], .lib-filters input[type=date] { padding: 7px 8px; font-size: 14px; }
+  .lib-filters input[type=number] { width: 82px; }
+  .lib-date-label { display: flex; gap: 5px; align-items: center; font-size: 13px; color: var(--muted); }
+  .lib-count { margin-left: auto; color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .lib-reset { padding: 7px 11px; background: var(--bg); font-size: 14px; cursor: pointer; }
+  .lib-empty { padding: 28px 14px; text-align: center; color: var(--muted); }
+  .lib-empty button { margin-top: 10px; padding: 7px 12px; background: var(--bg); cursor: pointer; }
   .lib-job-cancel { margin-left: 10px; padding: 2px 10px; font-size: 13px; background: var(--bg); cursor: pointer; }
   .progress { position: relative; height: 10px; margin-top: 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); overflow: hidden; }
   .progress > div { height: 100%; width: 0; background: var(--accent); transition: width 0.25s ease; }
@@ -284,6 +307,11 @@
   .lib-main { min-width: 220px; flex: 1; }
   .lib-title { font-weight: 600; overflow-wrap: anywhere; }
   .lib-sub { color: var(--muted); font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
+  .lib-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; align-items: center; }
+  .topic-chip, .year-chip, .date-chip { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 12px; line-height: 1.6; border: 1px solid var(--line); color: var(--muted); background: var(--bg); }
+  .topic-chip { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+  .year-chip { color: var(--text); }
+  .date-chip { margin-left: 2px; }
   .lib-actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .lib-actions button { padding: 6px 10px; font-size: 14px; background: var(--bg); cursor: pointer; }
   .lib-actions button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
@@ -305,6 +333,10 @@
     main { padding: 16px 14px 6px; }
     footer { padding: 8px 14px 12px; }
     .brand .sub { display: none; }
+    .library { padding: 0 12px; }
+    .lib-count { margin-left: 0; width: 100%; }
+    .lib-date-label { width: 100%; }
+    .topic-options { width: calc(100vw - 24px); grid-template-columns: 1fr; }
   }
   @media (max-width: 760px) {
     .chat-layout { flex-direction: column; }
@@ -365,29 +397,57 @@
 
 <div id="view-library" class="view" hidden>
   <main class="library">
-    <div class="lib-toolbar">
-      <div class="upload">
-        <input type="file" id="upload-file" accept=".pdf,.epub,.fb2,.djvu,application/pdf,application/epub+zip" aria-label="Книга для загрузки">
-        <label><input type="checkbox" id="upload-ingest"> сразу в RAG</label>
-        <button type="button" id="upload-button" class="primary">Загрузить книгу</button>
+    <div class="lib-header">
+      <div class="lib-toolbar">
+        <div class="upload">
+          <input type="file" id="upload-file" accept=".pdf,.epub,.fb2,.djvu,application/pdf,application/epub+zip" aria-label="Книга для загрузки">
+          <label><input type="checkbox" id="upload-ingest"> сразу в RAG</label>
+          <button type="button" id="upload-button" class="primary">Загрузить книгу</button>
+        </div>
+        <button type="button" id="lib-refresh" class="ghost">Обновить</button>
       </div>
-      <button type="button" id="lib-refresh" class="ghost">Обновить</button>
-    </div>
-    <div class="import-box">
-      <div class="lib-title">Импорт книг из папки</div>
-      <div class="import-row">
-        <input type="text" id="import-path" placeholder="D:\Books или /mnt/d/Books" aria-label="Папка с книгами">
-        <label><input type="checkbox" id="import-recursive" checked> рекурсивно</label>
-        <label><input type="checkbox" id="import-ingest" checked> сразу в RAG</label>
-        <button type="button" id="import-scan" class="primary">Проверить</button>
-        <button type="button" id="import-start" disabled>Импортировать</button>
+      <details class="import-box">
+        <summary>Импорт книг из папки</summary>
+        <div class="import-row">
+          <input type="text" id="import-path" placeholder="D:\Books или /mnt/d/Books" aria-label="Папка с книгами">
+          <label><input type="checkbox" id="import-recursive" checked> рекурсивно</label>
+          <label><input type="checkbox" id="import-ingest" checked> сразу в RAG</label>
+          <button type="button" id="import-scan" class="primary">Проверить</button>
+          <button type="button" id="import-start" disabled>Импортировать</button>
+        </div>
+        <div id="import-preview" class="lib-sub" hidden></div>
+        <div id="import-progress" class="progress indeterminate" hidden><div></div></div>
+      </details>
+      <div id="lib-job" class="job" hidden></div>
+      <div class="lib-filters">
+        <div class="lib-search">
+          <input type="search" id="lib-search" placeholder="Фильтр по названию или автору" aria-label="Фильтр по названию или автору">
+          <button type="button" id="lib-search-clear" class="lib-search-clear" aria-label="Очистить фильтр" hidden>×</button>
+        </div>
+        <details class="topic-filter" id="topic-filter">
+          <summary id="topic-summary">Темы: все</summary>
+          <div id="topic-options" class="topic-options"></div>
+        </details>
+        <select id="year-mode" aria-label="Фильтр по году выпуска">
+          <option value="any">Год: любой</option>
+          <option value="exact">Год: точный</option>
+          <option value="range">Год: диапазон</option>
+          <option value="gte">Год: не раньше</option>
+          <option value="lte">Год: не позже</option>
+        </select>
+        <input type="number" id="year-from" min="1500" max="2100" placeholder="Год" aria-label="Год от" hidden>
+        <span id="year-dash" class="lib-date-label" hidden>—</span>
+        <input type="number" id="year-to" min="1500" max="2100" placeholder="До" aria-label="Год до" hidden>
+        <label class="lib-date-label">Добавлена с <input type="date" id="added-from" aria-label="Добавлена с"></label>
+        <label class="lib-date-label">по <input type="date" id="added-to" aria-label="Добавлена по"></label>
+        <button type="button" id="lib-reset" class="lib-reset">Сбросить</button>
+        <span id="lib-count" class="lib-count"></span>
       </div>
-      <div id="import-preview" class="lib-sub" hidden></div>
-      <div id="import-progress" class="progress indeterminate" hidden><div></div></div>
     </div>
-    <div id="lib-job" class="job" hidden></div>
-    <div id="lib-list" class="lib-list"></div>
-    <p class="hint">Книги (PDF, EPUB, FB2, DJVU) хранятся в data/raw/books. «Удалить файл» убирает и файл, и индекс.</p>
+    <div class="lib-scroll">
+      <div id="lib-list" class="lib-list"></div>
+      <p class="hint">Книги (PDF, EPUB, FB2, DJVU) хранятся в data/raw/books. «Удалить файл» убирает и файл, и индекс.</p>
+    </div>
   </main>
 </div>
 
@@ -415,6 +475,19 @@
   const chatControls = document.getElementById("chat-controls");
   const libList = document.getElementById("lib-list");
   const libJob = document.getElementById("lib-job");
+  const libSearch = document.getElementById("lib-search");
+  const libSearchClear = document.getElementById("lib-search-clear");
+  const topicFilter = document.getElementById("topic-filter");
+  const topicSummary = document.getElementById("topic-summary");
+  const topicOptions = document.getElementById("topic-options");
+  const yearMode = document.getElementById("year-mode");
+  const yearFrom = document.getElementById("year-from");
+  const yearTo = document.getElementById("year-to");
+  const yearDash = document.getElementById("year-dash");
+  const addedFrom = document.getElementById("added-from");
+  const addedTo = document.getElementById("added-to");
+  const libReset = document.getElementById("lib-reset");
+  const libCount = document.getElementById("lib-count");
   const uploadFile = document.getElementById("upload-file");
   const uploadIngest = document.getElementById("upload-ingest");
   const uploadButton = document.getElementById("upload-button");
@@ -438,6 +511,16 @@
     pending: false,
     tab: "chat",
     library: [],
+    libraryTopics: [],
+    libraryFilters: {
+      query: "",
+      topics: [],
+      yearMode: "any",
+      yearFrom: "",
+      yearTo: "",
+      addedFrom: "",
+      addedTo: "",
+    },
     libraryBusy: false,
     importPreview: null,
     importSource: null,
@@ -1486,6 +1569,7 @@
     sub.className = "lib-sub";
     const parts = [
       (item.format || "pdf").toUpperCase(),
+      item.author || null,
       item.name,
       formatSize(item.size_bytes),
       item.pages ? `${item.pages} стр.` : null,
@@ -1494,6 +1578,34 @@
     sub.textContent = parts.join(" · ") + (item.file_exists ? "" : " · файл не найден");
     if (item.error) sub.textContent += ` · ${item.error}`;
     main.append(title, sub);
+
+    if ((item.topics && item.topics.length) || item.published_year || item.added_at) {
+      const meta = document.createElement("div");
+      meta.className = "lib-meta";
+      for (const topic of item.topics || []) {
+        const chip = document.createElement("span");
+        chip.className = "topic-chip";
+        chip.textContent = topic;
+        meta.append(chip);
+      }
+      if (item.published_year) {
+        const chip = document.createElement("span");
+        chip.className = "year-chip";
+        const prefix = item.published_year_source === "metadata" ? "≈" : "";
+        chip.textContent = `${prefix}${item.published_year}`;
+        chip.title = item.published_year_source === "metadata"
+          ? "Год из метаданных файла, может быть годом создания файла"
+          : "Год выпуска из имени файла";
+        meta.append(chip);
+      }
+      if (item.added_at) {
+        const chip = document.createElement("span");
+        chip.className = "date-chip";
+        chip.textContent = `добавлена ${formatLibraryDate(item.added_at)}`;
+        meta.append(chip);
+      }
+      main.append(meta);
+    }
 
     const actions = document.createElement("div");
     actions.className = "lib-actions";
@@ -1514,7 +1626,90 @@
     return row;
   }
 
+  function formatLibraryDate(iso) {
+    if (!iso) return "";
+    const [year, month, day] = iso.split("-");
+    return day && month && year ? `${day}.${month}.${year}` : iso;
+  }
+
+  function matchesLibraryFilters(item) {
+    const filters = state.libraryFilters;
+    const query = filters.query.trim().toLocaleLowerCase("ru");
+    if (query) {
+      const haystack = `${item.title || ""} ${item.author || ""} ${item.name || ""}`.toLocaleLowerCase("ru");
+      if (!haystack.includes(query)) return false;
+    }
+    if (filters.topics.length) {
+      const topics = item.topics || [];
+      if (!filters.topics.some((topic) => topics.includes(topic))) return false;
+    }
+
+    const year = item.published_year;
+    const from = Number.parseInt(filters.yearFrom, 10);
+    const to = Number.parseInt(filters.yearTo, 10);
+    if (filters.yearMode === "exact" && !Number.isNaN(from) && year !== from) return false;
+    if (filters.yearMode === "range" && (!Number.isNaN(from) || !Number.isNaN(to))) {
+      if (!year) return false;
+      if (!Number.isNaN(from) && year < from) return false;
+      if (!Number.isNaN(to) && year > to) return false;
+    }
+    if (filters.yearMode === "gte" && !Number.isNaN(from) && (!year || year < from)) return false;
+    if (filters.yearMode === "lte" && !Number.isNaN(to) && (!year || year > to)) return false;
+
+    if (filters.addedFrom && (!item.added_at || item.added_at < filters.addedFrom)) return false;
+    if (filters.addedTo && (!item.added_at || item.added_at > filters.addedTo)) return false;
+    return true;
+  }
+
+  function renderTopicOptions() {
+    topicOptions.replaceChildren();
+    const selected = new Set(state.libraryFilters.topics);
+    const counts = new Map();
+    for (const item of state.library) {
+      for (const topic of item.topics || []) {
+        counts.set(topic, (counts.get(topic) || 0) + 1);
+      }
+    }
+    for (const topic of state.libraryTopics) {
+      const label = document.createElement("label");
+      label.className = "topic-option";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = topic;
+      checkbox.checked = selected.has(topic);
+      checkbox.addEventListener("change", () => {
+        state.libraryFilters.topics = Array.from(topicOptions.querySelectorAll("input:checked")).map((item) => item.value);
+        updateTopicSummary();
+        renderLibrary();
+      });
+      const text = document.createElement("span");
+      text.textContent = `${topic} (${counts.get(topic) || 0})`;
+      label.append(checkbox, text);
+      topicOptions.append(label);
+    }
+    topicFilter.hidden = state.libraryTopics.length === 0;
+    updateTopicSummary();
+  }
+
+  function updateTopicSummary() {
+    const count = state.libraryFilters.topics.length;
+    topicSummary.textContent = count ? `Темы: выбрано ${count}` : "Темы: все";
+  }
+
+  function updateYearControls() {
+    const mode = state.libraryFilters.yearMode;
+    yearFrom.hidden = mode === "any" || mode === "lte";
+    yearTo.hidden = mode === "any" || mode === "exact" || mode === "gte";
+    yearDash.hidden = mode !== "range";
+    yearFrom.placeholder = mode === "gte" ? "Не раньше" : mode === "range" ? "От" : "Год";
+    yearTo.placeholder = mode === "lte" ? "Не позже" : "До";
+  }
+
   function renderLibrary() {
+    const filtered = state.library.filter(matchesLibraryFilters);
+    libCount.textContent = state.library.length
+      ? `Показано ${filtered.length} из ${state.library.length}`
+      : "";
     libList.replaceChildren();
     if (!state.library.length) {
       const empty = document.createElement("p");
@@ -1523,17 +1718,105 @@
       libList.append(empty);
       return;
     }
-    for (const item of state.library) libList.append(libraryRow(item));
+    if (!filtered.length) {
+      const empty = document.createElement("div");
+      empty.className = "lib-empty";
+      empty.textContent = "По выбранным фильтрам ничего не найдено.";
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.textContent = "Сбросить фильтры";
+      reset.addEventListener("click", resetLibraryFilters);
+      empty.append(document.createElement("br"), reset);
+      libList.append(empty);
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    for (const item of filtered) fragment.append(libraryRow(item));
+    libList.append(fragment);
   }
+
+  function resetLibraryFilters() {
+    state.libraryFilters = {
+      query: "",
+      topics: [],
+      yearMode: "any",
+      yearFrom: "",
+      yearTo: "",
+      addedFrom: "",
+      addedTo: "",
+    };
+    libSearch.value = "";
+    libSearchClear.hidden = true;
+    yearMode.value = "any";
+    yearFrom.value = "";
+    yearTo.value = "";
+    addedFrom.value = "";
+    addedTo.value = "";
+    renderTopicOptions();
+    updateYearControls();
+    renderLibrary();
+  }
+
+  let searchTimer = null;
+  libSearch.addEventListener("input", () => {
+    libSearchClear.hidden = !libSearch.value;
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => {
+      state.libraryFilters.query = libSearch.value;
+      renderLibrary();
+    }, 120);
+  });
+  libSearchClear.addEventListener("click", () => {
+    libSearch.value = "";
+    libSearchClear.hidden = true;
+    state.libraryFilters.query = "";
+    renderLibrary();
+  });
+  yearMode.addEventListener("change", () => {
+    state.libraryFilters.yearMode = yearMode.value;
+    updateYearControls();
+    renderLibrary();
+  });
+  yearFrom.addEventListener("input", () => {
+    state.libraryFilters.yearFrom = yearFrom.value;
+    renderLibrary();
+  });
+  yearTo.addEventListener("input", () => {
+    state.libraryFilters.yearTo = yearTo.value;
+    renderLibrary();
+  });
+  addedFrom.addEventListener("change", () => {
+    state.libraryFilters.addedFrom = addedFrom.value;
+    renderLibrary();
+  });
+  addedTo.addEventListener("change", () => {
+    state.libraryFilters.addedTo = addedTo.value;
+    renderLibrary();
+  });
+  libReset.addEventListener("click", resetLibraryFilters);
 
   async function loadLibrary() {
     try {
-      const response = await fetch("/api/library");
+      const [response, topicsResponse] = await Promise.all([
+        fetch("/api/library"),
+        fetch("/api/library/topics"),
+      ]);
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error((data && data.detail) || `HTTP ${response.status}`);
       }
       state.library = Array.isArray(data) ? data : [];
+      if (topicsResponse.ok) {
+        const topics = await topicsResponse.json().catch(() => null);
+        state.libraryTopics = Array.isArray(topics && topics.topics) ? topics.topics : [];
+      }
+      if (!state.libraryTopics.length) {
+        state.libraryTopics = Array.from(
+          new Set(state.library.flatMap((item) => item.topics || [])),
+        ).sort((a, b) => a.localeCompare(b, "ru"));
+      }
+      renderTopicOptions();
+      updateYearControls();
       renderLibrary();
       updateImportControls();
     } catch (error) {

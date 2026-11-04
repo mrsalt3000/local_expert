@@ -8,6 +8,7 @@ import shutil
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
 from typing import BinaryIO, Literal, Protocol
@@ -20,6 +21,7 @@ from book_expert.ingestion.extract import (
     detect_format,
 )
 from book_expert.ingestion.indexer import BookIndexer
+from book_expert.ingestion.metadata import extract_published_year
 from book_expert.models import Book, BookStatus
 from book_expert.providers import get_provider
 
@@ -69,6 +71,11 @@ class LibraryEntry:
     pages: int = 0
     chunks: int = 0
     error: str | None = None
+    author: str | None = None
+    topics: tuple[str, ...] = ()
+    published_year: int | None = None
+    published_year_source: str | None = None
+    added_at: str | None = None
 
 
 @dataclass(slots=True)
@@ -152,16 +159,22 @@ class LibraryService:
     def entries(self) -> list[LibraryEntry]:
         entries: list[LibraryEntry] = []
         seen: set[Path] = set()
+        topics = self.catalog.topics_map()
         for path in self._book_files():
             resolved = path.resolve()
             seen.add(resolved)
+            book = self.catalog.get_book_by_path(path)
             entries.append(
-                self._entry_for_file(path, self.catalog.get_book_by_path(path))
+                self._entry_for_file(
+                    path,
+                    book,
+                    topics=topics.get(book.id, ()) if book is not None else (),
+                )
             )
         for book in self.catalog.list_books():
             if book.path.resolve() in seen:
                 continue
-            entries.append(self._entry_for_book(book))
+            entries.append(self._entry_for_book(book, topics=topics.get(book.id, ())))
         entries.sort(key=lambda item: (not item.in_rag, item.title.lower(), item.name))
         return entries
 
@@ -593,12 +606,24 @@ class LibraryService:
             raise LibraryNotFoundError(f"file not found: {name}")
         return path
 
-    def _entry_for_file(self, path: Path, book: Book | None) -> LibraryEntry:
+    def _entry_for_file(
+        self,
+        path: Path,
+        book: Book | None,
+        *,
+        topics: tuple[str, ...] = (),
+    ) -> LibraryEntry:
         in_rag = book is not None and book.status is BookStatus.ready
+        year, year_source = extract_published_year(
+            path.name,
+            book.title if book is not None else path.stem,
+            book.metadata if book is not None else None,
+        )
         return LibraryEntry(
             key=path.name,
             name=path.name,
             title=book.title if book is not None else path.stem,
+            author=book.author if book is not None else None,
             size_bytes=_size(path),
             file_exists=True,
             in_rag=in_rag,
@@ -612,14 +637,27 @@ class LibraryService:
             error=book.description
             if book is not None and book.status is BookStatus.failed
             else None,
+            topics=topics,
+            published_year=year,
+            published_year_source=year_source,
+            added_at=_added_at(book.created_at if book is not None else None, path),
         )
 
-    def _entry_for_book(self, book: Book) -> LibraryEntry:
+    def _entry_for_book(
+        self,
+        book: Book,
+        *,
+        topics: tuple[str, ...] = (),
+    ) -> LibraryEntry:
         exists = book.path.exists()
+        year, year_source = extract_published_year(
+            book.path.name, book.title, book.metadata
+        )
         return LibraryEntry(
             key=book.id,
             name=book.path.name,
             title=book.title,
+            author=book.author,
             size_bytes=_size(book.path) if exists else None,
             file_exists=exists,
             in_rag=book.status is BookStatus.ready,
@@ -629,7 +667,21 @@ class LibraryService:
             pages=book.page_count,
             chunks=book.chunk_count,
             error=book.description if book.status is BookStatus.failed else None,
+            topics=topics,
+            published_year=year,
+            published_year_source=year_source,
+            added_at=_added_at(book.created_at, book.path),
         )
+
+
+def _added_at(created_at: datetime | None, path: Path) -> str | None:
+    """Дата появления в библиотеке: каталог, иначе время копирования файла."""
+    if created_at is not None:
+        return created_at.date().isoformat()
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).date().isoformat()
+    except OSError:
+        return None
 
 
 def _safe_filename(raw: str) -> str:

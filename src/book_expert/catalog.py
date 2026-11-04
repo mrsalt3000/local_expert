@@ -21,6 +21,7 @@ from book_expert.models import (
     Section,
 )
 from book_expert.retrieval.lemmas import lemmatize_text, lemmatize_tokens
+from book_expert.topics import parse_topics_json, topics_to_json
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS books (
@@ -41,6 +42,12 @@ CREATE TABLE IF NOT EXISTS books (
 );
 
 CREATE INDEX IF NOT EXISTS idx_books_status ON books(status);
+
+CREATE TABLE IF NOT EXISTS book_topics (
+    book_id TEXT PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
+    topics TEXT NOT NULL DEFAULT '[]',
+    tagged_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS sections (
     book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
@@ -367,6 +374,40 @@ class Catalog:
                 """,
                 (str(status), description, _iso(utcnow()), book_id),
             )
+
+    def set_topics(self, book_id: str, topics: Iterable[str]) -> None:
+        """Сохраняет темы книги; повторный вызов перезаписывает разметку."""
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO book_topics (book_id, topics, tagged_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(book_id) DO UPDATE SET
+                    topics = excluded.topics,
+                    tagged_at = excluded.tagged_at
+                """,
+                (book_id, topics_to_json(topics), _iso(utcnow())),
+            )
+
+    def get_topics(self, book_id: str) -> tuple[str, ...]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT topics FROM book_topics WHERE book_id = ?", (book_id,)
+            ).fetchone()
+        return parse_topics_json(row["topics"]) if row else ()
+
+    def topics_map(self) -> dict[str, tuple[str, ...]]:
+        """Возвращает разметку всех книг одним запросом."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT book_id, topics FROM book_topics"
+            ).fetchall()
+        result: dict[str, tuple[str, ...]] = {}
+        for row in rows:
+            parsed = parse_topics_json(row["topics"])
+            if parsed:
+                result[row["book_id"]] = parsed
+        return result
 
     def get_book(self, book_id: str) -> Book | None:
         with self._connect() as connection:

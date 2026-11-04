@@ -20,6 +20,7 @@ from book_expert.agent.graph import AgentError, AgentTimeoutError
 from book_expert.config import Settings
 from book_expert.models import Answer, Book
 from book_expert.providers import ProviderError, ProviderUnavailableError
+from book_expert.topics import TOPICS
 from book_expert.web.answer_worker import (
     AnswerTimeoutError,
     WorkerAnswerError,
@@ -154,6 +155,15 @@ class LibraryBookOut(BaseModel):
     pages: int = 0
     chunks: int = 0
     error: str | None = None
+    author: str | None = None
+    topics: list[str] = Field(default_factory=list)
+    published_year: int | None = None
+    published_year_source: str | None = None
+    added_at: str | None = None
+
+
+class TopicsOut(BaseModel):
+    topics: list[str] = Field(default_factory=list)
 
 
 class LibraryJobOut(BaseModel):
@@ -487,6 +497,10 @@ def create_app(
             raise_library_error(exc)
         return [_library_out(entry) for entry in entries]
 
+    @app.get("/api/library/topics", response_model=TopicsOut)
+    def library_topics() -> TopicsOut:
+        return TopicsOut(topics=list(TOPICS))
+
     @app.post(
         "/api/library/upload",
         response_model=LibraryUploadOut,
@@ -617,6 +631,11 @@ def _library_out(entry: LibraryEntry) -> LibraryBookOut:
         pages=entry.pages,
         chunks=entry.chunks,
         error=entry.error,
+        author=entry.author,
+        topics=list(entry.topics),
+        published_year=entry.published_year,
+        published_year_source=entry.published_year_source,
+        added_at=entry.added_at,
     )
 
 

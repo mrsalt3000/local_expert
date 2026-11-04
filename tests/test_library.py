@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event
 
@@ -633,3 +634,50 @@ def test_import_unexpected_error_marks_job_failed(
 
     assert finished.status == "failed"
     assert finished.error == "catalog exploded"
+
+
+def test_entries_expose_topics_year_and_added_date(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    catalog = _catalog(settings)
+    path = settings.books_dir / "2014 - Автор - Книга.pdf"
+    _pdf(path)
+    book = _indexed_book(
+        settings,
+        path.name,
+        title="Книга",
+        author="Автор",
+        created_at=datetime(2026, 11, 1, 12, tzinfo=UTC),
+    )
+    catalog.upsert_book(book)
+    catalog.set_topics(book.id, ["IT", "Бизнес"])
+    service = LibraryService(settings, catalog, FakeIndexer())
+    try:
+        entry = service.entries()[0]
+    finally:
+        service.close()
+
+    assert entry.author == "Автор"
+    assert entry.topics == (
+        "Бизнес и предпринимательство",
+        "IT, программирование, архитектура",
+    )
+    assert entry.published_year == 2014
+    assert entry.published_year_source == "filename"
+    assert entry.added_at == "2026-11-01"
+
+
+def test_unindexed_file_gets_year_from_name_and_mtime(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    path = settings.books_dir / "2008 - Неизвестная - Книга.pdf"
+    _pdf(path)
+    service = LibraryService(settings, _catalog(settings), FakeIndexer())
+    try:
+        entry = service.entries()[0]
+    finally:
+        service.close()
+
+    expected_date = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).date()
+    assert entry.published_year == 2008
+    assert entry.published_year_source == "filename"
+    assert entry.topics == ()
+    assert entry.added_at == expected_date.isoformat()

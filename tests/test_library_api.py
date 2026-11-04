@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -208,3 +209,38 @@ def test_unknown_job_is_404(stack) -> None:  # type: ignore[no-untyped-def]
     client, _, _, _ = stack
 
     assert client.get("/api/jobs/nope").status_code == 404
+
+
+def test_library_exposes_topics_year_and_topic_catalog(stack) -> None:  # type: ignore[no-untyped-def]
+    client, settings, catalog, _ = stack
+    path = settings.books_dir / "2014 - Indexed.pdf"
+    path.write_bytes(PDF_BYTES)
+    catalog.upsert_book(
+        Book(
+            id="book-topics",
+            title="Indexed",
+            author="Автор",
+            path=path,
+            content_hash="hash-topics",
+            status=BookStatus.ready,
+            created_at=datetime(2026, 11, 1, 12, tzinfo=UTC),
+        )
+    )
+    catalog.set_topics("book-topics", ["IT", "Бизнес"])
+
+    items = {item["name"]: item for item in client.get("/api/library").json()}
+    item = items["2014 - Indexed.pdf"]
+    assert item["topics"] == [
+        "Бизнес и предпринимательство",
+        "IT, программирование, архитектура",
+    ]
+    assert item["published_year"] == 2014
+    assert item["published_year_source"] == "filename"
+    assert item["added_at"] == "2026-11-01"
+    assert item["author"] == "Автор"
+
+    topics = client.get("/api/library/topics")
+    assert topics.status_code == 200
+    labels = topics.json()["topics"]
+    assert len(labels) == 15
+    assert labels[0] == "Бизнес и предпринимательство"

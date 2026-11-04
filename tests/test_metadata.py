@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from book_expert.ingestion.metadata import extract_published_year
 from book_expert.models import Book
 from book_expert.retrieval.metadata import (
     apply_metadata_filter,
@@ -61,3 +62,28 @@ def test_apply_filters_and_fallback() -> None:
         "a",
         "b",
     ]
+
+
+def test_extract_published_year_prefers_filename_prefix() -> None:
+    year, source = extract_published_year(
+        "2014 - Автор - Название.pdf",
+        "Название",
+        {"source": {"creationDate": "D:20200101120000"}},
+    )
+
+    assert (year, source) == (2014, "filename")
+
+
+def test_extract_published_year_falls_back_to_metadata() -> None:
+    year, source = extract_published_year(
+        "book.pdf",
+        "Название",
+        {"source": {"creationDate": "D:20200101120000"}},
+    )
+
+    assert (year, source) == (2020, "metadata")
+
+
+def test_extract_published_year_returns_none_without_signal() -> None:
+    assert extract_published_year("book.pdf", "Название", {}) == (None, None)
+    assert extract_published_year("book.pdf", "Название", None) == (None, None)
