@@ -11,7 +11,9 @@ import pytest
 from book_expert.eval.faithfulness import (
     JUDGE_BATCH_SIZE,
     MAX_CLAIMS,
+    ClaimJudgement,
     FaithfulnessJudge,
+    _aggregate,
     build_prompt,
     parse_verdicts,
     split_claims,
@@ -331,3 +333,34 @@ def test_judge_merges_verdicts_from_batches() -> None:
     assert report.faithfulness == 1.0
     assert report.citation_support_precision == 1.0
     assert report.truncated is False
+
+
+def test_citation_gauge_counts_referenced_and_supporting() -> None:
+    claims = (
+        ClaimJudgement("a", (1,), True, True),
+        ClaimJudgement("b", (1, 2), False, True),
+        ClaimJudgement("c", (), True, True),
+    )
+
+    report = _aggregate(claims, available=5)
+
+    assert report.citations_available == 5
+    assert report.citations_referenced == 2
+    assert report.citations_supporting == 1
+    assert report.citation_usage == 0.4
+    assert report.citation_support_rate == 0.5
+
+
+def test_citation_gauge_handles_missing_sources_and_unjudged_claims() -> None:
+    claims = (
+        ClaimJudgement("a", (1,), True, True, judged=False),
+        ClaimJudgement("b", (2,), False, False),
+    )
+
+    report = _aggregate(claims, available=0)
+
+    assert report.citations_referenced == 1
+    assert report.citations_supporting == 0
+    assert report.citation_usage == 0.0
+    assert report.citation_support_rate == 0.0
+    assert report.to_dict()["citation_support_rate"] == 0.0

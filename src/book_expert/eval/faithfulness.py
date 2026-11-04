@@ -74,6 +74,11 @@ class FaithfulnessReport:
     error: str | None = None
     claims_total: int = 0
     truncated: bool = False
+    citations_available: int = 0
+    citations_referenced: int = 0
+    citations_supporting: int = 0
+    citation_usage: float = 0.0
+    citation_support_rate: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -86,6 +91,11 @@ class FaithfulnessReport:
             "cited_claims": sum(1 for claim in self.claims if claim.cited),
             "unsupported": list(self.unsupported),
             "error": self.error,
+            "citations_available": self.citations_available,
+            "citations_referenced": self.citations_referenced,
+            "citations_supporting": self.citations_supporting,
+            "citation_usage": self.citation_usage,
+            "citation_support_rate": self.citation_support_rate,
         }
 
 
@@ -145,6 +155,7 @@ class FaithfulnessJudge:
         sources: tuple[str, ...],
         *,
         marker_map: dict[int, int] | None = None,
+        citation_count: int | None = None,
     ) -> FaithfulnessReport:
         claims = split_claims(answer_text)
         claims_total = len(split_claims(answer_text, limit=None))
@@ -232,8 +243,9 @@ class FaithfulnessJudge:
             )
             for index, (text, cited) in enumerate(claims)
         )
+        available = citation_count if citation_count is not None else len(sources)
         return replace(
-            _aggregate(judgements),
+            _aggregate(judgements, available=available),
             claims_total=claims_total,
             truncated=truncated,
         )
@@ -358,11 +370,20 @@ def _extract_json(text: str) -> dict[str, Any]:
     return payload
 
 
-def _aggregate(judgements: tuple[ClaimJudgement, ...]) -> FaithfulnessReport:
+def _aggregate(
+    judgements: tuple[ClaimJudgement, ...], *, available: int = 0
+) -> FaithfulnessReport:
     judged = [claim for claim in judgements if claim.judged]
     with_citations = [claim for claim in judged if claim.cited]
     supported_context = sum(claim.supported_by_context for claim in judged)
     supported_cited = sum(claim.supported_by_cited for claim in with_citations)
+    referenced = {number for claim in with_citations for number in claim.cited}
+    supporting = {
+        number
+        for claim in with_citations
+        if claim.supported_by_cited
+        for number in claim.cited
+    }
     return FaithfulnessReport(
         claims=judgements,
         faithfulness=round(supported_context / len(judged), 4) if judged else 0.0,
@@ -376,6 +397,13 @@ def _aggregate(judgements: tuple[ClaimJudgement, ...]) -> FaithfulnessReport:
             claim.text
             for claim in judged
             if claim.cited and not claim.supported_by_cited
+        ),
+        citations_available=available,
+        citations_referenced=len(referenced),
+        citations_supporting=len(supporting),
+        citation_usage=round(len(referenced) / available, 4) if available else 0.0,
+        citation_support_rate=(
+            round(len(supporting) / len(referenced), 4) if referenced else 0.0
         ),
     )
 

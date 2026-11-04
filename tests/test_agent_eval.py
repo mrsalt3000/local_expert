@@ -177,6 +177,7 @@ class FakeJudge:
         sources: tuple[str, ...],
         *,
         marker_map: dict[int, int] | None = None,
+        citation_count: int | None = None,
     ):
         self.calls += 1
         return FaithfulnessReport(

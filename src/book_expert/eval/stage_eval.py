@@ -179,6 +179,7 @@ def run_stage_eval(
                     case.question,
                     answer.text,
                     tuple(hit.text for hit in answer.sources),
+                    citation_count=len(answer.citations),
                 )
             cited_pages = {
                 (citation.book_id, citation.pdf_page_index)
@@ -222,6 +223,19 @@ def run_stage_eval(
                 ),
                 "citation_coverage": (
                     judgement.citation_coverage if judgement else None
+                ),
+                "citation_usage": judgement.citation_usage if judgement else None,
+                "citation_support_rate": (
+                    judgement.citation_support_rate if judgement else None
+                ),
+                "citations_available": (
+                    judgement.citations_available if judgement else 0
+                ),
+                "citations_referenced": (
+                    judgement.citations_referenced if judgement else 0
+                ),
+                "citations_supporting": (
+                    judgement.citations_supporting if judgement else 0
                 ),
                 "judged_claims": len(judgement.claims) if judgement else 0,
                 "claims_truncated": bool(judgement and judgement.truncated),
@@ -377,6 +391,8 @@ def _aggregate(
             "citation_support_precision": _mean_optional(
                 rows, "citation_support_precision"
             ),
+            "citation_usage": _mean_optional(rows, "citation_usage"),
+            "citation_support_rate": _mean_optional(rows, "citation_support_rate"),
             "judged_cases": sum(1 for row in rows if row["faithfulness"] is not None),
             "claims_truncated": sum(1 for row in rows if row["claims_truncated"]),
             "faithfulness_errors": sum(1 for row in rows if row["faithfulness_error"]),

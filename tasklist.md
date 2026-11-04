@@ -1401,3 +1401,39 @@ LLM-роутера и UI, но при `candidate_limit=24` и включённо
   пишет их при ingest, бэкфилл идемпотентен.
 - Ограничение: 481 книга без описания (метаданных нет); LLM-генерация не
   делалась; 69 кейсов, один прогон.
+
+### T85 — Citation gauge: используются ли цитаты на самом деле
+
+- [x] Статус: `accepted` (2026-11-04; гипотеза подтверждена, продукт не менялся)
+- Scope: `eval/faithfulness.py`, `eval/stage_eval.py`, `eval/agent_eval.py`,
+  `tests/test_faithfulness.py`, отчёт в `docs/experiments`.
+- Основание: page-overlap `citation_precision` у «Агента» .1775 при cap 5
+  цитат — это `1/N`, а не измерение корректности; T83 показала, что
+  multi-gold альтернатив нет, значит нужна метрика на уровне цитаты.
+- Acceptance: посчитать по каждой цитате, используется ли она в утверждении
+  и поддерживает ли его; живой прогон 20 кейсов; дефолты не менять.
+
+**Результат (2026-11-04).** В `FaithfulnessReport` добавлены
+`citations_available/referenced/supporting`, `citation_usage` и
+`citation_support_rate`; знаменатель — число цитат ответа, не фрагментов
+контекста. Живой `agent-eval` 20 кейсов (deepseek-ответы, судья
+`ollama/qwen3.5:4b`, cap 5):
+
+| Метрика | Значение |
+| --- | --- |
+| page-overlap `citation_precision` | **.1775** |
+| `citation_book_precision` | .8600 |
+| `citation_usage` | **1.0000** |
+| `citation_support_rate` | **.9368** |
+| `citation_support_precision` | .7737 |
+| `faithfulness` | .8822 |
+
+- `citation_usage = 1.0` во **всех 19** оценённых ответах — декоративных
+  цитат нет; `citation_support_rate` ниже 1.0 у 5 из 19 (минимум .6).
+- У 4 ответов с нулевой page-overlap precision поддержка ≥ .8: они цитируют
+  валидные страницы, просто не размеченную золотую.
+- **Вывод:** `.1775` — арифметика `1/5`, а не плохие цитаты. Фильтровать
+  нечего; менять надо отчётность: для решений использовать
+  `citation_support_rate` и `citation_recall`, page-overlap — sanity-check.
+- Ограничение: 20 кейсов, один прогон; метрика не проверяет, что цитата
+  подтверждает именно тот факт, ради которого стоит маркер.

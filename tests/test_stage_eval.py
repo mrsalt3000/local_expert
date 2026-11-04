@@ -389,7 +389,12 @@ class FakeJudge:
         self.calls: list[tuple[str, tuple[str, ...]]] = []
 
     def evaluate(
-        self, question: str, answer_text: str, sources: tuple[str, ...]
+        self,
+        question: str,
+        answer_text: str,
+        sources: tuple[str, ...],
+        *,
+        citation_count: int | None = None,
     ) -> FaithfulnessReport:
         self.calls.append((answer_text, sources))
         return FaithfulnessReport(
@@ -397,6 +402,7 @@ class FakeJudge:
             faithfulness=1.0,
             citation_support_precision=1.0,
             citation_coverage=1.0,
+            citations_available=citation_count or len(sources),
         )
 
 
