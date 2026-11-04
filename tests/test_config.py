@@ -84,3 +84,27 @@ def test_ollama_num_ctx_must_be_positive(tmp_path: Path) -> None:
 def test_threshold_range(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="router_confidence_threshold"):
         Settings(_env_file=None, workspace=tmp_path, router_confidence_threshold=1.5)
+
+
+def test_with_provider_picks_that_provider_chat_model(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        workspace=tmp_path,
+        provider="deepseek",
+        chat_model="deepseek-chat",
+    )
+
+    assert settings.with_provider("openai").chat_model == "gpt-4o-mini"
+    assert settings.with_provider("deepseek").chat_model == "deepseek-chat"
+    ollama = settings.with_provider("ollama")
+    assert ollama.provider == "ollama"
+    assert ollama.chat_model == "qwen3.5:4b"
+
+
+def test_with_provider_keeps_settings_for_same_provider(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None, workspace=tmp_path, provider="ollama", chat_model="custom:1b"
+    )
+
+    assert settings.with_provider("ollama") is settings
+    assert settings.with_provider("ollama").chat_model == "custom:1b"

@@ -169,6 +169,18 @@ class Settings(BaseSettings):
             raise ValueError("at least one RRF weight must be positive")
         return self
 
+    def with_provider(self, provider: ProviderName) -> Settings:
+        """Копия настроек с моделью чата, соответствующей провайдеру."""
+        if provider == self.provider:
+            return self
+        if provider == "openai":
+            model = self.openai_chat_model
+        elif provider == "deepseek":
+            model = self.deepseek_chat_model
+        else:
+            model = type(self).model_fields["chat_model"].default
+        return self.model_copy(update={"provider": provider, "chat_model": model})
+
     @property
     def workspace_path(self) -> Path:
         return self.workspace.resolve()

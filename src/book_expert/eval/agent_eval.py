@@ -58,7 +58,7 @@ def run_agent_eval(
     router = BookRouter(settings, provider, catalog)
     answerer = SuperAdvancedAnswerer(settings, provider, searcher, router)
     judge_client = (
-        get_provider(settings.model_copy(update={"provider": judge_provider}))
+        get_provider(settings.with_provider(judge_provider))
         if faithfulness and judge_provider
         else None
     )
