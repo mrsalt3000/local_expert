@@ -1567,7 +1567,8 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T90 — Наблюдаемость и стоимость: персистентные метрики, token/cost, SLO, feedback correlation
 
-- [ ] Статус: `todo`
+- [x] Статус: `accepted`
+- Документ: `docs/observability.md`
 - Scope: `web/metrics.py`, `web/app.py`, `docs/`, локальные артефакты;
   без внешних зависимостей и облачных сервисов.
 - Основание (аудит 2026-11-04): `RequestMetrics` живёт в памяти и

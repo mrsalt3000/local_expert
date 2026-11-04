@@ -545,6 +545,9 @@ def test_health_reports_requests_and_latency(
     assert payload["errors"] == 0
     assert payload["modes"] == {"rag": 1}
     assert payload["latency_ms"]["p50"] is not None
+    assert payload["by_mode"]["rag"]["requests"] == 1
+    assert payload["by_mode"]["rag"]["slo"]["all_ok"] is True
+    assert payload["slo"]["persisted"] is True
 
 
 def test_health_counts_refusals_and_errors(

@@ -241,6 +241,8 @@ class HealthOut(BaseModel):
     window: int
     latency_ms: dict[str, int | None]
     modes: dict[str, int]
+    by_mode: dict[str, Any] = Field(default_factory=dict)
+    slo: dict[str, Any] = Field(default_factory=dict)
 
 
 class FeedbackRequest(BaseModel):
@@ -280,7 +282,9 @@ def create_app(
     backend_lock = Lock()
     library_lock = Lock()
     feedback_lock = Lock()
-    metrics = RequestMetrics()
+    metrics = RequestMetrics(
+        path=app.state.settings.artifacts_dir / "metrics.local.jsonl"
+    )
 
     def write_feedback(entry: dict[str, Any]) -> None:
         path = app.state.settings.artifacts_dir / "feedback.local.jsonl"
