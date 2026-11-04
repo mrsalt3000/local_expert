@@ -8,7 +8,9 @@ from typing import Any, Sequence
 
 import pymupdf
 import pytest
+import httpx
 from qdrant_client import QdrantClient, models
+from qdrant_client.http import exceptions as qdrant_exceptions
 
 from book_expert.catalog import Catalog
 from book_expert.config import Settings
@@ -18,6 +20,7 @@ from book_expert.ingestion.indexer import (
     CollectionDimensionError,
     IndexingError,
     _batched_texts,
+    _qdrant_failure_message,
 )
 from book_expert.models import BookStatus
 from book_expert.providers import (
@@ -311,3 +314,18 @@ def test_batched_texts_counts_utf8_bytes_not_characters() -> None:
     batches = list(_batched_texts(["я" * 10, "я" * 10], 10, 25))
 
     assert [len(batch) for batch in batches] == [1, 1]
+
+
+def test_qdrant_failure_message_does_not_mask_timeout() -> None:
+    message = _qdrant_failure_message(
+        qdrant_exceptions.ResponseHandlingException("request timed out")
+    )
+
+    assert "timed out" in message
+    assert "qdrant is unavailable" not in message
+
+
+def test_qdrant_failure_message_marks_connection_as_unavailable() -> None:
+    message = _qdrant_failure_message(httpx.ConnectError("connection refused"))
+
+    assert "qdrant is unavailable" in message

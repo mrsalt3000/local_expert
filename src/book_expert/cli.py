@@ -29,7 +29,7 @@ from book_expert.ingestion.extract import extract_document
 from book_expert.ingestion.indexer import BookIndexer, IndexingError
 from book_expert.ingestion.pdf import PdfError
 from book_expert.ingestion.quality import QualityThresholds, assess_document
-from book_expert.models import Answer, Book, SearchHit
+from book_expert.models import Answer, Book, BookStatus, SearchHit
 from book_expert.providers import Provider, ProviderError, get_provider
 from book_expert.retrieval.advanced import AdvancedAnswerer
 from book_expert.retrieval.answer import GroundedAnswerer
@@ -219,6 +219,97 @@ def books(json_output: bool = typer.Option(False, "--json")) -> None:
             f"{book.id[:8]}  {book.status.value:<8}  {book.title}  "
             f"({book.page_count} pages, {book.chunk_count} chunks)"
         )
+
+
+@app.command("retry-failed")
+def retry_failed(
+    limit: int = typer.Option(0, "--limit", help="Сколько failed-книг обработать."),
+    include_no_text: bool = typer.Option(
+        False,
+        "--include-no-text",
+        help="Пробовать и книги без текстового слоя (обычно нужен OCR).",
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Только показать план."),
+    json_output: bool = typer.Option(False, "--json", help="Машинный вывод."),
+) -> None:
+    """Повторно проиндексировать failed-книги; no-text по умолчанию пропускаются."""
+    settings = Settings()
+    settings.ensure_dirs()
+    catalog = Catalog(settings.catalog_path)
+    catalog.initialize()
+    failed = [book for book in catalog.list_books() if book.status is BookStatus.failed]
+    skipped_no_text = [
+        book
+        for book in failed
+        if not include_no_text and "no extractable text" in (book.description or "")
+    ]
+    candidates = [book for book in failed if book not in skipped_no_text]
+    missing = [book for book in candidates if not book.path.exists()]
+    candidates = [book for book in candidates if book.path.exists()]
+    if limit > 0:
+        candidates = candidates[:limit]
+
+    if dry_run:
+        payload = {
+            "candidates": [
+                {"id": book.id, "title": book.title, "path": str(book.path)}
+                for book in candidates
+            ],
+            "skipped_no_text": len(skipped_no_text),
+            "missing": len(missing),
+            "dry_run": True,
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False) if json_output else payload)
+        return
+
+    provider: Provider | None = None
+    indexer: BookIndexer | None = None
+    results: list[dict[str, Any]] = []
+    try:
+        _, provider, indexer = _make_services(settings)
+        for book in candidates:
+            try:
+                updated = indexer.index_pdf(book.path, force=True)
+                results.append(
+                    {
+                        "id": book.id,
+                        "title": book.title,
+                        "status": updated.status.value,
+                        "chunks": updated.chunk_count,
+                    }
+                )
+            except Exception as exc:
+                results.append(
+                    {
+                        "id": book.id,
+                        "title": book.title,
+                        "status": "failed",
+                        "error": str(exc)[:300],
+                    }
+                )
+    finally:
+        if indexer is not None:
+            indexer.close()
+        if provider is not None and hasattr(provider, "close"):
+            provider.close()
+
+    payload = {
+        "attempted": len(results),
+        "ready": sum(1 for row in results if row["status"] == "ready"),
+        "failed": sum(1 for row in results if row["status"] == "failed"),
+        "skipped_no_text": len(skipped_no_text),
+        "missing": len(missing),
+        "results": results,
+    }
+    if json_output:
+        typer.echo(json.dumps(payload, ensure_ascii=False))
+    else:
+        console.print(
+            f"ready {payload['ready']} / failed {payload['failed']} / "
+            f"skipped no-text {payload['skipped_no_text']}"
+        )
+        for row in results:
+            console.print(f"{row['status']}: {row['title'][:60]}", markup=False)
 
 
 @app.command("catalog-audit")

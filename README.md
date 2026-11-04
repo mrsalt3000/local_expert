@@ -46,6 +46,8 @@ cp .env.example .env
 uv run book-expert doctor
 
 uv run book-expert ingest data/raw/book.pdf --title "My Book"
+uv run book-expert retry-failed --dry-run
+uv run book-expert retry-failed
 uv run book-expert ask "О чём глава 3?"
 uv run book-expert search "ключевой термин" --book <book_id>
 uv run book-expert chat
@@ -185,6 +187,7 @@ uv run python scripts/tag_topics.py --force --batch-size 16
 | --- | --- |
 | `doctor` | Проверка Python, Docker, Qdrant, Ollama, моделей и git-ignore |
 | `ingest <book>` | Извлечение, chunking, embeddings, запись в Qdrant и FTS5 |
+| `retry-failed` | Повторный ingest failed-книг; no-text пропускаются, есть `--dry-run` |
 | `books` | Список книг, статусов и размеров индекса |
 | `parser-audit` | Проверить text coverage документа до индексации; `--quality-gate` у `ingest` |
 | `catalog-audit` | Дубли по названию, подозрительные имена и пропавшие файлы; ничего не удаляет |

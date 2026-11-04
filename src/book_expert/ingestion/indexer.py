@@ -28,6 +28,7 @@ PAYLOAD_INDEXES: tuple[tuple[str, models.PayloadSchemaType], ...] = (
     ("section_path", models.PayloadSchemaType.KEYWORD),
 )
 EMBED_MAX_BYTES = 8 * 1024 * 1024
+UPSERT_BATCH_SIZE = 256
 
 
 class IndexingError(RuntimeError):
@@ -152,28 +153,30 @@ class BookIndexer:
             self.ensure_collection()
             embeddings = self._embed(result.chunks, pending.title)
             self._delete_points(book_id)
-            self.client.upsert(
-                collection_name=self.collection,
-                points=[
-                    models.PointStruct(
-                        id=str(uuid.uuid5(uuid.NAMESPACE_URL, chunk.id)),
-                        vector=list(vector),
-                        payload={
-                            "book_id": book_id,
-                            "book_title": pending.title,
-                            "book_format": document.format,
-                            "chunk_id": chunk.id,
-                            "text": chunk.text,
-                            "pdf_page_index": chunk.pdf_page_index,
-                            "printed_page_label": chunk.printed_page_label,
-                            "section_path": chunk.section_path,
-                            "ordinal": chunk.ordinal,
-                        },
-                    )
-                    for chunk, vector in zip(result.chunks, embeddings, strict=True)
-                ],
-                wait=True,
-            )
+            points = [
+                models.PointStruct(
+                    id=str(uuid.uuid5(uuid.NAMESPACE_URL, chunk.id)),
+                    vector=list(vector),
+                    payload={
+                        "book_id": book_id,
+                        "book_title": pending.title,
+                        "book_format": document.format,
+                        "chunk_id": chunk.id,
+                        "text": chunk.text,
+                        "pdf_page_index": chunk.pdf_page_index,
+                        "printed_page_label": chunk.printed_page_label,
+                        "section_path": chunk.section_path,
+                        "ordinal": chunk.ordinal,
+                    },
+                )
+                for chunk, vector in zip(result.chunks, embeddings, strict=True)
+            ]
+            for start in range(0, len(points), UPSERT_BATCH_SIZE):
+                self.client.upsert(
+                    collection_name=self.collection,
+                    points=points[start : start + UPSERT_BATCH_SIZE],
+                    wait=True,
+                )
             self.catalog.replace_chunks(book_id, result.chunks)
             ready = replace(
                 pending,
@@ -189,14 +192,13 @@ class BookIndexer:
             httpx.HTTPError,
         ) as exc:
             self._safe_delete_points(book_id)
+            message = _qdrant_failure_message(exc)
             self.catalog.set_status(
                 book_id,
                 BookStatus.failed,
-                description=str(exc)[:500],
+                description=message[:500],
             )
-            raise IndexingError(
-                "qdrant is unavailable; start it with `docker compose up -d`"
-            ) from exc
+            raise IndexingError(message) from exc
         except Exception as exc:
             self._safe_delete_points(book_id)
             self.catalog.set_status(
@@ -263,6 +265,24 @@ def _contextual_text(book_title: str, chunk: Chunk) -> str:
         parts.append(f"Раздел: {chunk.section_path}")
     parts.append(chunk.text)
     return "\n".join(parts)
+
+
+def _qdrant_failure_message(exc: Exception) -> str:
+    """Не маскирует таймаут/HTTP-ошибку под «qdrant unavailable»."""
+    detail = str(exc).replace("\n", " ")[:300]
+    if isinstance(exc, qdrant_exceptions.ResponseHandlingException):
+        return (
+            "qdrant request failed or timed out (client timeout 30 s): "
+            f"{detail}. Check Qdrant health and retry the book."
+        )
+    if isinstance(exc, qdrant_exceptions.ApiException):
+        status = getattr(exc, "status_code", "?")
+        return f"qdrant API error {status}: {detail}"
+    if isinstance(exc, httpx.TimeoutException):
+        return f"qdrant timeout (client timeout 30 s): {detail}"
+    if isinstance(exc, httpx.ConnectError):
+        return "qdrant is unavailable; start it with `docker compose up -d`"
+    return f"qdrant request failed ({type(exc).__name__}): {detail}"
 
 
 def _qdrant_client(settings: Settings) -> QdrantClient:

@@ -1632,3 +1632,20 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   изменены.
 - Ожидаемый эффект: числа в документации не расходятся с кодом; +0.1 к
   документации.
+
+### T93 — Диагностика Qdrant и пакетный retry failed
+
+- [x] Статус: `accepted`
+- Коммит: см. `docs/experiments/2026-11-04-retry-failed.md`
+- Scope: `ingestion/indexer.py`, `cli.py`, `tests/test_indexer.py`, README,
+  локальный каталог.
+- Основание: 23 failed-книги, из них 17 падали на payload/upsert, а CLI
+  маскировал любую Qdrant-ошибку под `qdrant is unavailable`; Qdrant отвечал
+  7–9 с при клиентском таймауте ~5 с.
+- Сделано: timeout 30 с, батчи upsert по 256 points, разные сообщения для
+  timeout/API/connect, команда `retry-failed` с `--dry-run` и пропуском
+  no-text.
+- Результат: **17 из 17** payload-книг восстановлены (+1 вручную), каталог
+  **1178 ready / 5 failed**; 5 остатков — сканы без текста, нужен OCR.
+- Verify: `pytest` 500 passed, `ruff`, `mypy`, pre-commit; живой retry дал
+  55 807 chunks.
