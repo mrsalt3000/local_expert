@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Hashable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from book_expert.retrieval.answer import GroundedAnswerer
 from book_expert.retrieval.hybrid import HybridSearcher
+
+Item = TypeVar("Item", bound=Hashable)
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,8 +191,8 @@ def _mean(values: Iterable[float]) -> float:
 
 
 def hit_at_k(
-    retrieved: Sequence[str],
-    grades: Mapping[str, int],
+    retrieved: Sequence[Item],
+    grades: Mapping[Item, int],
     k: int,
     *,
     min_grade: int = 1,
@@ -208,8 +210,8 @@ def hit_at_k(
 
 
 def recall_at_k(
-    retrieved: Sequence[str],
-    grades: Mapping[str, int],
+    retrieved: Sequence[Item],
+    grades: Mapping[Item, int],
     k: int,
     *,
     min_grade: int = 1,
@@ -229,8 +231,8 @@ def recall_at_k(
 
 
 def map_at_k(
-    retrieved: Sequence[str],
-    grades: Mapping[str, int],
+    retrieved: Sequence[Item],
+    grades: Mapping[Item, int],
     k: int,
     *,
     min_grade: int = 1,
@@ -259,8 +261,8 @@ def map_at_k(
 
 
 def ndcg_at_k(
-    retrieved: Sequence[str],
-    grades: Mapping[str, int],
+    retrieved: Sequence[Item],
+    grades: Mapping[Item, int],
     k: int,
 ) -> float:
     """nDCG@k с graded relevance: gain = 2**grade - 1."""

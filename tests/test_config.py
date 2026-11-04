@@ -108,3 +108,10 @@ def test_with_provider_keeps_settings_for_same_provider(tmp_path: Path) -> None:
 
     assert settings.with_provider("ollama") is settings
     assert settings.with_provider("ollama").chat_model == "custom:1b"
+
+
+def test_with_provider_rejects_unknown_provider(tmp_path: Path) -> None:
+    settings = Settings(_env_file=None, workspace=tmp_path)
+
+    with pytest.raises(ValueError, match="unknown provider"):
+        settings.with_provider("bogus")

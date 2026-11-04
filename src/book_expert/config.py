@@ -169,8 +169,10 @@ class Settings(BaseSettings):
             raise ValueError("at least one RRF weight must be positive")
         return self
 
-    def with_provider(self, provider: ProviderName) -> Settings:
+    def with_provider(self, provider: str) -> Settings:
         """Копия настроек с моделью чата, соответствующей провайдеру."""
+        if provider not in ("ollama", "openai", "deepseek"):
+            raise ValueError(f"unknown provider: {provider!r}")
         if provider == self.provider:
             return self
         if provider == "openai":
