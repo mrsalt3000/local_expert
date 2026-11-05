@@ -1696,3 +1696,5 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   --strict-judge-v2`; отчёт `data/artifacts/t96-smoke.local.json`.
 - Ограничение: калибровка in-sample на тех же 57, один прогон DeepSeek;
   4B/quote в strict_v2 не прогонялись. Это аудит-режим, не жёсткий гейт.
+- Holdout: `data/artifacts/t96-holdout` — 50 cited из 20 новых кейсов,
+  ждёт human-разметки; после неё `scripts/eval_holdout_judge.py`.

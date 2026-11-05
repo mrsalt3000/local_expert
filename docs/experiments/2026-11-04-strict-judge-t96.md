@@ -54,3 +54,23 @@ strict_v2 не прогонялись, поэтому сравнение с ни
 - 4B и quote-режимы в strict_v2 не измерены.
 - `full` требует дословную цитату; парафраз, который человек считает
   поддержкой, может стать `partial` — это и есть 13 FN.
+
+## Holdout-пакет (50 cited)
+
+`data/artifacts/t96-holdout/` — **50 cited-утверждений из 20 новых кейсов**
+(`combined-120`, offset 20; с T95-кейсами не пересекаются). Все строки с
+непустым `cited`, негативный контроль уже проверен в T95.
+
+- `labels.csv` — UTF-8 BOM, `;`, ID вида `h10_2` (Excel-safe), `label` пустая;
+- `packet.md` / `README.md` — инструкция и читаемый пакет;
+- `context.json` / `packet.json` — входы для судьи, в git не попадают.
+
+После разметки:
+
+```bash
+uv run python scripts/eval_holdout_judge.py --provider deepseek
+```
+
+Скрипт прогонит `binary`, `strict` и `strict_v2` на одних и тех же 50 метках и
+запишет `agreement.json`. Это **holdout**: промпт strict_v2 на этих
+утверждениях не подбирался.
