@@ -1700,3 +1700,19 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   размечен независимым агентом (43 true/7 false); binary/strict kappa .623,
   strict_v2 precision 1.0 / recall .814 / kappa .551. Human-holdout всё ещё
   не сделан.
+
+### T97 — NLI claim→citation (ONNX mDeBERTa XNLI)
+
+- [ ] Статус: `review`
+- Документ: `docs/experiments/2026-11-05-nli-citation.md`
+- Scope: `eval/nli.py`, `scripts/eval_nli.py`, `tests/test_nli.py`;
+  модель в gitignored `data/artifacts/models/mdeberta-nli`.
+- Сделано: ONNX quantized multilingual NLI без torch, sentence-level premise,
+  max entailment по cited-excerpt, sweep threshold .05–.9.
+- Результат: human-cited 57 — best threshold .05, accuracy .474, precision
+  .889, recall .364, kappa **.123**; holdout 50 (agent) — .480/.1.0/.395/
+  kappa **.155**. NLI не лучше LLM-судей (strict_v2 .204 human, binary .623
+  holdout), поэтому negative для гейта.
+- Причина: мета/заголовочные claim, парафразы, длинные excerpt; recall низкий.
+- Verify: `pytest tests/test_nli.py`, `scripts/eval_nli.py`,
+  `data/artifacts/nli/results.json`; 505 тестов.
