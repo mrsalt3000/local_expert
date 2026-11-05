@@ -1703,7 +1703,9 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T97 — NLI claim→citation (ONNX mDeBERTa XNLI)
 
-- [ ] Статус: `review`
+- [x] Статус: `accepted`
+- Итог: **negative** для citation-гейта; human kappa .123, holdout .155.
+  Оставлено как воспроизводимый эксперимент, в прод не включается.
 - Документ: `docs/experiments/2026-11-05-nli-citation.md`
 - Scope: `eval/nli.py`, `scripts/eval_nli.py`, `tests/test_nli.py`;
   модель в gitignored `data/artifacts/models/mdeberta-nli`.
@@ -1719,7 +1721,9 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T98 — Claim-типы factual/meta и повтор NLI
 
-- [ ] Статус: `review`
+- [x] Статус: `accepted`
+- Итог: **negative**; фильтрация мета не спасает (kappa .084/.112).
+  Гипотеза не подтверждена, повторять не нужно.
 - Документ: `docs/experiments/2026-11-05-claim-types-nli.md`
 - Scope: `eval/claim_types.py`, `scripts/classify_claim_types.py`,
   `scripts/eval_nli.py`, `tests/test_claim_types.py`.
@@ -1733,7 +1737,9 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T99 — Русская NLI ruBERT на фактических claim
 
-- [ ] Статус: `review`
+- [x] Статус: `accepted`
+- Итог: **лучший NLI-кандидат, но не гейт**: human kappa .256 / holdout
+  .768, до порога .6 на human-метках не дотягивает. В прод не включается.
 - Документ: `docs/experiments/2026-11-05-nli-rubert.md`
 - Scope: `eval/nli.py` (model_file + token_type_ids), `scripts/eval_nli.py`,
   модель в gitignored `data/artifacts/models/rubert-nli`.
@@ -1748,7 +1754,9 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T100 — Cross-lingual NLI holdout: русский claim + английский excerpt
 
-- [x] Статус: `review`
+- [x] Статус: `accepted`
+- Итог: **accepted-negative**: en→ru лучше ruBERT `.3` (kappa .384 против
+  .020 у mDeBERTa), citation-гейт не включается.
 - Scope: `data/artifacts/cross-lingual-nli` (local-only), `scripts/eval_nli.py`,
   `scripts/build_holdout_packet.py`/новый сэмплер; модель не менять.
 - Основание: в T95/T96 все factual-пары ru→ru; английских книг с пригодной
@@ -1771,7 +1779,10 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T101 — Opt-in language-aware NLI router
 
-- [ ] Статус: `todo` (пересмотреть после T100; возможно, закрыть как ненужный)
+- [x] Статус: `cancelled`
+- Решение: не реализовывать. T100 показал, что для en→ru нужна ruBERT
+  (kappa .384 против .020), а en→en-ветки в продукте нет; переключатель
+  не даёт выигрыша ни на одном реальном сценарии.
 - Scope: `eval/nli.py`, `scripts/eval_nli.py`, `meta` отчётов.
 - Основание: T100 показал, что для en→ru лучше ruBERT (kappa .384 против
   .020 у mDeBERTa), поэтому исходное «mDeBERTa для cross-lingual» неверно.
