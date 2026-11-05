@@ -1748,34 +1748,37 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T100 — Cross-lingual NLI holdout: русский claim + английский excerpt
 
-- [ ] Статус: `todo`
+- [x] Статус: `review`
 - Scope: `data/artifacts/cross-lingual-nli` (local-only), `scripts/eval_nli.py`,
   `scripts/build_holdout_packet.py`/новый сэмплер; модель не менять.
-- Основание: в T95/T96 все factual-пары ru→ru; 33 из 1230 книг английские
-  (~2.7%), human-запросы русские, поэтому cross-lingual NLI не измерен.
+- Основание: в T95/T96 все factual-пары ru→ru; английских книг с пригодной
+  прозой 12 из 1230 (~1%), human-запросы русские, поэтому cross-lingual NLI
+  не измерен.
 - Acceptance:
   1. 30 русских claim с cited-excerpt из английских книг (не синтетический
      перевод, а реальные цитаты), blind human-разметка.
   2. ruBERT и mDeBERTa на одном наборе, пороги .3 и .05 соответственно;
      accuracy/precision/recall/kappa.
   3. Зафиксировано, какая модель нужна для en→ru и en→en.
-- Прогресс (2026-11-05): пакет собран — 15 реальных английских excerpt из
-  12 книг, 30 русских claim (15 true / 15 false), слепой `labels.csv`;
-  `scripts/build_crosslingual_packet.py`, `--cross-lingual` в
-  `scripts/eval_nli.py`, детектор языка `eval/language.py`. На construction
-  gold (не human): ruBERT .3 — accuracy .700, kappa .400; mDeBERTa .05 —
-  .500, kappa .000. Ждёт human-разметку.
-- Verify: `agreement.json`, отчёт в `docs/experiments`.
+- Результат (2026-11-05, human 17 true / 13 false): ruBERT .3 — accuracy
+  .700, precision .722, recall .765, kappa **.384**; mDeBERTa .05 —
+  .567/.571/.941, kappa **.020**. На audited-срезе (x04/x10 исправлены)
+  ruBERT .400, mDeBERTa .000. Вывод: en→ru — ruBERT .3; en→en не измерен,
+  mDeBERTa единственный кандидат по языку, но такой ветки в продукте нет.
+  Коммит `e8b6376`.
+- Verify: `data/artifacts/cross-lingual-nli/agreement.json`, отчёт
+  `docs/experiments/2026-11-05-nli-cross-lingual.md`.
 
 ### T101 — Opt-in language-aware NLI router
 
-- [ ] Статус: `todo` (после T100)
+- [ ] Статус: `todo` (пересмотреть после T100; возможно, закрыть как ненужный)
 - Scope: `eval/nli.py`, `scripts/eval_nli.py`, `meta` отчётов.
-- Основание: ruBERT лучше на ru→ru (human kappa .256 против .084), mDeBERTa
-  нужен для cross-lingual; переключать по языку запроса бессмысленно.
+- Основание: T100 показал, что для en→ru лучше ruBERT (kappa .384 против
+  .020 у mDeBERTa), поэтому исходное «mDeBERTa для cross-lingual» неверно.
+  Маршрут даёт выигрыш только для en→en, а такой ветки в продукте нет.
 - Acceptance:
-  1. `--nli-language auto`: определяет язык cited-excerpt, ru→ru → ruBERT,
-     en/cross → mDeBERTa.
+  1. `--nli-language auto`: ru→ru и en→ru → ruBERT, en→en → mDeBERTa
+     (если появится английский ответ).
   2. Порог хранится вместе с моделью; в `meta` пишется выбранная модель,
      язык и threshold.
   3. A/B на ru→ru и cross-lingual holdout; без него не включать в прод.
