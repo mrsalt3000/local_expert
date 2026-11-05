@@ -21,20 +21,28 @@ def main() -> None:
     parser.add_argument(
         "--output", type=Path, default=Path("data/artifacts/nli/results.json")
     )
+    parser.add_argument(
+        "--types",
+        type=Path,
+        default=Path("data/artifacts/claim-types/claim_types.csv"),
+    )
     args = parser.parse_args()
     scorer = NLICitationScorer(args.model_dir)
+    types = _types(args.types)
     result = {
         "model": str(args.model_dir),
         "human_cited": _evaluate(
             scorer,
             Path("data/artifacts/t86-calibration/packet.json"),
             Path("data/artifacts/t86-human/labels.csv"),
+            types,
             human=True,
         ),
         "holdout_agent": _evaluate(
             scorer,
             Path("data/artifacts/t96-holdout/packet.json"),
             Path("data/artifacts/t96-holdout/labels.csv"),
+            types,
             human=False,
         ),
     }
@@ -46,7 +54,12 @@ def main() -> None:
 
 
 def _evaluate(
-    scorer: NLICitationScorer, packet_path: Path, labels_path: Path, *, human: bool
+    scorer: NLICitationScorer,
+    packet_path: Path,
+    labels_path: Path,
+    types: dict[str, str],
+    *,
+    human: bool,
 ) -> dict[str, Any]:
     packet = json.loads(packet_path.read_text(encoding="utf-8"))
     labels = _labels(labels_path)
@@ -65,13 +78,29 @@ def _evaluate(
             if excerpts
             else 0.0
         )
-        scored.append((labels[_key(claim["id"])], score, claim["id"]))
+        scored.append(
+            (
+                labels[_key(claim["id"])],
+                score,
+                claim["id"],
+                types.get(claim["id"], "unknown"),
+            )
+        )
+    factual = [row for row in scored if row[3] == "factual"]
     sweep = {}
+    factual_sweep = {}
     for threshold in THRESHOLDS:
-        pairs = [(gold, score >= threshold) for gold, score, _ in scored]
+        pairs = [(gold, score >= threshold) for gold, score, _, _ in scored]
         sweep[str(threshold)] = {
             **binary_metrics(pairs),
-            "predicted_true": sum(1 for _, score, _ in scored if score >= threshold),
+            "predicted_true": sum(1 for _, score, _, _ in scored if score >= threshold),
+        }
+        factual_pairs = [(gold, score >= threshold) for gold, score, _, _ in factual]
+        factual_sweep[str(threshold)] = {
+            **binary_metrics(factual_pairs),
+            "predicted_true": sum(
+                1 for _, score, _, _ in factual if score >= threshold
+            ),
         }
     best = max(
         THRESHOLDS,
@@ -80,15 +109,32 @@ def _evaluate(
             sweep[str(threshold)].get("accuracy", -1),
         ),
     )
+    best_factual = max(
+        THRESHOLDS,
+        key=lambda threshold: (
+            factual_sweep[str(threshold)].get("kappa", -1),
+            factual_sweep[str(threshold)].get("accuracy", -1),
+        ),
+    )
     return {
         "human_labels" if human else "agent_labels": len(labels),
         "claims": len(scored),
+        "factual_claims": len(factual),
+        "meta_claims": sum(1 for row in scored if row[3] == "meta"),
         "best_threshold": best,
         "best": sweep[str(best)],
+        "best_threshold_factual": best_factual,
+        "best_factual": factual_sweep[str(best_factual)],
         "sweep": sweep,
+        "factual_sweep": factual_sweep,
         "scores": [
-            {"id": claim_id, "gold": gold, "score": round(score, 4)}
-            for gold, score, claim_id in scored
+            {
+                "id": claim_id,
+                "gold": gold,
+                "score": round(score, 4),
+                "claim_type": claim_type,
+            }
+            for gold, score, claim_id, claim_type in scored
         ],
     }
 
@@ -96,6 +142,16 @@ def _evaluate(
 def _sentences(text: str) -> list[str]:
     parts = re.split(r"(?<=[.!?…])\s+|\n+", text)
     return [" ".join(part.split()) for part in parts if part.strip()]
+
+
+def _types(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        return {
+            str(row["id"]): str(row["claim_type"])
+            for row in csv.DictReader(handle, delimiter=";")
+        }
 
 
 def _labels(path: Path) -> dict[str, bool]:

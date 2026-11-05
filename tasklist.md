@@ -1716,3 +1716,17 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 - Причина: мета/заголовочные claim, парафразы, длинные excerpt; recall низкий.
 - Verify: `pytest tests/test_nli.py`, `scripts/eval_nli.py`,
   `data/artifacts/nli/results.json`; 505 тестов.
+
+### T98 — Claim-типы factual/meta и повтор NLI
+
+- [ ] Статус: `review`
+- Документ: `docs/experiments/2026-11-05-claim-types-nli.md`
+- Scope: `eval/claim_types.py`, `scripts/classify_claim_types.py`,
+  `scripts/eval_nli.py`, `tests/test_claim_types.py`.
+- Сделано: эвристика factual/meta, 202 claim размечено в
+  `data/artifacts/claim-types/claim_types.csv`; NLI перемерен на factual.
+- Результат: human factual 47 — accuracy .447, precision .867, recall .351,
+  kappa **.084**; holdout factual 35 — .429/1.0/.355, kappa **.112**; хуже,
+  чем на всех cited (.123/.155). Гипотеза «NLI портят мета-claim» не подтверждена.
+- Verify: `pytest tests/test_claim_types.py tests/test_nli.py`,
+  `scripts/eval_nli.py`, `data/artifacts/nli/results.json`.
