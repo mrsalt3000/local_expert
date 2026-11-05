@@ -1163,6 +1163,7 @@
         body: JSON.stringify({
           chat_id: chat.id,
           message_index: index,
+          request_id: message.request_id || "",
           rating,
           mode: message.mode || state.mode,
         }),
@@ -1266,6 +1267,7 @@
       rounds: data.rounds || 0,
       max_rounds: data.max_rounds || 0,
       elapsed_ms: data.elapsed_ms,
+      request_id: data.request_id || "",
     });
   }
 

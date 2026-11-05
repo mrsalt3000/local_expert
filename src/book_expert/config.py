@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     answer_verify_citations: bool = False
     answer_timeout_s: int = 180
     answer_hard_timeout: bool = True
+    price_input_per_mtok: float = 0.0
+    price_output_per_mtok: float = 0.0
     candidate_limit: int = 24
     advanced_query_limit: int = 8
     super_max_rounds: int = 5

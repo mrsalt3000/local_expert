@@ -52,6 +52,7 @@ class FakeBackend:
             confidence=0.9,
             book_ids=("b1",),
             route_reason="single book",
+            usage={"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
         )
         self.super_answer = Answer(
             text="Супер ответ [1].",
@@ -70,6 +71,7 @@ class FakeBackend:
             book_ids=("b1",),
             route_reason="single book",
             plan=("запрос 1", "запрос 2"),
+            usage={"prompt_tokens": 20, "completion_tokens": 6, "total_tokens": 26},
         )
         self.agent_text = "Агентный ответ"
         self.rag_error: Exception | None = None
@@ -400,6 +402,11 @@ def test_advanced_stream_emits_progress_and_response(
         "done",
     ]
     assert events[-1]["response"]["plan"] == ["запрос 1", "запрос 2"]
+    assert events[-1]["response"]["request_id"]
+
+    health = client.get("/api/health").json()
+    assert health["requests"] == 1
+    assert health["tokens"] == {"prompt": 20, "completion": 6, "total": 26}
 
 
 def test_advanced_stream_rejects_other_modes(client: TestClient) -> None:
@@ -535,10 +542,12 @@ def test_index_has_expand_buttons(client: TestClient) -> None:
 def test_health_reports_requests_and_latency(
     client: TestClient, backend: FakeBackend
 ) -> None:
-    client.post("/api/chat", json={"message": "вопрос", "mode": "rag"})
+    response = client.post("/api/chat", json={"message": "вопрос", "mode": "rag"})
+    request_id = response.json()["request_id"]
 
     payload = client.get("/api/health").json()
 
+    assert request_id
     assert payload["ok"] is True
     assert payload["requests"] == 1
     assert payload["refusals"] == 0
@@ -547,6 +556,9 @@ def test_health_reports_requests_and_latency(
     assert payload["latency_ms"]["p50"] is not None
     assert payload["by_mode"]["rag"]["requests"] == 1
     assert payload["by_mode"]["rag"]["slo"]["all_ok"] is True
+    assert payload["tokens"] == {"prompt": 12, "completion": 4, "total": 16}
+    assert payload["usage_coverage"] == 1.0
+    assert next(iter(payload["by_provider"].values()))["total_tokens"] == 16
     assert payload["slo"]["persisted"] is True
 
 
@@ -573,6 +585,7 @@ def test_feedback_is_written_without_answer_text(
         json={
             "chat_id": "chat-1",
             "message_index": 3,
+            "request_id": "req-1",
             "rating": "down",
             "mode": "super",
         },
@@ -585,6 +598,7 @@ def test_feedback_is_written_without_answer_text(
     entry = json.loads(lines[0])
     assert entry["rating"] == "down"
     assert entry["message_index"] == 3
+    assert entry["request_id"] == "req-1"
     assert entry["mode"] == "super"
     assert "answer" not in entry
     assert "text" not in entry

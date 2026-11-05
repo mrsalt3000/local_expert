@@ -12,6 +12,7 @@ from __future__ import annotations
 import multiprocessing as mp
 import time
 from collections.abc import Iterator, Sequence
+from dataclasses import replace
 from typing import Any
 
 from book_expert.agent.graph import AgentError, AgentTimeoutError
@@ -20,6 +21,7 @@ from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.models import Answer
 from book_expert.providers import ProviderError, get_provider
+from book_expert.providers.usage import MeteredProvider, finish_usage, start_usage
 from book_expert.retrieval.advanced import AdvancedAnswerer
 from book_expert.retrieval.hybrid import HybridSearcher
 from book_expert.retrieval.router import BookRouter
@@ -160,11 +162,12 @@ def _answer_child(
 ) -> None:
     provider = None
     searcher = None
+    usage_token = start_usage()
     try:
         settings.ensure_dirs()
         catalog = Catalog(settings.catalog_path)
         catalog.initialize()
-        provider = get_provider(settings)
+        provider = MeteredProvider(get_provider(settings))
         searcher = HybridSearcher(settings, provider, catalog)
         router = BookRouter(settings, provider, catalog)
         trace = TraceRecorder.create(settings, prefix="web")
@@ -188,6 +191,7 @@ def _answer_child(
             progress=emit,
             history=history,
         )
+        answer = replace(answer, usage=finish_usage(usage_token))
         conn.send({"type": "answer", "answer": answer})
     except Exception as exc:  # noqa: BLE001 - процесс обязан вернуть ошибку
         failure = stream_error(exc)

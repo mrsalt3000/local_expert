@@ -58,4 +58,64 @@ def test_metrics_file_has_no_request_text(tmp_path: Path) -> None:
 
     entry = json.loads(path.read_text(encoding="utf-8"))
 
-    assert set(entry) == {"recorded_at", "mode", "elapsed_ms", "refused", "error"}
+    assert set(entry) == {
+        "recorded_at",
+        "mode",
+        "elapsed_ms",
+        "refused",
+        "error",
+        "provider",
+        "model",
+        "request_id",
+        "citations",
+        "unsupported_claims",
+    }
+    assert "answer" not in entry and "question" not in entry
+
+
+def test_metrics_track_tokens_cost_and_provider(tmp_path: Path) -> None:
+    path = tmp_path / "metrics.jsonl"
+    metrics = RequestMetrics(
+        path=path,
+        price_input_per_mtok=1.0,
+        price_output_per_mtok=2.0,
+    )
+    metrics.record(
+        mode="rag",
+        elapsed_ms=100,
+        usage={"prompt_tokens": 1_000_000, "completion_tokens": 500_000},
+        provider="deepseek",
+        model="deepseek-chat",
+    )
+
+    snapshot = metrics.snapshot()
+
+    assert snapshot["tokens"] == {
+        "prompt": 1_000_000,
+        "completion": 500_000,
+        "total": 1_500_000,
+    }
+    assert snapshot["cost_usd"] == 2.0
+    assert snapshot["usage_coverage"] == 1.0
+    assert snapshot["by_mode"]["rag"]["cost_usd"] == 2.0
+    assert snapshot["by_provider"]["deepseek"]["total_tokens"] == 1_500_000
+
+    restored = RequestMetrics(
+        path=path, price_input_per_mtok=1.0, price_output_per_mtok=2.0
+    )
+    assert restored.snapshot()["tokens"]["total"] == 1_500_000
+    assert restored.snapshot()["cost_usd"] == 2.0
+
+
+def test_metrics_accept_openai_usage_keys(tmp_path: Path) -> None:
+    metrics = RequestMetrics(path=tmp_path / "metrics.jsonl")
+    metrics.record(
+        mode="super",
+        elapsed_ms=100,
+        usage={"input_tokens": 10, "output_tokens": 5},
+    )
+
+    snapshot = metrics.snapshot()
+
+    assert snapshot["tokens"] == {"prompt": 10, "completion": 5, "total": 15}
+    assert snapshot["cost_usd"] == 0.0

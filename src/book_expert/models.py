@@ -106,3 +106,4 @@ class Answer:
     context: tuple[SearchHit, ...] = ()
     uncited: bool = False
     unsupported_claims: tuple[str, ...] = ()
+    usage: dict[str, int] = field(default_factory=dict)

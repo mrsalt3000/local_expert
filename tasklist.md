@@ -1794,3 +1794,52 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
      язык и threshold.
   3. A/B на ru→ru и cross-lingual holdout; без него не включать в прод.
 - Verify: unit-тесты роутинга, `eval_nli.py --nli-language auto`, отчёт.
+
+### T102 — Закрыть NLI-линию по итогам T97–T100
+
+- [x] Статус: `accepted`
+- Коммит: `7e05022`
+- Scope: `tasklist.md`; код и модели не трогать.
+- Основание: T97–T100 дали negative для citation-гейта; лучший human kappa
+  .384 (T100), до порога .6 далеко. Дальнейшие NLI-эксперименты не дают
+  ожидаемого выигрыша.
+- Сделано: T97–T100 → `accepted` с явным «negative», T101 → `cancelled`;
+  итог зафиксирован в tasklist.
+- Verify: tasklist без открытых NLI-задач.
+
+### T103 — Human-holdout судьи на T96-пакете
+
+- [ ] Статус: `todo` (пакет собран, ждёт human-разметку)
+- Scope: `data/artifacts/t96-holdout/human` (local-only),
+  `scripts/eval_holdout_judge.py`, `docs/experiments`; модель судьи не менять.
+- Основание: T96 strict_v2 дал kappa .551 на **agent**-holdout, human-holdout
+  не сделан; T95 human-cited — только 57 in-sample строк. Это главный
+  незакрытый разрыв аудита 7.9/10.
+- Acceptance:
+  1. 50 cited-утверждений T96 размечены человеком слепо (label true/false).
+  2. binary, strict и strict_v2 оценены на human-holdout; agreement с n,
+     accuracy/precision/recall/kappa.
+  3. Решение: kappa ≥ .6 → судья годится в аудит; иначе judge-линию
+     остановить.
+- Verify: `data/artifacts/t96-holdout/human/labels.csv`,
+  `agreement-human.json`, отчёт в `docs/experiments`.
+
+### T104 — Token/cost accounting и feedback correlation (хвост T90)
+
+- [ ] Статус: `todo`
+- Scope: `providers/usage.py`/`web/metrics.py`, `web/app.py`,
+  `web/backend.py`, `config.py`, `tests/`, `scripts/feedback_correlation.py`,
+  `docs/observability.md`; без внешних зависимостей.
+- Основание: T90 закрыл персистентность latency/SLO, но token usage от
+  провайдеров не доходит до метрик, стоимости нет, корреляции feedback ↔
+  качество нет. `ChatResult.usage` уже заполняется Ollama/OpenAI-совместимым
+  провайдером.
+- Acceptance:
+  1. `/api/health` отдаёт prompt/completion/total tokens и cost по
+     провайдеру и режиму; значения переживают рестарт.
+  2. Стоимость считается по настраиваемым ставкам за 1M токенов; секреты
+     не логируются.
+  3. `scripts/feedback_correlation.py` выгружает пары feedback ↔
+     unsupported/citations и считает коэффициент.
+- Verify: unit-тесты метрик и провайдера, live `/api/health`, отчёт в
+  `docs/observability.md`.

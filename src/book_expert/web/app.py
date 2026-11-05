@@ -11,6 +11,7 @@ from queue import Queue
 from threading import Lock, Thread
 from time import perf_counter
 from typing import Annotated, Any, Literal, Protocol
+from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -142,6 +143,7 @@ class ChatResponse(BaseModel):
     rounds: int = 0
     max_rounds: int = 0
     elapsed_ms: int
+    request_id: str = ""
 
 
 class LibraryBookOut(BaseModel):
@@ -240,14 +242,19 @@ class HealthOut(BaseModel):
     errors: int
     window: int
     latency_ms: dict[str, int | None]
+    tokens: dict[str, int] = Field(default_factory=dict)
+    cost_usd: float = 0.0
+    usage_coverage: float = 0.0
     modes: dict[str, int]
     by_mode: dict[str, Any] = Field(default_factory=dict)
+    by_provider: dict[str, Any] = Field(default_factory=dict)
     slo: dict[str, Any] = Field(default_factory=dict)
 
 
 class FeedbackRequest(BaseModel):
     chat_id: str = Field(default="", max_length=MAX_BOOK_ID_CHARS)
     message_index: int = Field(default=-1, ge=-1, le=10_000)
+    request_id: str = Field(default="", max_length=64)
     rating: Literal["up", "down"]
     mode: str = Field(default="", max_length=32)
     comment: str = Field(default="", max_length=500)
@@ -283,7 +290,9 @@ def create_app(
     library_lock = Lock()
     feedback_lock = Lock()
     metrics = RequestMetrics(
-        path=app.state.settings.artifacts_dir / "metrics.local.jsonl"
+        path=app.state.settings.artifacts_dir / "metrics.local.jsonl",
+        price_input_per_mtok=app.state.settings.price_input_per_mtok,
+        price_output_per_mtok=app.state.settings.price_output_per_mtok,
     )
 
     def write_feedback(entry: dict[str, Any]) -> None:
@@ -359,8 +368,12 @@ def create_app(
         book_ids = payload.book_ids or None
         history = [(turn.role, turn.content) for turn in payload.history[-12:]]
         started = perf_counter()
+        request_id = uuid4().hex
         refused = False
         failed = False
+        usage: dict[str, int] = {}
+        citations = 0
+        unsupported = 0
         try:
             active = get_backend()
             if payload.mode == "rag":
@@ -391,6 +404,11 @@ def create_app(
             else:
                 text = active.ask_agent(payload.message, book_ids, history=history)
                 response = ChatResponse(mode="agent", answer=text, elapsed_ms=0)
+                usage = dict(getattr(active, "agent_usage", {}) or {})
+            if payload.mode != "agent":
+                usage = dict(answer.usage)
+                citations = len(answer.citations)
+                unsupported = len(answer.unsupported_claims)
         except ProviderError as exc:
             failed = True
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -416,8 +434,15 @@ def create_app(
                 elapsed_ms=elapsed_ms,
                 refused=refused,
                 error=failed,
+                usage=usage,
+                provider=app.state.settings.provider,
+                model=_active_chat_model(app.state.settings),
+                request_id=request_id,
+                citations=citations,
+                unsupported_claims=unsupported,
             )
         response.elapsed_ms = int((perf_counter() - started) * 1000)
+        response.request_id = request_id
         return response
 
     @app.post("/api/chat/stream")
@@ -430,18 +455,44 @@ def create_app(
         book_ids = payload.book_ids or None
         history = [(turn.role, turn.content) for turn in payload.history[-12:]]
         started = perf_counter()
+        request_id = uuid4().hex
+
+        def record(answer: Answer | None, *, error: bool = False) -> None:
+            elapsed_ms = (perf_counter() - started) * 1000
+            metrics.record(
+                mode=payload.mode,
+                elapsed_ms=elapsed_ms,
+                refused=bool(answer and answer.refused),
+                error=error,
+                usage=dict(answer.usage) if answer is not None else {},
+                provider=app.state.settings.provider,
+                model=_active_chat_model(app.state.settings),
+                request_id=request_id,
+                citations=len(answer.citations) if answer is not None else 0,
+                unsupported_claims=len(answer.unsupported_claims)
+                if answer is not None
+                else 0,
+            )
 
         def generate() -> Iterator[str]:
             try:
                 backend = get_backend()
             except Exception as exc:  # noqa: BLE001 - SSE обязан вернуть error
+                record(None, error=True)
                 yield _sse({"type": "error", **_stream_error(exc)})
                 return
             if app.state.settings.answer_hard_timeout and isinstance(
                 backend, BookChatBackend
             ):
                 yield from _hard_timeout_stream(
-                    app.state.settings, payload, book_ids, history, started
+                    app.state.settings,
+                    payload,
+                    book_ids,
+                    history,
+                    started,
+                    request_id=request_id,
+                    on_done=lambda answer, _elapsed: record(answer),
+                    on_error=lambda _elapsed: record(None, error=True),
                 )
                 return
             events: Queue[dict[str, Any] | None] = Queue()
@@ -466,10 +517,13 @@ def create_app(
                             history=history,
                         )
                 except Exception as exc:
+                    record(None, error=True)
                     events.put({"type": "error", **_stream_error(exc)})
                 else:
                     response = _rag_response(answer, mode=payload.mode)
                     response.elapsed_ms = int((perf_counter() - started) * 1000)
+                    response.request_id = request_id
+                    record(answer)
                     events.put(
                         {
                             "type": "done",
@@ -612,6 +666,7 @@ def create_app(
             {
                 "chat_id": payload.chat_id,
                 "message_index": payload.message_index,
+                "request_id": payload.request_id,
                 "rating": payload.rating,
                 "mode": payload.mode,
                 "comment": payload.comment,
@@ -712,6 +767,10 @@ def _hard_timeout_stream(
     book_ids: Sequence[str] | None,
     history: Sequence[tuple[str, str]],
     started: float,
+    *,
+    request_id: str = "",
+    on_done: Callable[[Answer, float], None] | None = None,
+    on_error: Callable[[float], None] | None = None,
 ) -> Iterator[str]:
     """SSE из дочернего процесса: прогресс идёт, зависание убивается по таймауту."""
     try:
@@ -723,13 +782,28 @@ def _hard_timeout_stream(
             history=history,
         ):
             if event["type"] == "done":
-                response = _rag_response(event["answer"], mode=payload.mode)
-                response.elapsed_ms = int((perf_counter() - started) * 1000)
+                answer = event["answer"]
+                response = _rag_response(answer, mode=payload.mode)
+                elapsed_ms = int((perf_counter() - started) * 1000)
+                response.elapsed_ms = elapsed_ms
+                response.request_id = request_id
+                if on_done is not None:
+                    on_done(answer, float(elapsed_ms))
                 yield _sse({"type": "done", "response": response.model_dump()})
             else:
                 yield _sse(event)
     except Exception as exc:  # noqa: BLE001 - SSE обязан вернуть error-событие
+        if on_error is not None:
+            on_error(float((perf_counter() - started) * 1000))
         yield _sse({"type": "error", **_stream_error(exc)})
+
+
+def _active_chat_model(settings: Settings) -> str:
+    if settings.provider == "ollama":
+        return settings.chat_model
+    if settings.provider == "deepseek":
+        return settings.deepseek_chat_model
+    return settings.openai_chat_model
 
 
 def _rag_response(

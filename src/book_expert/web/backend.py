@@ -6,6 +6,8 @@ from collections.abc import Callable, Sequence
 from threading import Lock
 from typing import Any
 
+from dataclasses import replace
+
 from book_expert.agent.audit import AuditLogger
 from book_expert.agent.graph import AgentRunner
 from book_expert.agent.worker import run_agent_in_process
@@ -16,6 +18,7 @@ from book_expert.catalog import Catalog
 from book_expert.config import Settings
 from book_expert.models import Answer, Book, BookStatus
 from book_expert.providers import get_provider
+from book_expert.providers.usage import MeteredProvider, finish_usage, start_usage
 from book_expert.retrieval.advanced import AdvancedAnswerer
 from book_expert.retrieval.answer import GroundedAnswerer
 from book_expert.retrieval.hybrid import HybridSearcher
@@ -31,7 +34,7 @@ class BookChatBackend:
         settings.ensure_dirs()
         self.catalog = Catalog(settings.catalog_path)
         self.catalog.initialize()
-        self.provider = get_provider(settings)
+        self.provider = MeteredProvider(get_provider(settings))
         self.searcher = HybridSearcher(settings, self.provider, self.catalog)
         self.trace = TraceRecorder.create(settings, prefix="web")
         self.router = BookRouter(
@@ -60,9 +63,23 @@ class BookChatBackend:
         )
         self._agent: AgentRunner | None = None
         self._agent_lock = Lock()
+        self._last_agent_usage: dict[str, int] = {}
 
     def list_books(self) -> list[Book]:
         return ready_books(self.catalog.list_books())
+
+    @staticmethod
+    def _metered(function: Callable[[], Answer]) -> Answer:
+        token = start_usage()
+        try:
+            answer = function()
+        finally:
+            usage = finish_usage(token)
+        return replace(answer, usage=usage)
+
+    @property
+    def agent_usage(self) -> dict[str, int]:
+        return dict(self._last_agent_usage)
 
     def ask_rag(
         self,
@@ -70,12 +87,14 @@ class BookChatBackend:
         book_ids: Sequence[str] | None = None,
         history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer:
-        return self.answerer.ask(
-            message,
-            book_ids=list(book_ids) if book_ids else None,
-            auto_route=True,
-            history=history,
-            relevance_filter=self.settings.answer_relevance_filter,
+        return self._metered(
+            lambda: self.answerer.ask(
+                message,
+                book_ids=list(book_ids) if book_ids else None,
+                auto_route=True,
+                history=history,
+                relevance_filter=self.settings.answer_relevance_filter,
+            )
         )
 
     def ask_advanced(
@@ -85,12 +104,14 @@ class BookChatBackend:
         progress: Callable[[dict[str, Any]], None] | None = None,
         history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer:
-        return self.advanced.ask(
-            message,
-            book_ids=list(book_ids) if book_ids else None,
-            auto_route=True,
-            progress=progress,
-            history=history,
+        return self._metered(
+            lambda: self.advanced.ask(
+                message,
+                book_ids=list(book_ids) if book_ids else None,
+                auto_route=True,
+                progress=progress,
+                history=history,
+            )
         )
 
     def ask_super(
@@ -100,12 +121,14 @@ class BookChatBackend:
         progress: Callable[[dict[str, Any]], None] | None = None,
         history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer:
-        return self.super_advanced.ask(
-            message,
-            book_ids=list(book_ids) if book_ids else None,
-            auto_route=True,
-            progress=progress,
-            history=history,
+        return self._metered(
+            lambda: self.super_advanced.ask(
+                message,
+                book_ids=list(book_ids) if book_ids else None,
+                auto_route=True,
+                progress=progress,
+                history=history,
+            )
         )
 
     def ask_agent(
@@ -115,22 +138,21 @@ class BookChatBackend:
         history: Sequence[tuple[str, str]] | None = None,
     ) -> str:
         if self.settings.agent_hard_timeout:
-            result = run_agent_in_process(
+            worker_result = run_agent_in_process(
                 self.settings,
                 message,
                 book_ids=book_ids or None,
                 history=history,
             )
-            return str(result["text"])
-        return (
-            self._agent_runner()
-            .run(
-                message,
-                book_ids=book_ids or None,
-                history=history,
-            )
-            .text
+            self._last_agent_usage = dict(worker_result.get("usage") or {})
+            return str(worker_result["text"])
+        agent_result = self._agent_runner().run(
+            message,
+            book_ids=book_ids or None,
+            history=history,
         )
+        self._last_agent_usage = dict(agent_result.usage)
+        return agent_result.text
 
     def close(self) -> None:
         self.searcher.close()

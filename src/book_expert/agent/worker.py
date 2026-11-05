@@ -121,6 +121,7 @@ def _agent_child(
                 "text": result.text,
                 "steps": result.steps,
                 "trace_path": str(result.trace_path),
+                "usage": result.usage,
             }
         )
     except BaseException as exc:  # noqa: BLE001 - ошибка уходит родителю

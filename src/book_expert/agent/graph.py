@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -16,6 +16,7 @@ from pydantic import SecretStr
 
 from book_expert.config import Settings
 from book_expert.providers import ProviderError, ProviderUnavailableError
+from book_expert.providers.usage import merge_usage
 from book_expert.agent.trace import TraceRecorder
 
 SYSTEM_PROMPT = (
@@ -42,6 +43,7 @@ class AgentResult:
     messages: tuple[BaseMessage, ...]
     steps: int
     trace_path: Path
+    usage: dict[str, int] = field(default_factory=dict)
 
 
 class AgentRunner:
@@ -118,6 +120,7 @@ class AgentRunner:
             messages=messages,
             steps=len(messages),
             trace_path=trace.path,
+            usage=_messages_usage(messages),
         )
 
     @staticmethod
@@ -238,6 +241,20 @@ def _content_text(content: Any) -> str:
                 parts.append(block["text"])
         return "".join(parts).strip()
     return ""
+
+
+def _messages_usage(messages: Sequence[BaseMessage]) -> dict[str, int]:
+    usage: dict[str, int] = {}
+    for message in messages:
+        metadata = getattr(message, "usage_metadata", None)
+        if isinstance(metadata, dict):
+            merge_usage(usage, metadata)
+        response_metadata = getattr(message, "response_metadata", None)
+        if isinstance(response_metadata, dict):
+            token_usage = response_metadata.get("token_usage")
+            if isinstance(token_usage, dict):
+                merge_usage(usage, token_usage)
+    return usage
 
 
 __all__ = [
