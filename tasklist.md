@@ -1697,4 +1697,6 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 - Ограничение: калибровка in-sample на тех же 57, один прогон DeepSeek;
   4B/quote в strict_v2 не прогонялись. Это аудит-режим, не жёсткий гейт.
 - Holdout: `data/artifacts/t96-holdout` — 50 cited из 20 новых кейсов,
-  ждёт human-разметки; после неё `scripts/eval_holdout_judge.py`.
+  размечен независимым агентом (43 true/7 false); binary/strict kappa .623,
+  strict_v2 precision 1.0 / recall .814 / kappa .551. Human-holdout всё ещё
+  не сделан.
