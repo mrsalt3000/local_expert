@@ -15,7 +15,11 @@ MAX_LENGTH = 512
 class NLICitationScorer:
     """Ленивая ONNX-модель: без torch, на onnxruntime + tokenizers."""
 
-    def __init__(self, model_dir: Path = DEFAULT_MODEL_DIR) -> None:
+    def __init__(
+        self,
+        model_dir: Path = DEFAULT_MODEL_DIR,
+        model_file: str = "onnx/model_quantized.onnx",
+    ) -> None:
         from onnxruntime import InferenceSession
         from tokenizers import Tokenizer
 
@@ -33,7 +37,7 @@ class NLICitationScorer:
         self._tokenizer.enable_truncation(max_length=MAX_LENGTH)
         self._tokenizer.enable_padding()
         self._session = InferenceSession(
-            str(self.model_dir / "onnx/model_quantized.onnx"),
+            str(self.model_dir / model_file),
             providers=["CPUExecutionProvider"],
         )
 
@@ -51,7 +55,12 @@ class NLICitationScorer:
         mask = np.array(
             [encoding.attention_mask for encoding in encodings], dtype=np.int64
         )
-        logits = self._session.run(None, {"input_ids": ids, "attention_mask": mask})[0]
+        inputs = {"input_ids": ids, "attention_mask": mask}
+        if any(item.name == "token_type_ids" for item in self._session.get_inputs()):
+            inputs["token_type_ids"] = np.array(
+                [encoding.type_ids for encoding in encodings], dtype=np.int64
+            )
+        logits = self._session.run(None, inputs)[0]
         shifted = logits - logits.max(axis=1, keepdims=True)
         probabilities = np.exp(shifted) / np.exp(shifted).sum(axis=1, keepdims=True)
         return [float(row[self._entailment]) for row in probabilities]

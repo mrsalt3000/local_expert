@@ -18,6 +18,7 @@ THRESHOLDS = (0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR)
+    parser.add_argument("--model-file", default="onnx/model_quantized.onnx")
     parser.add_argument(
         "--output", type=Path, default=Path("data/artifacts/nli/results.json")
     )
@@ -27,7 +28,7 @@ def main() -> None:
         default=Path("data/artifacts/claim-types/claim_types.csv"),
     )
     args = parser.parse_args()
-    scorer = NLICitationScorer(args.model_dir)
+    scorer = NLICitationScorer(args.model_dir, args.model_file)
     types = _types(args.types)
     result = {
         "model": str(args.model_dir),

@@ -1730,3 +1730,18 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   чем на всех cited (.123/.155). Гипотеза «NLI портят мета-claim» не подтверждена.
 - Verify: `pytest tests/test_claim_types.py tests/test_nli.py`,
   `scripts/eval_nli.py`, `data/artifacts/nli/results.json`.
+
+### T99 — Русская NLI ruBERT на фактических claim
+
+- [ ] Статус: `review`
+- Документ: `docs/experiments/2026-11-05-nli-rubert.md`
+- Scope: `eval/nli.py` (model_file + token_type_ids), `scripts/eval_nli.py`,
+  модель в gitignored `data/artifacts/models/rubert-nli`.
+- Сделано: проверена `cointegrated/rubert-base-cased-nli-threeway` (ONNX,
+  русская three-way NLI) на фактических claim.
+- Результат: human factual 47, threshold .3 — accuracy .787, precision .829,
+  recall .919, kappa **.256** (mDeBERTa .084); holdout factual 35, threshold
+  .3 — .943/1.0/.935, kappa **.768**; при .15 holdout kappa .873, но это
+  подгонка. Лучший NLI-кандидат, не гейт.
+- Verify: `scripts/eval_nli.py --model-dir data/artifacts/models/rubert-nli
+  --model-file onnx/model.onnx`, `data/artifacts/nli/rubert.json`.
