@@ -1759,6 +1759,12 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   2. ruBERT и mDeBERTa на одном наборе, пороги .3 и .05 соответственно;
      accuracy/precision/recall/kappa.
   3. Зафиксировано, какая модель нужна для en→ru и en→en.
+- Прогресс (2026-11-05): пакет собран — 15 реальных английских excerpt из
+  12 книг, 30 русских claim (15 true / 15 false), слепой `labels.csv`;
+  `scripts/build_crosslingual_packet.py`, `--cross-lingual` в
+  `scripts/eval_nli.py`, детектор языка `eval/language.py`. На construction
+  gold (не human): ruBERT .3 — accuracy .700, kappa .400; mDeBERTa .05 —
+  .500, kappa .000. Ждёт human-разметку.
 - Verify: `agreement.json`, отчёт в `docs/experiments`.
 
 ### T101 — Opt-in language-aware NLI router

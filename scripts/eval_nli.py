@@ -27,8 +27,35 @@ def main() -> None:
         type=Path,
         default=Path("data/artifacts/claim-types/claim_types.csv"),
     )
+    parser.add_argument("--cross-lingual", action="store_true")
+    parser.add_argument(
+        "--packet",
+        type=Path,
+        default=Path("data/artifacts/cross-lingual-nli/packet.json"),
+    )
+    parser.add_argument(
+        "--labels",
+        type=Path,
+        default=Path("data/artifacts/cross-lingual-nli/labels.csv"),
+    )
+    parser.add_argument("--threshold", type=float)
     args = parser.parse_args()
     scorer = NLICitationScorer(args.model_dir, args.model_file)
+    if args.cross_lingual:
+        if args.threshold is None:
+            parser.error("--cross-lingual требует --threshold")
+        result = {
+            "model": str(args.model_dir),
+            "model_file": args.model_file,
+            "threshold": args.threshold,
+            **_cross_lingual(scorer, args.packet, args.labels, args.threshold),
+        }
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
     types = _types(args.types)
     result = {
         "model": str(args.model_dir),
@@ -52,6 +79,70 @@ def main() -> None:
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def _cross_lingual(
+    scorer: NLICitationScorer,
+    packet_path: Path,
+    labels_path: Path,
+    threshold: float,
+) -> dict[str, Any]:
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    labels = _labels(labels_path)
+    claims = [claim for claim in packet["claims"] if claim["id"] in labels]
+    if not claims:
+        raise SystemExit(f"нет размеченных claim: заполните label в {labels_path}")
+    scored = []
+    for claim in claims:
+        excerpts = [
+            item["text"] for item in claim.get("excerpts", []) if item.get("text")
+        ]
+        score = (
+            max(scorer.score_many([(text, claim["text"]) for text in excerpts]))
+            if excerpts
+            else 0.0
+        )
+        scored.append(
+            (
+                labels[claim["id"]],
+                score,
+                claim["id"],
+                claim.get("book_title", ""),
+                claim.get("page"),
+            )
+        )
+    pairs = [(gold, score >= threshold) for gold, score, _, _, _ in scored]
+    sweep = {
+        str(candidate): binary_metrics(
+            [(gold, score >= candidate) for gold, score, _, _, _ in scored]
+        )
+        for candidate in THRESHOLDS
+    }
+    true_scores = [score for gold, score, _, _, _ in scored if gold]
+    false_scores = [score for gold, score, _, _, _ in scored if not gold]
+    return {
+        "claims": len(scored),
+        "gold_true": len(true_scores),
+        "gold_false": len(false_scores),
+        "mean_score_true": round(sum(true_scores) / len(true_scores), 4)
+        if true_scores
+        else None,
+        "mean_score_false": round(sum(false_scores) / len(false_scores), 4)
+        if false_scores
+        else None,
+        "metrics": binary_metrics(pairs),
+        "sweep": sweep,
+        "scores": [
+            {
+                "id": claim_id,
+                "gold": gold,
+                "score": round(score, 4),
+                "book": book,
+                "page": page,
+            }
+            for gold, score, claim_id, book, page in scored
+        ],
+    }
 
 
 def _evaluate(
