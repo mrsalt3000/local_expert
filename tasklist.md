@@ -1850,3 +1850,22 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
      unsupported/citations и считает коэффициент.
 - Verify: unit-тесты метрик и провайдера, live `/api/health`, отчёт в
   `docs/observability.md`.
+
+### T105 — Сравнение локальных chat-моделей на RAG и Agent
+
+- [ ] Статус: `todo` (полный прогон идёт в фоне)
+- Scope: `scripts/model_benchmark.py`, `--judge-model` в
+  `stage-eval`/`agent-eval`, `data/artifacts/model-benchmark` (local-only),
+  `docs/experiments/2026-11-06-model-benchmark.md`; прод-модель не менять.
+- Основание: нужен выбор локальной chat-модели вместо/рядом с qwen3.5:4b;
+  retrieval от модели не зависит, поэтому сравниваются generation и agent.
+- Модели: Ministral 3 3B, Gemma 3 4B IT, Phi-4-mini, Qwen3-4B q4_K_M и q8_0;
+  DeepSeek Flash — только reference на 20 кейсах. q5/q6 Qwen3 не проверяются:
+  в Ollama нет тегов, импорт GGUF не делался.
+- Acceptance:
+  1. 120 RAG-кейсов и 20 agent-кейсов на каждую локальную модель.
+  2. Один фиксированный судья qwen3.5:4b; в meta — judge_chat_model.
+  3. Сводка `summary.json`/`summary.md` с latency, citation precision/recall,
+     faithfulness/support и отказами; вывод по модели и квантованию.
+- Verify: отчёты `data/artifacts/model-benchmark/`, smoke на 1 кейсе,
+  `summary.md`.

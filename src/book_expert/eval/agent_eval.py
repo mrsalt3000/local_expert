@@ -36,6 +36,7 @@ def run_agent_eval(
     offset: int = 0,
     faithfulness: bool = False,
     judge_provider: str | None = None,
+    judge_model: str | None = None,
     strict_judge: bool = False,
     strict_judge_v2: bool = False,
     quote_judge: bool = False,
@@ -58,11 +59,14 @@ def run_agent_eval(
     searcher = HybridSearcher(settings, provider, catalog)
     router = BookRouter(settings, provider, catalog)
     answerer = SuperAdvancedAnswerer(settings, provider, searcher, router)
-    judge_client = (
-        get_provider(settings.with_provider(judge_provider))
+    judge_settings = (
+        settings.with_provider(judge_provider)
         if faithfulness and judge_provider
         else None
     )
+    if judge_settings is not None and judge_model:
+        judge_settings = judge_settings.model_copy(update={"chat_model": judge_model})
+    judge_client = get_provider(judge_settings) if judge_settings else None
     judge = (
         FaithfulnessJudge(
             judge_client or provider,

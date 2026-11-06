@@ -768,6 +768,11 @@ def stage_eval(
         "--judge-provider",
         help="Провайдер LLM-судьи (ollama|openai|deepseek); по умолчанию — как у ответов.",
     ),
+    judge_model: str | None = typer.Option(
+        None,
+        "--judge-model",
+        help="Модель судьи; по умолчанию — модель провайдера судьи.",
+    ),
     strict_judge: bool = typer.Option(
         False,
         "--strict-judge",
@@ -807,6 +812,7 @@ def stage_eval(
         faithfulness=faithfulness,
         k=k,
         judge_provider=judge_provider,
+        judge_model=judge_model,
         strict_judge=strict_judge,
         strict_judge_v2=strict_judge_v2,
         quote_judge=quote_judge,
@@ -850,6 +856,11 @@ def agent_evaluate(
         "--judge-provider",
         help="Провайдер LLM-судьи (ollama|openai|deepseek); по умолчанию — как у ответов.",
     ),
+    judge_model: str | None = typer.Option(
+        None,
+        "--judge-model",
+        help="Модель судьи; по умолчанию — модель провайдера судьи.",
+    ),
     strict_judge: bool = typer.Option(
         False,
         "--strict-judge",
@@ -888,6 +899,7 @@ def agent_evaluate(
         offset=offset,
         faithfulness=faithfulness,
         judge_provider=judge_provider,
+        judge_model=judge_model,
         strict_judge=strict_judge,
         strict_judge_v2=strict_judge_v2,
         quote_judge=quote_judge,
