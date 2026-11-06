@@ -72,9 +72,16 @@ BOOK_EXPERT_PRICE_OUTPUT_PER_MTOK=1.10
   },
   "by_provider": {"ollama": {"requests": 42, "total_tokens": 58000,
                               "cost_usd": 0.0123}},
+  "super": {"requests": 12, "avg_rounds": 1.4, "avg_extra_queries": 2.1},
   "slo": {"persisted": true, "targets": {"rag": {"p50_ms": 2500, ...}}}
 }
 ```
+
+`super.avg_rounds` — среднее число возвратов к плану, `super.avg_extra_queries`
+— среднее число дополнительных поисковых запросов сверх начального плана.
+Оба значения также лежат в `by_mode.super`. В JSONL на каждый запрос пишутся
+`rounds` и `extra_queries`; это позволяет считать распределение, а не только
+среднее.
 
 `usage_coverage` — доля запросов, для которых провайдер вернул usage. Если
 провайдер не отдаёт токены (например, часть Ollama-ответов), coverage ниже 1.

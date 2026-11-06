@@ -62,6 +62,8 @@ class RequestMetrics:
         self._mode_errors: dict[str, int] = {}
         self._mode_tokens: dict[str, dict[str, int]] = {}
         self._mode_cost: dict[str, float] = {}
+        self._mode_rounds: dict[str, int] = {}
+        self._mode_extra_queries: dict[str, int] = {}
         self._providers: dict[str, dict[str, Any]] = {}
         self._load()
 
@@ -78,6 +80,8 @@ class RequestMetrics:
         request_id: str = "",
         citations: int = 0,
         unsupported_claims: int = 0,
+        rounds: int = 0,
+        extra_queries: int = 0,
     ) -> None:
         tokens = _normalize_usage(usage)
         cost = self.cost(tokens)
@@ -92,6 +96,8 @@ class RequestMetrics:
             "request_id": request_id,
             "citations": int(citations),
             "unsupported_claims": int(unsupported_claims),
+            "rounds": int(rounds),
+            "extra_queries": int(extra_queries),
         }
         if tokens:
             entry["tokens"] = tokens
@@ -129,6 +135,14 @@ class RequestMetrics:
                     },
                     "tokens": dict(self._mode_tokens.get(mode, {})),
                     "cost_usd": round(self._mode_cost.get(mode, 0.0), 8),
+                    "avg_rounds": round(self._mode_rounds.get(mode, 0) / requests, 2)
+                    if requests
+                    else 0.0,
+                    "avg_extra_queries": round(
+                        self._mode_extra_queries.get(mode, 0) / requests, 2
+                    )
+                    if requests
+                    else 0.0,
                     "slo": _slo_status(mode, values, refusals, requests),
                 }
             return {
@@ -153,6 +167,22 @@ class RequestMetrics:
                 else 0.0,
                 "modes": dict(sorted(self._modes.items())),
                 "by_mode": by_mode,
+                "super": {
+                    "requests": self._modes.get("super", 0),
+                    "avg_rounds": round(
+                        self._mode_rounds.get("super", 0) / self._modes.get("super", 1),
+                        2,
+                    )
+                    if self._modes.get("super")
+                    else 0.0,
+                    "avg_extra_queries": round(
+                        self._mode_extra_queries.get("super", 0)
+                        / self._modes.get("super", 1),
+                        2,
+                    )
+                    if self._modes.get("super")
+                    else 0.0,
+                },
                 "by_provider": {
                     name: {
                         **values,
@@ -203,6 +233,12 @@ class RequestMetrics:
             )
             merge_tokens(mode_tokens, tokens)
             self._mode_cost[mode] = self._mode_cost.get(mode, 0.0) + cost
+        self._mode_rounds[mode] = self._mode_rounds.get(mode, 0) + _to_int(
+            entry.get("rounds")
+        )
+        self._mode_extra_queries[mode] = self._mode_extra_queries.get(
+            mode, 0
+        ) + _to_int(entry.get("extra_queries"))
         provider_stats = self._providers.setdefault(
             provider,
             {

@@ -45,6 +45,7 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
         if self.settings.super_scope_limit > 0 and selected:
             selected = selected[: self.settings.super_scope_limit]
         plan = list(self._plan(query, history))
+        initial_queries = len(plan)
         if self.trace is not None:
             self.trace.write("advanced_plan", query=query, queries=list(plan))
         if progress is not None:
@@ -125,6 +126,7 @@ class SuperAdvancedAnswerer(AdvancedAnswerer):
             mode="super",
             rounds=rounds,
             max_rounds=max_rounds,
+            initial_queries=initial_queries,
             history=history,
         )
 

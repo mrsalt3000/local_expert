@@ -102,6 +102,8 @@ class Answer:
     plan: tuple[str, ...] = ()
     rounds: int = 0
     max_rounds: int = 0
+    initial_queries: int = 0
+    extra_queries: int = 0
     sources: tuple[SearchHit, ...] = ()
     context: tuple[SearchHit, ...] = ()
     uncited: bool = False

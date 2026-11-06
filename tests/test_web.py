@@ -63,6 +63,8 @@ class FakeBackend:
             plan=("запрос 1", "запрос 2", "доп"),
             rounds=1,
             max_rounds=5,
+            initial_queries=2,
+            extra_queries=1,
         )
         self.advanced_answer = Answer(
             text="Развернутый ответ [1].",
@@ -462,8 +464,14 @@ def test_super_mode_returns_rounds_and_plan(
     assert data["mode"] == "super"
     assert data["rounds"] == 1
     assert data["max_rounds"] == 5
+    assert data["extra_queries"] == 1
     assert data["plan"] == ["запрос 1", "запрос 2", "доп"]
     assert backend.super_calls == [("Глубокий вопрос", None)]
+
+    health = client.get("/api/health").json()
+    assert health["super"]["requests"] == 1
+    assert health["super"]["avg_rounds"] == 1.0
+    assert health["super"]["avg_extra_queries"] == 1.0
 
 
 def test_super_stream_emits_round_event(

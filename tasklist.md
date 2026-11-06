@@ -1869,3 +1869,15 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
      faithfulness/support и отказами; вывод по модели и квантованию.
 - Verify: отчёты `data/artifacts/model-benchmark/`, smoke на 1 кейсе,
   `summary.md`.
+
+### T106 — Метрики super: средние раунды и дополнительные запросы
+
+- [x] Статус: `review`
+- Scope: `Answer`, `retrieval/super_advanced.py`, `web/metrics.py`,
+  `web/app.py`, `docs/observability.md`, тесты.
+- Основание: health показывал только latency/отказы/tokens, но не стоимость
+  super-режима по дополнительным раундам и запросам.
+- Сделано: `Answer.initial_queries`/`extra_queries`; в JSONL пишутся
+  `rounds` и `extra_queries`; `/api/health` отдаёт `super.avg_rounds`,
+  `super.avg_extra_queries` и те же поля в `by_mode.super`.
+- Проверки: 523 теста, mypy/ruff/pre-commit зелёные.

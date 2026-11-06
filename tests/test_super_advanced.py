@@ -143,6 +143,8 @@ def test_refines_once_then_answers(tmp_path: Path) -> None:
     assert answer.plan == ("вопрос", "q1", "q2", "q3")
     assert answer.rounds == 1
     assert answer.max_rounds == 5
+    assert answer.initial_queries == 3
+    assert answer.extra_queries == 1
     assert searcher.calls == ["вопрос", "q1", "q2", "q3"]
     assert [citation.chunk_id for citation in answer.citations] == [
         "c1",

@@ -69,6 +69,8 @@ def test_metrics_file_has_no_request_text(tmp_path: Path) -> None:
         "request_id",
         "citations",
         "unsupported_claims",
+        "rounds",
+        "extra_queries",
     }
     assert "answer" not in entry and "question" not in entry
 

@@ -142,6 +142,7 @@ class ChatResponse(BaseModel):
     plan: list[str] = Field(default_factory=list)
     rounds: int = 0
     max_rounds: int = 0
+    extra_queries: int = 0
     elapsed_ms: int
     request_id: str = ""
 
@@ -248,6 +249,7 @@ class HealthOut(BaseModel):
     modes: dict[str, int]
     by_mode: dict[str, Any] = Field(default_factory=dict)
     by_provider: dict[str, Any] = Field(default_factory=dict)
+    super: dict[str, Any] = Field(default_factory=dict)
     slo: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -374,6 +376,8 @@ def create_app(
         usage: dict[str, int] = {}
         citations = 0
         unsupported = 0
+        rounds = 0
+        extra_queries = 0
         try:
             active = get_backend()
             if payload.mode == "rag":
@@ -409,6 +413,8 @@ def create_app(
                 usage = dict(answer.usage)
                 citations = len(answer.citations)
                 unsupported = len(answer.unsupported_claims)
+                rounds = answer.rounds
+                extra_queries = answer.extra_queries
         except ProviderError as exc:
             failed = True
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -440,6 +446,8 @@ def create_app(
                 request_id=request_id,
                 citations=citations,
                 unsupported_claims=unsupported,
+                rounds=rounds,
+                extra_queries=extra_queries,
             )
         response.elapsed_ms = int((perf_counter() - started) * 1000)
         response.request_id = request_id
@@ -472,6 +480,8 @@ def create_app(
                 unsupported_claims=len(answer.unsupported_claims)
                 if answer is not None
                 else 0,
+                rounds=answer.rounds if answer is not None else 0,
+                extra_queries=answer.extra_queries if answer is not None else 0,
             )
 
         def generate() -> Iterator[str]:
@@ -835,6 +845,7 @@ def _rag_response(
         plan=list(answer.plan),
         rounds=answer.rounds,
         max_rounds=answer.max_rounds,
+        extra_queries=answer.extra_queries,
         elapsed_ms=0,
     )
 

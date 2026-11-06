@@ -176,8 +176,10 @@ class AdvancedAnswerer:
         mode: str,
         rounds: int = 0,
         max_rounds: int = 0,
+        initial_queries: int = 0,
         history: Sequence[tuple[str, str]] | None = None,
     ) -> Answer:
+        extra_queries = max(0, len(plan) - initial_queries) if initial_queries else 0
         answer_books = (
             tuple(selected) if selected is not None else _hit_book_ids(tuple(hits))
         )
@@ -194,6 +196,8 @@ class AdvancedAnswerer:
                     plan=tuple(plan),
                     rounds=rounds,
                     max_rounds=max_rounds,
+                    initial_queries=initial_queries,
+                    extra_queries=extra_queries,
                 ),
                 query,
                 (),
@@ -233,6 +237,8 @@ class AdvancedAnswerer:
                     plan=tuple(plan),
                     rounds=rounds,
                     max_rounds=max_rounds,
+                    initial_queries=initial_queries,
+                    extra_queries=extra_queries,
                 ),
                 query,
                 tuple(hits),
@@ -267,6 +273,8 @@ class AdvancedAnswerer:
                 plan=tuple(plan),
                 rounds=rounds,
                 max_rounds=max_rounds,
+                initial_queries=initial_queries,
+                extra_queries=extra_queries,
                 sources=sources,
                 context=tuple(hits),
             ),
