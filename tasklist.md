@@ -1809,7 +1809,7 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T103 — Human-holdout судьи на T96-пакете
 
-- [ ] Статус: `todo` (пакет собран, ждёт human-разметку)
+- [x] Статус: `review`
 - Scope: `data/artifacts/t96-holdout/human` (local-only),
   `scripts/eval_holdout_judge.py`, `docs/experiments`; модель судьи не менять.
 - Основание: T96 strict_v2 дал kappa .551 на **agent**-holdout, human-holdout
@@ -1821,6 +1821,13 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
      accuracy/precision/recall/kappa.
   3. Решение: kappa ≥ .6 → судья годится в аудит; иначе judge-линию
      остановить.
+- Результат (2026-11-06, qwen3.5:4b, n=49): 49 валидных меток из 50
+  (`h1_4` пустой, `h1_6` как `1` → true), база 45 true / 4 false.
+  binary — accuracy .9184, kappa **.4556**; strict — .8776 / **.3348**;
+  strict_v2 — precision 1.0, recall .3556, kappa **.0826**. Порог .6 не
+  достигнут → **judge-линию остановить**, strict_v2 в аудит/гейт не
+  включать. Сравнение с T96 (.551) confounded: другая модель судьи и метки.
+  Отчёт `docs/experiments/2026-11-06-judge-human-holdout.md`.
 - Verify: `data/artifacts/t96-holdout/human/labels.csv`,
   `agreement-human.json`, отчёт в `docs/experiments`.
 
