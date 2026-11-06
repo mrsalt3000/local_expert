@@ -364,6 +364,7 @@
       <button type="button" data-mode="rag" aria-pressed="false">RAG</button>
       <button type="button" data-mode="super" class="active" aria-pressed="true">Агент</button>
     </div>
+    <select id="agent-model" aria-label="Модель агента" hidden></select>
     <button type="button" id="clear" class="ghost">Очистить</button>
   </div>
 </header>
@@ -462,6 +463,7 @@
   const bookInput = document.getElementById("book");
   const bookOptions = document.getElementById("book-options");
   const modeButtons = Array.from(document.querySelectorAll(".modes button"));
+  const agentModelSelect = document.getElementById("agent-model");
   const form = document.getElementById("form");
   const input = document.getElementById("input");
   const sendButton = document.getElementById("send");
@@ -504,6 +506,7 @@
 
   const state = {
     mode: "super",
+    agentModel: null,
     bookId: "",
     messages: [],
     chats: [],
@@ -762,6 +765,54 @@
       input.placeholder = "Спросите о книге…";
     } else {
       input.placeholder = "Вопрос агенту: план поиска, дополнительные раунды и синтез…";
+    }
+    syncAgentModelVisibility();
+  }
+
+  function syncAgentModelVisibility() {
+    agentModelSelect.hidden =
+      state.mode !== "super" ||
+      state.pending ||
+      agentModelSelect.options.length === 0;
+  }
+
+  function selectedAgentModel() {
+    const option = agentModelSelect.selectedOptions[0];
+    if (!option || !option.dataset.provider || !option.dataset.model) return null;
+    return {
+      provider: option.dataset.provider,
+      model: option.dataset.model,
+    };
+  }
+
+  async function loadModels() {
+    try {
+      const response = await fetch("/api/models");
+      if (!response.ok) return;
+      const models = await response.json();
+      if (!Array.isArray(models) || !models.length) return;
+      agentModelSelect.replaceChildren();
+      for (const model of models) {
+        const option = document.createElement("option");
+        option.value = model.id;
+        option.textContent =
+          (model.kind === "cloud" ? "☁ " : "") + model.label;
+        option.dataset.provider = model.provider;
+        option.dataset.model = model.model;
+        option.dataset.kind = model.kind;
+        agentModelSelect.appendChild(option);
+      }
+      const preferred =
+        models.find(
+          (model) => model.provider === "ollama" && model.model === "qwen3.5:4b",
+        ) ||
+        models.find((model) => model.kind === "local") ||
+        models[0];
+      agentModelSelect.value = preferred.id;
+      state.agentModel = selectedAgentModel();
+      syncAgentModelVisibility();
+    } catch (error) {
+      // Список моделей не критичен: без него работает модель по умолчанию.
     }
   }
 
@@ -1272,10 +1323,22 @@
   }
 
   async function streamAdvanced(text, bookIds, mode, history) {
+    const model = state.agentModel
+      ? {
+          agent_provider: state.agentModel.provider,
+          agent_model: state.agentModel.model,
+        }
+      : {};
     const response = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, mode, book_ids: bookIds, history }),
+      body: JSON.stringify({
+        message: text,
+        mode,
+        book_ids: bookIds,
+        history,
+        ...model,
+      }),
     });
     if (!response.ok) {
       let detail = `HTTP ${response.status}`;
@@ -1398,6 +1461,7 @@
     state.messages.push({ role: "user", text: displayText });
     state.pending = true;
     state.advancedProgress = null;
+    syncAgentModelVisibility();
     showError("");
     persistAndRender();
     try {
@@ -1432,6 +1496,7 @@
     } finally {
       state.pending = false;
       state.advancedProgress = null;
+      syncAgentModelVisibility();
       persistAndRender();
       input.focus();
     }
@@ -2196,6 +2261,10 @@
     });
   });
 
+  agentModelSelect.addEventListener("change", () => {
+    state.agentModel = selectedAgentModel();
+  });
+
   bookInput.addEventListener("focus", () => {
     bookInput.select();
     renderBookOptions("");
@@ -2279,6 +2348,7 @@
   syncBookInput();
   render();
   refreshBooks();
+  loadModels();
   updateImportControls();
   input.focus();
 })();

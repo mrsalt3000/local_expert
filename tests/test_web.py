@@ -85,6 +85,8 @@ class FakeBackend:
         self.advanced_calls: list[tuple[str, Sequence[str] | None]] = []
         self.super_calls: list[tuple[str, Sequence[str] | None]] = []
         self.agent_calls: list[tuple[str, Sequence[str] | None]] = []
+        self.super_model: tuple[str | None, str | None] = (None, None)
+        self.agent_model: tuple[str | None, str | None] = (None, None)
         self.closed = False
 
     def list_books(self) -> list[Book]:
@@ -137,8 +139,11 @@ class FakeBackend:
         book_ids: Sequence[str] | None = None,
         progress=None,  # type: ignore[no-untyped-def]
         history=None,  # type: ignore[no-untyped-def]
+        provider: str | None = None,
+        model: str | None = None,
     ) -> Answer:
         self.super_calls.append((message, book_ids))
+        self.super_model = (provider, model)
         if progress is not None:
             progress({"type": "plan", "queries": ["запрос 1", "запрос 2"], "total": 2})
             progress(
@@ -170,8 +175,11 @@ class FakeBackend:
         message: str,
         book_ids: Sequence[str] | None = None,
         history=None,  # type: ignore[no-untyped-def]
+        provider: str | None = None,
+        model: str | None = None,
     ) -> str:
         self.agent_calls.append((message, book_ids))
+        self.agent_model = (provider, model)
         if self.agent_error is not None:
             raise self.agent_error
         return self.agent_text
@@ -472,6 +480,47 @@ def test_super_mode_returns_rounds_and_plan(
     assert health["super"]["requests"] == 1
     assert health["super"]["avg_rounds"] == 1.0
     assert health["super"]["avg_extra_queries"] == 1.0
+
+
+def test_models_endpoint_lists_local_model(client: TestClient) -> None:
+    payload = client.get("/api/models").json()
+
+    assert isinstance(payload, list)
+    assert any(item["provider"] == "ollama" for item in payload)
+
+
+def test_super_model_selection_is_passed(
+    client: TestClient, backend: FakeBackend
+) -> None:
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "Глубокий вопрос",
+            "mode": "super",
+            "agent_provider": "ollama",
+            "agent_model": "gemma3:4b",
+        },
+    )
+
+    assert response.status_code == 200
+    assert backend.super_model == ("ollama", "gemma3:4b")
+
+
+def test_agent_model_selection_is_passed(
+    client: TestClient, backend: FakeBackend
+) -> None:
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "Вопрос",
+            "mode": "agent",
+            "agent_provider": "deepseek",
+            "agent_model": "deepseek-flash",
+        },
+    )
+
+    assert response.status_code == 200
+    assert backend.agent_model == ("deepseek", "deepseek-flash")
 
 
 def test_super_stream_emits_round_event(

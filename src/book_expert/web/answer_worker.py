@@ -64,8 +64,12 @@ def stream_answer_in_process(
     history: Sequence[tuple[str, str]] | None = None,
     timeout: float | None = None,
     context: str = "spawn",
+    provider: str | None = None,
+    model: str | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Yield progress-события, затем ``{"type": "done", "answer": Answer}``."""
+    if provider and model:
+        settings = settings.with_model(provider, model)
     limit = timeout if timeout is not None else settings.answer_timeout_s
     ctx: Any = mp.get_context(context)
     parent, child = ctx.Pipe(duplex=False)
@@ -133,6 +137,8 @@ def answer_in_process(
     history: Sequence[tuple[str, str]] | None = None,
     timeout: float | None = None,
     context: str = "spawn",
+    provider: str | None = None,
+    model: str | None = None,
 ) -> Answer:
     """Блокирующий вариант для ``POST /api/chat``: прогресс отбрасывается."""
     answer = None
@@ -144,6 +150,8 @@ def answer_in_process(
         history=history,
         timeout=timeout,
         context=context,
+        provider=provider,
+        model=model,
     ):
         if event["type"] == "done":
             answer = event["answer"]

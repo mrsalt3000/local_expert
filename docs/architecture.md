@@ -110,6 +110,11 @@ project-scope `.qwen/settings.json` с сервером `book-expert`.
 
 `book-expert ui` поднимает FastAPI на loopback. По умолчанию UI и API выбирают
 режим `super`. `GET /api/books` отдаёт только `ready` книги.
+`GET /api/models` отдаёт локальные chat-модели Ollama (без embedding) и
+облачные DeepSeek Flash/V4 Pro, если задан ключ. UI в режиме «Агент» передаёт
+выбор как `agent_provider`/`agent_model`; `_super_answerer` и `AgentRunner`
+кэшируются по паре провайдер/модель, а hard-timeout worker получает копию
+`Settings` с этой моделью.
 `POST /api/chat` с `mode=rag` вызывает `GroundedAnswerer.ask()`
 и возвращает citations, с `mode=advanced` — `AdvancedAnswerer`: планировщик
 строит 2–4 запроса, они последовательно выполняются в `HybridSearcher`,

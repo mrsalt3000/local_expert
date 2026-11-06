@@ -187,6 +187,17 @@ class Settings(BaseSettings):
             model = type(self).model_fields["chat_model"].default
         return self.model_copy(update={"provider": provider, "chat_model": model})
 
+    def with_model(self, provider: str, model: str) -> Settings:
+        """Копия настроек с выбранными провайдером и chat-моделью."""
+        if provider not in ("ollama", "openai", "deepseek"):
+            raise ValueError(f"unknown provider: {provider!r}")
+        target = {
+            "ollama": "chat_model",
+            "openai": "openai_chat_model",
+            "deepseek": "deepseek_chat_model",
+        }[provider]
+        return self.model_copy(update={"provider": provider, target: model})
+
     @property
     def workspace_path(self) -> Path:
         return self.workspace.resolve()

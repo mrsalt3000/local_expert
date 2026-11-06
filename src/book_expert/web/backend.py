@@ -61,9 +61,11 @@ class BookChatBackend:
             self.router,
             trace=self.trace,
         )
-        self._agent: AgentRunner | None = None
+        self._agents: dict[tuple[str, str], AgentRunner] = {}
         self._agent_lock = Lock()
         self._last_agent_usage: dict[str, int] = {}
+        self._extra_providers: dict[tuple[str, str], MeteredProvider] = {}
+        self._supers: dict[tuple[str, str], SuperAdvancedAnswerer] = {}
 
     def list_books(self) -> list[Book]:
         return ready_books(self.catalog.list_books())
@@ -80,6 +82,40 @@ class BookChatBackend:
     @property
     def agent_usage(self) -> dict[str, int]:
         return dict(self._last_agent_usage)
+
+    def _model_settings(self, provider: str, model: str) -> Settings:
+        return self.settings.with_model(provider, model)
+
+    def _model_provider(self, provider: str, model: str) -> MeteredProvider:
+        key = (provider, model)
+        with self._agent_lock:
+            existing = self._extra_providers.get(key)
+            if existing is None:
+                existing = MeteredProvider(
+                    get_provider(self._model_settings(provider, model))
+                )
+                self._extra_providers[key] = existing
+            return existing
+
+    def _super_answerer(
+        self, provider: str | None, model: str | None
+    ) -> SuperAdvancedAnswerer:
+        if not provider or not model:
+            return self.super_advanced
+        key = (provider, model)
+        model_provider = self._model_provider(provider, model)
+        with self._agent_lock:
+            existing = self._supers.get(key)
+            if existing is None:
+                existing = SuperAdvancedAnswerer(
+                    self._model_settings(provider, model),
+                    model_provider,
+                    self.searcher,
+                    self.router,
+                    trace=self.trace,
+                )
+                self._supers[key] = existing
+            return existing
 
     def ask_rag(
         self,
@@ -120,9 +156,12 @@ class BookChatBackend:
         book_ids: Sequence[str] | None = None,
         progress: Callable[[dict[str, Any]], None] | None = None,
         history: Sequence[tuple[str, str]] | None = None,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> Answer:
+        answerer = self._super_answerer(provider, model)
         return self._metered(
-            lambda: self.super_advanced.ask(
+            lambda: answerer.ask(
                 message,
                 book_ids=list(book_ids) if book_ids else None,
                 auto_route=True,
@@ -136,17 +175,27 @@ class BookChatBackend:
         message: str,
         book_ids: Sequence[str] | None = None,
         history: Sequence[tuple[str, str]] | None = None,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> str:
-        if self.settings.agent_hard_timeout:
+        agent_settings = (
+            self._model_settings(provider, model)
+            if provider and model
+            else self.settings
+        )
+        if agent_settings.agent_hard_timeout:
             worker_result = run_agent_in_process(
-                self.settings,
+                agent_settings,
                 message,
                 book_ids=book_ids or None,
                 history=history,
             )
             self._last_agent_usage = dict(worker_result.get("usage") or {})
             return str(worker_result["text"])
-        agent_result = self._agent_runner().run(
+        agent_result = self._agent_runner(
+            provider if provider and model else None,
+            model if provider and model else None,
+        ).run(
             message,
             book_ids=book_ids or None,
             history=history,
@@ -156,18 +205,29 @@ class BookChatBackend:
 
     def close(self) -> None:
         self.searcher.close()
-        close = getattr(self.provider, "close", None)
-        if callable(close):
-            close()
+        for provider in [self.provider, *self._extra_providers.values()]:
+            close = getattr(provider, "close", None)
+            if callable(close):
+                close()
 
-    def _agent_runner(self) -> AgentRunner:
+    def _agent_runner(
+        self, provider: str | None = None, model: str | None = None
+    ) -> AgentRunner:
+        key = (provider or "", model or "")
         with self._agent_lock:
-            if self._agent is None:
-                audit = AuditLogger.create(self.settings)
+            existing = self._agents.get(key)
+            if existing is None:
+                settings = (
+                    self._model_settings(provider, model)
+                    if provider and model
+                    else self.settings
+                )
+                audit = AuditLogger.create(settings)
                 tools = build_rag_tools(self.searcher, self.answerer, audit=audit)
-                tools.extend(build_coding_tools(self.settings, audit=audit))
-                self._agent = AgentRunner(self.settings, tools, trace=self.trace)
-            return self._agent
+                tools.extend(build_coding_tools(settings, audit=audit))
+                existing = AgentRunner(settings, tools, trace=self.trace)
+                self._agents[key] = existing
+            return existing
 
 
 def ready_books(books: Sequence[Book]) -> list[Book]:

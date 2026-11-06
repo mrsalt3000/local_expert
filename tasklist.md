@@ -1892,3 +1892,19 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   `avg_answer_words` и `avg_answer_words_answered`, а также те же поля в
   `by_mode.<mode>`.
 - Проверки: 523 теста, mypy/ruff/pre-commit зелёные.
+
+### T108 — Выбор chat-модели на вкладке «Агент»
+
+- [x] Статус: `review`
+- Scope: `web/app.py`, `web/backend.py`, `web/answer_worker.py`,
+  `config.py`, `static/index.html`, README/architecture, тесты.
+- Основание: на вкладке «Агент» нельзя было выбрать модель; нужен список
+  доступных локальных моделей и DeepSeek для облачного сравнения.
+- Сделано: `GET /api/models` отдаёт локальные chat-модели Ollama (embedding,
+  STT и diary-* отфильтрованы) и DeepSeek Flash/V4 Pro при наличии ключа.
+  В шапке «Агента» появился dropdown; выбор уходит как
+  `agent_provider`/`agent_model`. `BookChatBackend` кэширует super-answerer и
+  AgentRunner по паре провайдер/модель, hard-timeout worker получает копию
+  `Settings` с выбранной моделью; метрики пишут фактическую модель.
+- Проверки: 527 тестов, mypy/ruff/pre-commit, `node --check` inline-JS;
+  live `/api/models` вернул 6 локальных + 2 DeepSeek.

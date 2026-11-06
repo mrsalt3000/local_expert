@@ -13,6 +13,8 @@ from time import perf_counter
 from typing import Annotated, Any, Literal, Protocol
 from uuid import uuid4
 
+import httpx
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
@@ -75,6 +77,8 @@ class ChatBackend(Protocol):
         book_ids: Sequence[str] | None = None,
         progress: Callable[[dict[str, Any]], None] | None = None,
         history: Sequence[tuple[str, str]] | None = None,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> Answer: ...
 
     def ask_agent(
@@ -82,6 +86,8 @@ class ChatBackend(Protocol):
         message: str,
         book_ids: Sequence[str] | None = None,
         history: Sequence[tuple[str, str]] | None = None,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> str: ...
 
     def close(self) -> None: ...
@@ -96,6 +102,8 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     history: list[ChatTurn] = Field(default_factory=list, max_length=20)
     mode: Literal["rag", "advanced", "super", "agent"] = "super"
+    agent_provider: Literal["ollama", "deepseek", "openai"] | None = None
+    agent_model: str | None = Field(default=None, max_length=128)
     book_ids: list[Annotated[str, Field(max_length=MAX_BOOK_ID_CHARS)]] = Field(
         default_factory=list, max_length=MAX_BOOK_FILTERS
     )
@@ -117,6 +125,14 @@ class BookOut(BaseModel):
     chunks: int
     status: str
     format: str = "pdf"
+
+
+class ModelOut(BaseModel):
+    id: str
+    label: str
+    provider: Literal["ollama", "deepseek", "openai"]
+    model: str
+    kind: Literal["local", "cloud"]
 
 
 class CitationOut(BaseModel):
@@ -381,6 +397,10 @@ def create_app(
         rounds = 0
         extra_queries = 0
         answer_words = 0
+        model_provider = payload.agent_provider if payload.agent_model else None
+        model_name = payload.agent_model if payload.agent_provider else None
+        metric_provider = model_provider or app.state.settings.provider
+        metric_model = model_name or _active_chat_model(app.state.settings)
         try:
             active = get_backend()
             if payload.mode == "rag":
@@ -397,6 +417,8 @@ def create_app(
                         payload.message,
                         book_ids=book_ids,
                         history=history,
+                        provider=model_provider,
+                        model=model_name,
                     )
                 elif payload.mode == "advanced":
                     answer = active.ask_advanced(
@@ -404,12 +426,22 @@ def create_app(
                     )
                 else:
                     answer = active.ask_super(
-                        payload.message, book_ids, history=history
+                        payload.message,
+                        book_ids,
+                        history=history,
+                        provider=model_provider,
+                        model=model_name,
                     )
                 response = _rag_response(answer, mode=payload.mode)
                 refused = answer.refused
             else:
-                text = active.ask_agent(payload.message, book_ids, history=history)
+                text = active.ask_agent(
+                    payload.message,
+                    book_ids,
+                    history=history,
+                    provider=model_provider,
+                    model=model_name,
+                )
                 response = ChatResponse(mode="agent", answer=text, elapsed_ms=0)
                 usage = dict(getattr(active, "agent_usage", {}) or {})
                 answer_words = len(text.split())
@@ -446,8 +478,8 @@ def create_app(
                 refused=refused,
                 error=failed,
                 usage=usage,
-                provider=app.state.settings.provider,
-                model=_active_chat_model(app.state.settings),
+                provider=metric_provider,
+                model=metric_model,
                 request_id=request_id,
                 citations=citations,
                 unsupported_claims=unsupported,
@@ -470,6 +502,10 @@ def create_app(
         history = [(turn.role, turn.content) for turn in payload.history[-12:]]
         started = perf_counter()
         request_id = uuid4().hex
+        model_provider = payload.agent_provider if payload.agent_model else None
+        model_name = payload.agent_model if payload.agent_provider else None
+        metric_provider = model_provider or app.state.settings.provider
+        metric_model = model_name or _active_chat_model(app.state.settings)
 
         def record(answer: Answer | None, *, error: bool = False) -> None:
             elapsed_ms = (perf_counter() - started) * 1000
@@ -479,8 +515,8 @@ def create_app(
                 refused=bool(answer and answer.refused),
                 error=error,
                 usage=dict(answer.usage) if answer is not None else {},
-                provider=app.state.settings.provider,
-                model=_active_chat_model(app.state.settings),
+                provider=metric_provider,
+                model=metric_model,
                 request_id=request_id,
                 citations=len(answer.citations) if answer is not None else 0,
                 unsupported_claims=len(answer.unsupported_claims)
@@ -508,6 +544,8 @@ def create_app(
                     history,
                     started,
                     request_id=request_id,
+                    provider=model_provider,
+                    model=model_name,
                     on_done=lambda answer, _elapsed: record(answer),
                     on_error=lambda _elapsed: record(None, error=True),
                 )
@@ -525,6 +563,8 @@ def create_app(
                             book_ids,
                             progress=emit,
                             history=history,
+                            provider=model_provider,
+                            model=model_name,
                         )
                     else:
                         answer = backend.ask_advanced(
@@ -673,6 +713,10 @@ def create_app(
             raise_library_error(exc)
         return _job_out_required(job)
 
+    @app.get("/api/models", response_model=list[ModelOut])
+    def models() -> list[ModelOut]:
+        return _available_models(app.state.settings)
+
     @app.get("/api/health", response_model=HealthOut)
     def health() -> HealthOut:
         return HealthOut(**metrics.snapshot())
@@ -786,6 +830,8 @@ def _hard_timeout_stream(
     started: float,
     *,
     request_id: str = "",
+    provider: str | None = None,
+    model: str | None = None,
     on_done: Callable[[Answer, float], None] | None = None,
     on_error: Callable[[float], None] | None = None,
 ) -> Iterator[str]:
@@ -797,6 +843,8 @@ def _hard_timeout_stream(
             payload.message,
             book_ids=book_ids,
             history=history,
+            provider=provider,
+            model=model,
         ):
             if event["type"] == "done":
                 answer = event["answer"]
@@ -821,6 +869,68 @@ def _active_chat_model(settings: Settings) -> str:
     if settings.provider == "deepseek":
         return settings.deepseek_chat_model
     return settings.openai_chat_model
+
+
+def _available_models(settings: Settings) -> list[ModelOut]:
+    models: list[ModelOut] = []
+    try:
+        response = httpx.get(
+            f"{settings.ollama_base_url.rstrip('/')}/api/tags", timeout=3.0
+        )
+        response.raise_for_status()
+        payload = response.json()
+        names = [
+            str(item.get("name") or item.get("model") or "")
+            for item in payload.get("models", [])
+            if isinstance(item, dict)
+        ]
+        for name in sorted({name for name in names if name}):
+            lowered = name.lower()
+            if lowered.startswith("diary-") or any(
+                token in lowered
+                for token in ("embed", "bge", "nomic", "stt", "whisper")
+            ):
+                continue
+            models.append(
+                ModelOut(
+                    id=f"ollama:{name}",
+                    label=name,
+                    provider="ollama",
+                    model=name,
+                    kind="local",
+                )
+            )
+    except (httpx.HTTPError, ValueError, TypeError):
+        pass
+    if settings.deepseek_api_key is not None:
+        for model, label in (
+            ("deepseek-flash", "DeepSeek Flash"),
+            ("deepseek-v4-pro", "DeepSeek V4 Pro"),
+        ):
+            models.append(
+                ModelOut(
+                    id=f"deepseek:{model}",
+                    label=label,
+                    provider="deepseek",
+                    model=model,
+                    kind="cloud",
+                )
+            )
+    if (
+        not any(item.kind == "local" for item in models)
+        and settings.provider == "ollama"
+    ):
+        models.insert(
+            0,
+            ModelOut(
+                id=f"ollama:{settings.chat_model}",
+                label=settings.chat_model,
+                provider="ollama",
+                model=settings.chat_model,
+                kind="local",
+            ),
+        )
+    return sorted(models, key=lambda item: (item.kind != "local", item.label.lower()))
 
 
 def _rag_response(
