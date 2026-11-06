@@ -8,7 +8,7 @@
 ```json
 {"recorded_at": "2026-11-06T10:00:00+00:00", "mode": "rag",
  "elapsed_ms": 1712.3, "refused": false, "error": false,
- "provider": "deepseek", "model": "deepseek-chat", "request_id": "…",
+ "provider": "ollama", "model": "qwen3.5:4b", "request_id": "…",
  "citations": 5, "unsupported_claims": 1,
  "tokens": {"prompt_tokens": 1200, "completion_tokens": 300, "total_tokens": 1500},
  "cost_usd": 0.0012}
@@ -70,8 +70,8 @@ BOOK_EXPERT_PRICE_OUTPUT_PER_MTOK=1.10
       "slo": {"p50_ok": true, "p95_ok": true, "refusal_ok": true, "all_ok": true}
     }
   },
-  "by_provider": {"deepseek": {"requests": 42, "total_tokens": 58000,
-                                "cost_usd": 0.0123}},
+  "by_provider": {"ollama": {"requests": 42, "total_tokens": 58000,
+                              "cost_usd": 0.0123}},
   "slo": {"persisted": true, "targets": {"rag": {"p50_ms": 2500, ...}}}
 }
 ```
