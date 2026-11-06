@@ -64,6 +64,12 @@ class RequestMetrics:
         self._mode_cost: dict[str, float] = {}
         self._mode_rounds: dict[str, int] = {}
         self._mode_extra_queries: dict[str, int] = {}
+        self._answer_words_total = 0
+        self._answered_words_total = 0
+        self._answered_requests = 0
+        self._mode_answer_words: dict[str, int] = {}
+        self._mode_answered_words: dict[str, int] = {}
+        self._mode_answered: dict[str, int] = {}
         self._providers: dict[str, dict[str, Any]] = {}
         self._load()
 
@@ -82,6 +88,7 @@ class RequestMetrics:
         unsupported_claims: int = 0,
         rounds: int = 0,
         extra_queries: int = 0,
+        answer_words: int = 0,
     ) -> None:
         tokens = _normalize_usage(usage)
         cost = self.cost(tokens)
@@ -98,6 +105,7 @@ class RequestMetrics:
             "unsupported_claims": int(unsupported_claims),
             "rounds": int(rounds),
             "extra_queries": int(extra_queries),
+            "answer_words": max(0, int(answer_words)),
         }
         if tokens:
             entry["tokens"] = tokens
@@ -143,6 +151,18 @@ class RequestMetrics:
                     )
                     if requests
                     else 0.0,
+                    "avg_answer_words": round(
+                        self._mode_answer_words.get(mode, 0) / requests, 1
+                    )
+                    if requests
+                    else 0.0,
+                    "avg_answer_words_answered": round(
+                        self._mode_answered_words.get(mode, 0)
+                        / self._mode_answered[mode],
+                        1,
+                    )
+                    if self._mode_answered.get(mode)
+                    else 0.0,
                     "slo": _slo_status(mode, values, refusals, requests),
                 }
             return {
@@ -162,6 +182,14 @@ class RequestMetrics:
                     "total": self._tokens_prompt + self._tokens_completion,
                 },
                 "cost_usd": round(self._cost, 8),
+                "avg_answer_words": round(self._answer_words_total / self._requests, 1)
+                if self._requests
+                else 0.0,
+                "avg_answer_words_answered": round(
+                    self._answered_words_total / self._answered_requests, 1
+                )
+                if self._answered_requests
+                else 0.0,
                 "usage_coverage": round(self._usage_recorded / self._requests, 4)
                 if self._requests
                 else 0.0,
@@ -239,6 +267,16 @@ class RequestMetrics:
         self._mode_extra_queries[mode] = self._mode_extra_queries.get(
             mode, 0
         ) + _to_int(entry.get("extra_queries"))
+        words = _to_int(entry.get("answer_words"))
+        self._answer_words_total += words
+        self._mode_answer_words[mode] = self._mode_answer_words.get(mode, 0) + words
+        if not refused:
+            self._answered_requests += 1
+            self._answered_words_total += words
+            self._mode_answered[mode] = self._mode_answered.get(mode, 0) + 1
+            self._mode_answered_words[mode] = (
+                self._mode_answered_words.get(mode, 0) + words
+            )
         provider_stats = self._providers.setdefault(
             provider,
             {

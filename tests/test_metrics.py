@@ -71,8 +71,26 @@ def test_metrics_file_has_no_request_text(tmp_path: Path) -> None:
         "unsupported_claims",
         "rounds",
         "extra_queries",
+        "answer_words",
     }
     assert "answer" not in entry and "question" not in entry
+
+
+def test_metrics_track_answer_words(tmp_path: Path) -> None:
+    path = tmp_path / "metrics.jsonl"
+    metrics = RequestMetrics(path=path)
+    metrics.record(mode="rag", elapsed_ms=10, answer_words=10)
+    metrics.record(mode="rag", elapsed_ms=10, answer_words=4, refused=True)
+
+    snapshot = metrics.snapshot()
+
+    assert snapshot["avg_answer_words"] == 7.0
+    assert snapshot["avg_answer_words_answered"] == 10.0
+    assert snapshot["by_mode"]["rag"]["avg_answer_words"] == 7.0
+    assert snapshot["by_mode"]["rag"]["avg_answer_words_answered"] == 10.0
+
+    restored = RequestMetrics(path=path)
+    assert restored.snapshot()["avg_answer_words"] == 7.0
 
 
 def test_metrics_track_tokens_cost_and_provider(tmp_path: Path) -> None:

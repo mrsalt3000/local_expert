@@ -566,6 +566,8 @@ def test_health_reports_requests_and_latency(
     assert payload["by_mode"]["rag"]["slo"]["all_ok"] is True
     assert payload["tokens"] == {"prompt": 12, "completion": 4, "total": 16}
     assert payload["usage_coverage"] == 1.0
+    assert payload["avg_answer_words"] == 2.0
+    assert payload["avg_answer_words_answered"] == 2.0
     assert next(iter(payload["by_provider"].values()))["total_tokens"] == 16
     assert payload["slo"]["persisted"] is True
 

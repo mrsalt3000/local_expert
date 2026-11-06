@@ -245,6 +245,8 @@ class HealthOut(BaseModel):
     latency_ms: dict[str, int | None]
     tokens: dict[str, int] = Field(default_factory=dict)
     cost_usd: float = 0.0
+    avg_answer_words: float = 0.0
+    avg_answer_words_answered: float = 0.0
     usage_coverage: float = 0.0
     modes: dict[str, int]
     by_mode: dict[str, Any] = Field(default_factory=dict)
@@ -378,6 +380,7 @@ def create_app(
         unsupported = 0
         rounds = 0
         extra_queries = 0
+        answer_words = 0
         try:
             active = get_backend()
             if payload.mode == "rag":
@@ -409,12 +412,14 @@ def create_app(
                 text = active.ask_agent(payload.message, book_ids, history=history)
                 response = ChatResponse(mode="agent", answer=text, elapsed_ms=0)
                 usage = dict(getattr(active, "agent_usage", {}) or {})
+                answer_words = len(text.split())
             if payload.mode != "agent":
                 usage = dict(answer.usage)
                 citations = len(answer.citations)
                 unsupported = len(answer.unsupported_claims)
                 rounds = answer.rounds
                 extra_queries = answer.extra_queries
+                answer_words = len(answer.text.split())
         except ProviderError as exc:
             failed = True
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -448,6 +453,7 @@ def create_app(
                 unsupported_claims=unsupported,
                 rounds=rounds,
                 extra_queries=extra_queries,
+                answer_words=answer_words,
             )
         response.elapsed_ms = int((perf_counter() - started) * 1000)
         response.request_id = request_id
@@ -482,6 +488,7 @@ def create_app(
                 else 0,
                 rounds=answer.rounds if answer is not None else 0,
                 extra_queries=answer.extra_queries if answer is not None else 0,
+                answer_words=len(answer.text.split()) if answer is not None else 0,
             )
 
         def generate() -> Iterator[str]:

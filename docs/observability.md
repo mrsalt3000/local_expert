@@ -57,6 +57,8 @@ BOOK_EXPERT_PRICE_OUTPUT_PER_MTOK=1.10
   "requests": 42,
   "tokens": {"prompt": 50000, "completion": 8000, "total": 58000},
   "cost_usd": 0.0123,
+  "avg_answer_words": 84.2,
+  "avg_answer_words_answered": 96.5,
   "usage_coverage": 0.95,
   "by_mode": {
     "rag": {
@@ -82,6 +84,11 @@ BOOK_EXPERT_PRICE_OUTPUT_PER_MTOK=1.10
 Оба значения также лежат в `by_mode.super`. В JSONL на каждый запрос пишутся
 `rounds` и `extra_queries`; это позволяет считать распределение, а не только
 среднее.
+
+`avg_answer_words` — средняя длина ответа в словах по всем запросам,
+`avg_answer_words_answered` — только по не-отказным ответам. Оба значения есть
+и в `by_mode.<mode>`. Длина считается как `len(text.split())`; текст ответа в
+метрики не пишется.
 
 `usage_coverage` — доля запросов, для которых провайдер вернул usage. Если
 провайдер не отдаёт токены (например, часть Ollama-ответов), coverage ниже 1.

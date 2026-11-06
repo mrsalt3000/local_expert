@@ -1881,3 +1881,14 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   `rounds` и `extra_queries`; `/api/health` отдаёт `super.avg_rounds`,
   `super.avg_extra_queries` и те же поля в `by_mode.super`.
 - Проверки: 523 теста, mypy/ruff/pre-commit зелёные.
+
+### T107 — Среднее число слов на ответ
+
+- [x] Статус: `review`
+- Scope: `web/metrics.py`, `web/app.py`, `docs/observability.md`, тесты.
+- Основание: нужна оценка многословности моделей/режимов, а не только
+  latency и citation-метрики.
+- Сделано: в JSONL пишется `answer_words`; `/api/health` отдаёт
+  `avg_answer_words` и `avg_answer_words_answered`, а также те же поля в
+  `by_mode.<mode>`.
+- Проверки: 523 теста, mypy/ruff/pre-commit зелёные.
