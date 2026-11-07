@@ -1860,17 +1860,18 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 - Основание: нужен выбор локальной chat-модели вместо/рядом с qwen3.5:4b;
   retrieval от модели не зависит, поэтому сравниваются generation и agent.
 - Модели: Ministral 3 3B, Gemma 3 4B IT, Phi-4-mini, Qwen3-4B q4_K_M и q8_0;
-  DeepSeek Flash — только reference на 20 кейсах. q5/q6 Qwen3 не проверяются:
-  в Ollama нет тегов, импорт GGUF не делался.
+  DeepSeek Flash — reference, полный 120 RAG + 20 Agent. q5/q6 Qwen3 не
+  проверяются: в Ollama нет тегов, импорт GGUF не делался.
 - Результат (2026-11-07): Qwen3-4B q4 — лучший локальный (RAG: 2 отказа,
   citP .530 / citR .817, faith .939, support .868, p50 13.6 s; Agent:
   page .500 / source .800, support .741, 0 отказов). Gemma 3 4B — второй
   (7 отказов, citR .717, support .788). Phi-4-mini быстрее (11.1 s), но
   26 отказов и support .728. Ministral 3B — 57/120 отказов, непригоден.
   **q8 упал по таймауту:** 5.7 ГБ, 25% CPU, ~7.5 tok/s, первый запрос >2 мин;
-  при 6 ГБ VRAM практичный квант — q4. DeepSeek ref: RAG 3.7 s, faith .934,
-  citP .171; Agent page/source .650/.800, support .739, p50 17.4 s, 675.9
-  слова — облако, не прод. Refine-on A/B (20 кейсов): +0.3–0.9 запроса,
+  при 6 ГБ VRAM практичный квант — q4. DeepSeek Flash (120 RAG): citP .539,
+  citR .883, faith .941, support .900, 7 отказов, p50 4.2 s, 90.2 слова;
+  Agent page/source .500/.650, support .778, p50 16.3 s — сильный cloud-ref,
+  не прод. Refine-on A/B (20 кейсов): +0.3–0.9 запроса,
   Qwen page +.05/support +.027, Gemma support +.081/page −.05; дефолт
   refine=false сохранён.
 - Verify: `data/artifacts/model-benchmark/summary.md`, отчёт

@@ -233,12 +233,12 @@ def _stage_metrics(path: Path) -> dict[str, Any] | None:
         "citation_support_precision": answers.get("citation_support_precision"),
         "refused": answers.get("refused"),
         "zero_precision": answers.get("zero_precision"),
-        "avg_answer_words": word_answers.get(
-            "avg_answer_words", answers.get("avg_answer_words")
-        ),
-        "avg_answer_words_answered": word_answers.get(
-            "avg_answer_words_answered", answers.get("avg_answer_words_answered")
-        ),
+        "avg_answer_words": answers.get("avg_answer_words")
+        if answers.get("avg_answer_words") is not None
+        else word_answers.get("avg_answer_words"),
+        "avg_answer_words_answered": answers.get("avg_answer_words_answered")
+        if answers.get("avg_answer_words_answered") is not None
+        else word_answers.get("avg_answer_words_answered"),
         "answer_p50_ms": latency.get("answer_p50"),
         "answer_p95_ms": latency.get("answer_p95"),
         "meta": report.get("meta", {}),
