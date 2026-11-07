@@ -152,6 +152,8 @@ def run_agent_eval(
                     "citations": len(answer.citations),
                     "plan": len(answer.plan),
                     "rounds": answer.rounds,
+                    "extra_queries": answer.extra_queries,
+                    "answer_words": len(answer.text.split()),
                     "faithfulness": judgement.faithfulness if judgement else None,
                     "citation_support_precision": (
                         judgement.citation_support_precision if judgement else None
@@ -294,6 +296,14 @@ def _aggregate(
             ),
             "citation_usage": _mean_optional(rows, "citation_usage"),
             "citation_support_rate": _mean_optional(rows, "citation_support_rate"),
+            "avg_answer_words": round(_mean(rows, "answer_words"), 1),
+            "avg_answer_words_answered": round(
+                _mean(
+                    [row for row in rows if not row["refused"]],
+                    "answer_words",
+                ),
+                1,
+            ),
             "judged_cases": sum(1 for row in rows if row["faithfulness"] is not None),
             "claims_truncated": sum(1 for row in rows if row["claims_truncated"]),
             "faithfulness_errors": sum(1 for row in rows if row["faithfulness_error"]),
@@ -301,6 +311,7 @@ def _aggregate(
         "plan": {
             "avg_queries": round(_mean(rows, "plan"), 2),
             "avg_rounds": round(_mean(rows, "rounds"), 2),
+            "avg_extra_queries": round(_mean(rows, "extra_queries"), 2),
         },
         "latency_ms": {
             "p50": _percentile([row["elapsed_ms"] for row in rows], 50),

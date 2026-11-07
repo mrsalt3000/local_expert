@@ -63,7 +63,7 @@ MODELS: tuple[dict[str, Any], ...] = (
         "provider": "deepseek",
         "model": "deepseek-flash",
         "stage_limit": 20,
-        "agent_limit": 0,
+        "agent_limit": 20,
     },
 )
 
@@ -214,6 +214,12 @@ def _stage_metrics(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
     report = json.loads(path.read_text(encoding="utf-8"))
+    word_path = path.with_name(path.name.replace("-stage.json", "-stage-20.json"))
+    word_answers = (
+        json.loads(word_path.read_text(encoding="utf-8")).get("answers", {})
+        if word_path.exists()
+        else {}
+    )
     retrieval = report.get("retrieval", {})
     answers = report.get("answers", {})
     latency = report.get("latency_ms", {})
@@ -227,6 +233,12 @@ def _stage_metrics(path: Path) -> dict[str, Any] | None:
         "citation_support_precision": answers.get("citation_support_precision"),
         "refused": answers.get("refused"),
         "zero_precision": answers.get("zero_precision"),
+        "avg_answer_words": word_answers.get(
+            "avg_answer_words", answers.get("avg_answer_words")
+        ),
+        "avg_answer_words_answered": word_answers.get(
+            "avg_answer_words_answered", answers.get("avg_answer_words_answered")
+        ),
         "answer_p50_ms": latency.get("answer_p50"),
         "answer_p95_ms": latency.get("answer_p95"),
         "meta": report.get("meta", {}),
@@ -249,10 +261,12 @@ def _agent_metrics(path: Path) -> dict[str, Any] | None:
         "faithfulness": answers.get("faithfulness"),
         "citation_support_precision": answers.get("citation_support_precision"),
         "refused": answers.get("refused"),
+        "avg_answer_words": answers.get("avg_answer_words"),
         "p50_ms": latency.get("p50"),
         "p95_ms": latency.get("p95"),
         "avg_queries": plan.get("avg_queries"),
         "avg_rounds": plan.get("avg_rounds"),
+        "avg_extra_queries": plan.get("avg_extra_queries"),
         "meta": report.get("meta", {}),
     }
 
@@ -323,6 +337,30 @@ def _summary_markdown(summary: dict[str, Any]) -> str:
                 support=_fmt(agent["citation_support_precision"]),
                 refused=_fmt(agent["refused"]),
                 p50=_fmt(agent["p50_ms"], 0),
+            )
+        )
+    lines.extend(
+        [
+            "",
+            "## Новые метрики (20-кейсовый срез, где есть)",
+            "",
+            "| модель | RAG words | Agent words | queries | rounds | extra |",
+            "| --- | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in summary["models"]:
+        stage = row["stage"] or {}
+        agent = row["agent"] or {}
+        rounds = agent.get("avg_rounds")
+        extra = agent.get("avg_extra_queries")
+        lines.append(
+            "| {label} | {rw} | {aw} | {q} | {r} | {e} |".format(
+                label=row["label"],
+                rw=_fmt(stage.get("avg_answer_words"), 1),
+                aw=_fmt(agent.get("avg_answer_words"), 1),
+                q=_fmt(agent.get("avg_queries"), 2),
+                r="n/a (refine off)" if rounds == 0 else _fmt(rounds, 2),
+                e="n/a (refine off)" if extra in (0, None) else _fmt(extra, 2),
             )
         )
     lines.extend(

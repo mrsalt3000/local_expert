@@ -1868,8 +1868,11 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
   (7 отказов, citR .717, support .788). Phi-4-mini быстрее (11.1 s), но
   26 отказов и support .728. Ministral 3B — 57/120 отказов, непригоден.
   **q8 упал по таймауту:** 5.7 ГБ, 25% CPU, ~7.5 tok/s, первый запрос >2 мин;
-  при 6 ГБ VRAM практичный квант — q4. DeepSeek ref: 3.7 s, faith .934,
-  но citP .171 на 20 кейсах и облако.
+  при 6 ГБ VRAM практичный квант — q4. DeepSeek ref: RAG 3.7 s, faith .934,
+  citP .171; Agent page/source .650/.800, support .739, p50 17.4 s, 675.9
+  слова — облако, не прод. Refine-on A/B (20 кейсов): +0.3–0.9 запроса,
+  Qwen page +.05/support +.027, Gemma support +.081/page −.05; дефолт
+  refine=false сохранён.
 - Verify: `data/artifacts/model-benchmark/summary.md`, отчёт
   `docs/experiments/2026-11-06-model-benchmark.md`.
 

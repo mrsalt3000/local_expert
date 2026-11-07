@@ -216,6 +216,7 @@ def run_stage_eval(
                 "retrieval_ms": round(retrieval_ms, 1),
                 "answer_ms": round(answer_ms, 1),
                 "answer_refused": answer.refused,
+                "answer_words": len(answer.text.split()),
                 "uncited": answer.uncited,
                 "unsupported_claims": len(answer.unsupported_claims),
                 "citations": len(answer.citations),
@@ -408,6 +409,14 @@ def _aggregate(
             ),
             "citation_usage": _mean_optional(rows, "citation_usage"),
             "citation_support_rate": _mean_optional(rows, "citation_support_rate"),
+            "avg_answer_words": round(_mean(rows, "answer_words"), 1),
+            "avg_answer_words_answered": round(
+                _mean(
+                    [row for row in rows if not row["answer_refused"]],
+                    "answer_words",
+                ),
+                1,
+            ),
             "judged_cases": sum(1 for row in rows if row["faithfulness"] is not None),
             "claims_truncated": sum(1 for row in rows if row["claims_truncated"]),
             "faithfulness_errors": sum(1 for row in rows if row["faithfulness_error"]),
