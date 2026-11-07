@@ -1853,22 +1853,25 @@ Read-only аудит на `5fbab95`: 471 тест, coverage 84%, CI success; `st
 
 ### T105 — Сравнение локальных chat-моделей на RAG и Agent
 
-- [ ] Статус: `todo` (полный прогон идёт в фоне)
+- [x] Статус: `review`
 - Scope: `scripts/model_benchmark.py`, `--judge-model` в
   `stage-eval`/`agent-eval`, `data/artifacts/model-benchmark` (local-only),
-  `docs/experiments/2026-11-06-model-benchmark.md`; прод-модель не менять.
+  `docs/experiments/2026-11-06-model-benchmark.md`; прод-модель не меняли.
 - Основание: нужен выбор локальной chat-модели вместо/рядом с qwen3.5:4b;
   retrieval от модели не зависит, поэтому сравниваются generation и agent.
 - Модели: Ministral 3 3B, Gemma 3 4B IT, Phi-4-mini, Qwen3-4B q4_K_M и q8_0;
   DeepSeek Flash — только reference на 20 кейсах. q5/q6 Qwen3 не проверяются:
   в Ollama нет тегов, импорт GGUF не делался.
-- Acceptance:
-  1. 120 RAG-кейсов и 20 agent-кейсов на каждую локальную модель.
-  2. Один фиксированный судья qwen3.5:4b; в meta — judge_chat_model.
-  3. Сводка `summary.json`/`summary.md` с latency, citation precision/recall,
-     faithfulness/support и отказами; вывод по модели и квантованию.
-- Verify: отчёты `data/artifacts/model-benchmark/`, smoke на 1 кейсе,
-  `summary.md`.
+- Результат (2026-11-07): Qwen3-4B q4 — лучший локальный (RAG: 2 отказа,
+  citP .530 / citR .817, faith .939, support .868, p50 13.6 s; Agent:
+  page .500 / source .800, support .741, 0 отказов). Gemma 3 4B — второй
+  (7 отказов, citR .717, support .788). Phi-4-mini быстрее (11.1 s), но
+  26 отказов и support .728. Ministral 3B — 57/120 отказов, непригоден.
+  **q8 упал по таймауту:** 5.7 ГБ, 25% CPU, ~7.5 tok/s, первый запрос >2 мин;
+  при 6 ГБ VRAM практичный квант — q4. DeepSeek ref: 3.7 s, faith .934,
+  но citP .171 на 20 кейсах и облако.
+- Verify: `data/artifacts/model-benchmark/summary.md`, отчёт
+  `docs/experiments/2026-11-06-model-benchmark.md`.
 
 ### T106 — Метрики super: средние раунды и дополнительные запросы
 
